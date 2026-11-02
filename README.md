@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img alt="Strata" src="docs/assets/logo-light.svg" height="90">
+  </picture>
+</p>
+
 # Strata
 
 A Rust alternative with Goose-style arenas: compiler-managed lifetimes, virtual threads, native C output. The design is in `strata-design.md`.

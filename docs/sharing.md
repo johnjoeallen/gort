@@ -25,6 +25,8 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.
 
+**Globals and `spawn`.** A module-level `let` is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level `var` is local to each vthread. `stra/http/store.stra` shows a `let users: Ref<UserTable>`. A borrow passed to `spawn` inside a `scope` is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.
+
 **Fresh results.** A function whose result is a new allocation that nothing else refers to is marked `fresh` in its summary, so `let db = Db.make(lim)` is local in the caller until it escapes. Without `fresh` the caller must treat the result as incoming.
 
 Mutability, escape (retains/publishes), access mode per parameter, and `fresh` are Tier A contract data ([modules](architecture/modules.md#access-and-escape-summaries)). Changing a field from write-once to mutable is a breaking change.

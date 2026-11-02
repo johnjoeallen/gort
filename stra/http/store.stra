@@ -1,0 +1,33 @@
+// http/store.stra - the process-wide state the example handlers use: a user table and a row importer.
+// Neither type is in the original server; they stand in for "some state every request must see" so the handlers can follow the sharing
+// rules (design doc 7.3, docs/sharing.md).
+package http
+
+// A module-level `let` is one binding for the whole process, initialised before any vthread starts, so the object it holds is published
+// at that point (the same as `routes`, which is shared read-only data). A module-level `var` would be local to each vthread.
+// Both types synchronise inside their methods, like redis.Db: the handlers call users.insert(...) and importer.add(...) and write no block.
+let users: Ref<UserTable> = UserTable.make()
+let importer: Ref<RowImporter> = RowImporter.make()
+
+struct UserState { rows: Map<i64, User>, nextId: i64 = 1 }          // mutable: every access is inside sync/mutate
+struct UserTable {
+    state: Ref<UserState>                                            // write-once: set in make(), so reading `state` needs no block
+    static fn make(): Ref<UserTable> { return new UserTable { state: new UserState {} } }
+    fn insert(user: User): i64 {                                     // may park (lock entry); the block bodies cannot
+        mutate(state) {
+            let id = state.nextId
+            state.nextId += 1
+            state.rows.insert(id, user)
+            return id
+        }
+    }
+}
+
+struct ImportState { count: u64 }
+struct RowImporter {
+    state: Ref<ImportState>
+    static fn make(): Ref<RowImporter> { return new RowImporter { state: new ImportState {} } }
+    fn add(row: Row) {                                               // called once per row from importRows, which is [yield]
+        mutate(state) { state.count += 1; /* the row is handed to the importer's sink here */ }
+    }
+}

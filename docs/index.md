@@ -1,3 +1,8 @@
+<p align="center" markdown>
+  ![Strata](assets/logo-light.svg#only-light){ height="90" }
+  ![Strata](assets/logo-dark.svg#only-dark){ height="90" }
+</p>
+
 # Strata
 
 Strata is a design for a systems language that keeps Rust's memory safety and Goose's compiler-managed arenas, and asks the programmer for far less ceremony. It aims at servers: many cheap virtual threads, shared caches, deterministic cleanup, and no lifetime annotations.

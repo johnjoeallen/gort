@@ -5,6 +5,8 @@ repo_url: https://github.com/johnjoeallen/strata
 repo_name: johnjoeallen/strata
 theme:
   name: material
+  logo: assets/logo-mark-dark.svg
+  favicon: assets/logo-mark-light.svg
   features:
     - navigation.sections
     - navigation.top

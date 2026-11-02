@@ -4,7 +4,7 @@
 strata-design.md     the design specification
 stra/                Strata source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
   runtime/             runtime interface and the parts writable in Strata
-  http/                HTTP library and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
+  http/                HTTP library (store.stra holds the process-wide state the handlers use) and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
   redis/               mini-redis library and server.stra
   experiments/         handler classification study
 c/

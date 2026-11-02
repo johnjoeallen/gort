@@ -8,6 +8,10 @@
 // sync/mutate are P. Everything else in the stdlib (map, string, json, sort) is N.
 
 package experiments
+import runtime
+
+// Sharing in this file (docs/sharing.md): Env's fields are set once at startup, so reading env.users, env.pool and the rest needs no block.
+// Cache, KeySet and SubList are Strata types with mutable fields reached through a Ref, so every access to their contents is in sync/mutate.
 
 // ---------- 1. cache + db read path ----------
 fn cacheGet(cache: Ref<Cache>, key: i64): User? {   //@P frame=40

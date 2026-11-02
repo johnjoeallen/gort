@@ -126,7 +126,7 @@ struct Reader {
         }
         if (start == end && headExpects100Continue(head)) conn.trySend("HTTP/1.1 100 Continue\r\n\r\n")   // best effort; the client is waiting
         var decoder = BodyDecoder.of(framing, limit)
-        var budget = yieldBytes
+        var slice = yieldBytes
         while (buf.capacity < 8192) buf.grow()   // stream through a bigger buffer
         while (!decoder.done) {
             if (start == end) {
@@ -137,8 +137,8 @@ struct Reader {
             }
             let used = decoder.feed(buf[start..end], sink, uploadDir)   // may throw BadBody / PayloadTooLarge
             self.start += used
-            budget = (used >= budget) ? 0 : budget - used
-            if (budget == 0) { yield(); budget = yieldBytes }   // back of the run queue
+            slice = (used >= slice) ? 0 : slice - used
+            if (slice == 0) { yield(); slice = yieldBytes }   // back of the run queue
         }
         return decoder
     }

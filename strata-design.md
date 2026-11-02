@@ -299,7 +299,7 @@ There is one reference kind, `Ref<T>`, and no declaration of sharedness. The com
 - On an unshared object `sync`/`mutate` test the flag once and do nothing. Behaviour never depends on whether an object is shared, only cost does.
 - Borrows taken inside a block cannot leave it.
 
-Module-level variables stay vthread-local by default. A global that must be process-wide holds a `Ref<T>` that has been published; there is no `shared var` keyword.
+A module-level `var` is local to each vthread. A module-level `let` is one binding for the whole process, initialised before any vthread starts: the object it holds is published at that point, so a `let` holding a `Ref<T>` is how a process-wide table is declared (`stra/http/store.stra`). There is no `shared var` keyword.
 
 Open: publishing a graph, where the lock word lives, per-instance reference-count mode, write-once fields across modules, interface access modes (`docs/sharing.md`, Open).
 
