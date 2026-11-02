@@ -692,6 +692,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#growable-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Growable containers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#open" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1161,6 +1172,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#growable-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Growable containers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#open" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1329,6 +1351,8 @@ purgeBatch  param 0: write
 <span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">sh</span><span class="p">)</span><span class="w"> </span><span class="n">rwlock_read_exit</span><span class="p">(</span><span class="o">&amp;</span><span class="n">store</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span><span class="w">          </span><span class="c1">// on every exit path, including throws</span>
 </code></pre></div>
 <p>Reference counts follow the same split. An object the compiler proves local uses plain counts. A reference to a non-local object tests the flag: plain count if clear, atomic if set. That test per copy and release is a real cost, and the alternative (always atomic for non-local) is simpler and slower; <code>bench/c/refcount_bench.c</code> is where it gets measured (Open).</p>
+<h2 id="growable-containers">Growable containers<a class="headerlink" href="#growable-containers" title="Permanent link">&para;</a></h2>
+<p>A container that can relocate its storage (arrays, builders, map tables) is reached through a non-moving header, and references into it are <code>(header, offset)</code>. Growing a shared container needs <code>mutate</code>, reading it needs <code>sync</code>, so a raw address is valid exactly inside the block that holds it and a grow cannot happen under a reader (R1, R4, R7). An unshared container has no lock; its raw address is valid until the next call that may grow it or the next park. See spec 4.5 and <a href="../architecture/open-decisions/#d15-growable-arrays-relocation-and-stable-references">D15</a>.</p>
 <h2 id="open">Open<a class="headerlink" href="#open" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Publishing a graph.</strong> Setting the flag on everything reachable costs a walk at the publish. Alternatives: refuse to publish an object whose graph has local-only parts that are not themselves being published; or make <code>spawn</code> and message sends take only values whose reachable graph is already shared or immutable.</li>

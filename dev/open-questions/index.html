@@ -1064,12 +1064,12 @@
 <ul>
 <li>Per-instance sharing: does the flag test on each reference-count operation cost more than always-atomic for non-local references? See <a href="../sharing/">sharing</a>.</li>
 <li>Sharing (direction chosen, see <a href="../sharing/">sharing</a>): the cost of the per-instance shared flag, publishing a graph, where the lock word lives, write-once fields across modules, access modes on interfaces.</li>
-<li>When does a growable array get a dedicated virtual region instead of a relocatable buffer?</li>
+<li>Relocation (direction chosen, see <a href="../architecture/open-decisions/#d15-growable-arrays-relocation-and-stable-references">D15</a>): a non-moving header and <code>(handle, offset)</code> references. Open: the per-access cost, when a dedicated virtual region is worth it, FFI pinning, and the precision of the may-grow summary.</li>
 <li>Exact string representation, slicing and UTF-8 indexing.</li>
 <li>How does a throw interact with a scope that still has child vthreads?</li>
 <li>Stack model: fixed reserve with guard pages, or segmented stacks.</li>
 <li>How are exported lifetime and effect metadata versioned? Direction in <a href="../architecture/modules/">architecture</a>; policy open.</li>
-<li>Architecture decisions D1 to D14 (D14: packages and imports) (where lowering happens, borrowed locals with lazy frames, minimum IR, effects in public interfaces, fusion across modules, debugging maps, dynamic loading, blocking FFI, slice-check overhead and loop warnings): <a href="../architecture/open-decisions/">open decisions</a>.</li>
+<li>Architecture decisions D1 to D15 (D14: packages and imports, D15: relocation and stable references) (where lowering happens, borrowed locals with lazy frames, minimum IR, effects in public interfaces, fusion across modules, debugging maps, dynamic loading, blocking FFI, slice-check overhead and loop warnings): <a href="../architecture/open-decisions/">open decisions</a>.</li>
 </ul>
 <h2 id="not-yet-built-or-measured">Not yet built or measured<a class="headerlink" href="#not-yet-built-or-measured" title="Permanent link">&para;</a></h2>
 <ul>

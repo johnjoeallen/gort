@@ -1043,6 +1043,10 @@
 <td>A unit for module compilation, visibility and the <code>[yield]</code>/<code>[noyield]</code>/<code>[nopark]</code> default. The details are open (D14).</td>
 </tr>
 <tr>
+<td>Growable containers sit behind a non-moving header; references into them are <code>(header, offset)</code>, a raw address exists only in a deref window (<code>sync</code>/<code>mutate</code>, or until the next may-grow call or park)</td>
+<td>Relocation cannot invalidate a reference, and no borrow error is needed. Direction (D15); per-access cost unmeasured.</td>
+</tr>
+<tr>
 <td>C stays the backend</td>
 <td>Under the module architecture too.</td>
 </tr>
