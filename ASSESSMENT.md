@@ -10,6 +10,10 @@ possible compiler-inserted scheduling points, and (in a later update) the
 resumable-frame and compiled-module architecture. It is a design review, not
 a compiler audit or an independent reproduction of the benchmarks.
 
+## Positioning (added after this assessment)
+
+This review compares Strata with Rust and Go. The project has since been positioned as a Go-like language with a sprinkle of Java, for servers and services, and not as a systems language (spec 1.1, `docs/decisions.md`). Read the Rust comparisons below as a performance reference ceiling; the comparisons with Go and Java are the ones that set the bar.
+
 ## Overall judgment
 
 Strata has a credible position: a server-focused language combining ordinary

@@ -7,7 +7,7 @@
 
 # Strata
 
-A Rust alternative with Goose-style arenas: compiler-managed lifetimes, virtual threads, native C output. The design is in `strata-design.md`.
+A Go-like language with a sprinkle of Java, for network servers and services: plain sequential code, virtual threads, classes and exceptions, no tracing garbage collector (compiler-managed lifetimes and deterministic cleanup), compile-time-checked shared state, native output through C. It is not a systems language and does not compete with Rust or C/C++. The design is in `strata-design.md`.
 Nothing here compiles Strata yet; the `.stra` files are the source as it would be written, and `c/generated/` holds the C a compiler would emit for them (written by hand and kept in step by the tests).
 
 ```

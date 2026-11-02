@@ -2,7 +2,7 @@
 
 **Status:** exploratory design draft (not an implementation or language standard)  
 **Origin:** independent language design informed by Goose’s compiler-managed stacks and virtual-memory techniques, Rust’s ownership guarantees, and virtual-thread runtimes  
-**Primary goal:** memory-safe, high-performance concurrent server programming with a simpler programmer-facing ownership model than Rust.
+**Primary goal:** memory-safe, high-performance concurrent server programming with Go-like simplicity (plus a sprinkle of Java), without a tracing garbage collector. See 1.1 for the positioning.
 
 > Strata is an independent language proposal, not a Goose fork or a Rust dialect. All Strata examples are illustrative and not yet implemented. Its compiler and runtime may reuse ideas or components from other projects where technically and legally appropriate.
 
@@ -18,7 +18,20 @@ Strata explores retaining those ideas where useful while supporting:
 - Deterministic cleanup of files, sockets, locks, and other resources.
 - Static reference-safety analysis without programmer-written lifetime names such as Rust's `'a`.
 
-**Non-goal:** feature parity with Rust or support for every application architecture. Strata should prioritize understandable semantics over zero runtime overhead at all costs.
+**Non-goal:** feature parity with Rust, systems programming, or support for every application architecture. Strata should prioritize understandable semantics over zero runtime overhead at all costs.
+
+### 1.1 Positioning
+
+Strata is **a Go-like language with a sprinkle of Java**, for network servers and services. It is not a systems language and does not compete with Rust or C/C++ for that work: it has a runtime (a scheduler and a heap), it exposes no lifetime annotations, custom allocators or raw pointers outside the foreign-call boundary, and it trades that control for a simpler model. Its comparison set is Go and Java; Rust is a performance reference, not a rival.
+
+- **From Go (goals, none built yet):** a small language; plain sequential code with cheap concurrent tasks and blocking-style I/O (virtual threads, no `async`/`await`, so no function colouring; Rust and C++20 coroutines have it); little ceremony; fast builds (C++ and Rust are slow here); deployment as one native program (Rust and C++ do this too; Java needs a JVM or GraalVM native image); packages that follow the folder layout (Java does too).
+- **From Java (goals):** structs that carry their functions ("C with classes": methods are declared inside the struct body, not as separate receiver functions), interfaces, exceptions with `throws` (checked exceptions; Go uses error values, Rust `Result`, and C++ has no static `throws` since C++17), structured concurrency (`scope`; a preview API in Java as of JDK 25, a library pattern such as `errgroup` in Go), generics (Java erases them, Strata monomorphises as C++ and Rust do), and the virtual-thread model (Java 21, Go's goroutines). Strata's virtual threads are cooperative and never time-sliced, as in Java; Go has preempted long-running goroutines since 1.14.
+- **Where it breaks with Go:** Go has no classes, and keeps data and behaviour apart (a struct, then functions with a receiver declared elsewhere). Strata follows Java here: a struct declares its functions and `cleanup()` with its fields, so a type reads as one unit. It is still a value type with the storage rules of 4.1, not a Java object on a heap. Inheritance is not part of the design so far; interfaces carry polymorphism.
+- **Beyond Go and Java (design intent, no compiler yet; Rust and C++ already have the first and third):**
+    - No tracing garbage collector: compiler-managed lifetimes, reference counting where sharing needs it, deterministic cleanup (C++ RAII, Rust `Drop`). No collector pauses; Go's and ZGC's pauses are short, but a collector costs CPU and memory headroom. Reference counting has costs of its own: atomic counts on shared references and cascading frees.
+    - Compile-time-checked shared state (`sync`/`mutate`, 7.3), which Go (race detector, found at run time and only in tests) and Java leave to the programmer's discipline. Rust rejects data races at compile time with `Send`/`Sync`, and more completely; Strata's check is the lexical lock rule.
+    - Native output through C, so a Strata library can be embedded in a C host (Go `c-shared`, Rust `cdylib` and C++ do this too, so it is not a differentiator).
+- **What it gives up against them:** their ecosystems, tooling and maturity; a tracing collector's handling of cycles (Strata has `WeakRef<T>`, and cycles of strong references leak, as with `Rc` in Rust and `shared_ptr` in C++); some allocation-heavy workloads where a generational collector's cheap allocation is competitive; and Go's time-slicing, so one CPU-bound loop with no park point holds its worker.
 
 ## 2. Design principles
 
@@ -421,7 +434,8 @@ Strata should demonstrate that an ordinary concurrent server can be written with
 - Compiler-enforced, encapsulated synchronization.
 - Scalable logical tasks with straightforward blocking-style I/O.
 - Predictable resource cleanup and measured memory overhead.
-- Performance in the same class as hand-tuned Rust async or Java virtual-thread code, with less source ceremony. Superiority is not a goal and is not claimed without evidence.
+- Performance in the same class as Go and Java virtual-thread code, with source ceremony comparable to Go's. Hand-tuned Rust async is a reference ceiling, not a target. Superiority is not a goal and is not claimed without evidence.
+- Data races rejected at compile time in code that uses the checked sharing rules (7.3), and no collection pauses: the two things Go and Java do not give (Rust gives the first; C++ and Rust give the second).
 
 Strata remains an independent language regardless of the compiler implementation chosen. Reuse Goose-inspired virtual-memory techniques only where benchmarking and simplicity justify them.
 

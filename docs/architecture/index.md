@@ -8,7 +8,7 @@ This section extends [`strata-design.md`](https://github.com/johnjoeallen/strata
 | [Suspension and continuations](suspension.md) | The may-park effect, resumable frames, recursion, cancellation, cleanup, fusion |
 | [Compiled modules and linking](modules.md) | The module format, the three information tiers, ABI and IR boundaries, incremental versus optimised builds, recompilation rules |
 | [Dynamic dispatch and external code](dispatch-and-ffi.md) | Interfaces, function values, generics, C interop, blocking foreign calls, callbacks, dynamic loading |
-| [Evaluation plan](benchmarks.md) | How Strata is compared with Java virtual threads and Rust async |
+| [Evaluation plan](benchmarks.md) | How Strata is compared with Go and Java virtual threads, and with Rust async as a reference ceiling |
 | [Open decisions](open-decisions.md) | Unresolved questions, alternatives, recommended direction |
 | [Changes and contradictions](changes.md) | What this update changed in the existing design, and what it contradicted |
 

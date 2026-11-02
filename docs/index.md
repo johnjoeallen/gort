@@ -5,7 +5,7 @@
 
 # Strata
 
-Strata is a design for a systems language that keeps Rust's memory safety and Goose's compiler-managed arenas, and asks the programmer for far less ceremony. It aims at servers: many cheap virtual threads, shared caches, deterministic cleanup, and no lifetime annotations.
+Strata is a design for a Go-like language with a sprinkle of Java, aimed at network servers and services. From Go: a small language, plain sequential code, cheap concurrent tasks with blocking-style I/O, little ceremony. From Java: classes, interfaces, exceptions, structured concurrency, packages that follow folders. Beyond both: no tracing garbage collector (compiler-managed lifetimes, deterministic cleanup) and compile-time-checked shared state, which neither Go nor Java has. It is not a systems language: it has a runtime, and it does not compete with Rust or C/C++. There are no lifetime annotations.
 
 !!! note "Status"
     Exploratory. There is no compiler yet. The `.stra` files in the repository are Strata as it would be written, and the C beside them is what a compiler would emit, written by hand and kept honest by tests and benchmarks.
