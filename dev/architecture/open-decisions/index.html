@@ -1000,6 +1000,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D17. Moving objects between chunks: split control blocks, and weak promotion
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1327,6 +1338,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D17. Moving objects between chunks: split control blocks, and weak promotion
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1423,7 +1445,7 @@
 <li><em>Unshared container:</em> no lock (R6). The window ends at any call whose mutation summary says it may grow the container, and at every park point. After that the compiler reloads <code>ptr</code>. Calls through interfaces, function values or foreign code are treated as may-grow.</li>
 </ul>
 </li>
-<li><strong>Only growable containers get a handle.</strong> Fixed-size structs and objects never relocate, so they are referenced directly. Indirection for every object would cost locality and an allocation per object for no safety gain.</li>
+<li><strong>Only growable containers get a handle (superseded in part by <a href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion">D17</a>).</strong> Plain structs and objects were to be referenced directly, since indirection would cost locality and an allocation per object for no safety gain. D17 gives every <code>new T</code> object a never-moving control block anyway (it carries the counts), and proposes that the body behind it may move for memory reclamation, so the cost argument changes to one extra load.</li>
 <li><strong>Effect on D2.</strong> No raw array address is frame-resident across a park (a locked window cannot span one, and an unlocked window ends at the park), so borrows into growable arrays do not force an eager frame. Borrows of other locals are still <a href="#d2-borrowed-locals-and-the-lazy-shape">D2</a>.</li>
 <li><strong>Contract.</strong> The mutation summary in the <code>.smod</code> (modules.md, "Access and escape summaries") gains a <code>may-grow</code> bit per container parameter, so a caller can end its deref window exactly. Widening it is a breaking change.</li>
 </ul>
@@ -1449,6 +1471,23 @@
 <li><strong>Fallback if examples need it:</strong> a <code>sealed</code> single-inheritance base with <code>override</code>, where the compiler sees the whole hierarchy and can keep the effect precise.</li>
 </ul>
 <p>Open points: the name of the inline field (<code>dog.body</code>?); clashes when two incorporated structs promote the same name (compile error until the author disambiguates); whether <code>with</code> may name an interface-typed field; <code>cleanup()</code> order (fields in reverse order of declaration, incorporated structs in the same order); how interface access modes (sharing, <code>sync</code>/<code>mutate</code>) are stated; and whether <code>: Animal</code> can be declared outside the struct (as Go and Rust allow) or only in its header.</p>
+<h2 id="d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion">D17. Moving objects between chunks: split control blocks, and weak promotion<a class="headerlink" href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion" title="Permanent link">&para;</a></h2>
+<p><em>Direction, proposed by the author; unmeasured.</em> The finding that motivates it: long-lived objects scattered through shared chunks pin memory (Measured, <a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md"><code>group2.md</code></a>: 6 to 11x retained after a burst). Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks. Chunked arenas already let a type arena grow without moving anything; this decision is about shrinking.</p>
+<ul>
+<li><strong>Split.</strong> The control block (strong and weak counts, metadata, a pointer to the body as <code>{chunk, offset}</code>) lives in one fixed-size control-block arena shared by all types, and never moves. <code>Ref&lt;T&gt;</code> and <code>WeakRef&lt;T&gt;</code> point at it. The body (the fields) stays in the type's chunked arena and may be moved to another chunk by copying it and updating the one pointer in the control block. No <code>Ref</code> or <code>WeakRef</code> changes, and counting never touches the body.</li>
+<li><strong>Lifetimes.</strong> When the strong count reaches zero the body is destroyed (<code>cleanup()</code> runs) and its slot freed. The control block stays until the weak count is also zero. Today's layout (spec 3.3) keeps the whole slot until then, so a dead object with a lingering <code>WeakRef</code> pins its full size; after the split it pins only the control block (about 32 bytes). A <code>WeakRef</code> that is never dropped, for example in a long-lived cache, pins that block until its holder drops the entry; holders should drop an entry when promotion fails.</li>
+<li><strong>Weak promotion returns <code>Ref&lt;T&gt;?</code></strong> (null if the object is gone). Expiry is an expected result the caller must handle, as in Java's <code>WeakReference.get()</code>, Rust's <code>Weak::upgrade</code> and C++'s <code>weak_ptr::lock</code>. Both ways of keeping the data fail identically, because the object is already destroyed at strong zero, so holding the bytes would not avoid the failure. There is no implicit promotion and no <code>ExpiredReference</code> (spec 3.1).</li>
+<li><strong>When a move is safe.</strong> An unshared object: between turns of its owning worker (scheduling is cooperative, so no raw address is live there). A shared mutable object: under <code>mutate</code>, which excludes the <code>sync</code> readers. A shared immutable object: after a grace period, once every worker has passed a park or yield. An object with an FFI borrow is pinned (as in D15). A borrow held in a frame across a park (D2) holds a raw body address: either it blocks the move or it is stored as <code>(control block, offset)</code>.</li>
+<li><strong>A visible service, not magic (principle 10).</strong> Compaction is a runtime service with a stated policy (evacuate chunks below an occupancy threshold), a bounded step per pass, and statistics. Whether it is on is a per-type choice.</li>
+</ul>
+<p>Costs and open points:</p>
+<ul>
+<li><strong>One extra load</strong> (<code>control block</code> then <code>body</code>) per dereference outside a hoisted window; B14 measured about 0 to 3% for such a load in realistic bodies, but not on pointer-heavy object graphs.</li>
+<li><strong><code>new</code> becomes two allocations</strong> (control block and body), which could roughly double its 5 to 10 ns. Types that do not opt in could keep the combined slot of 3.3; two layouts cost compiler complexity.</li>
+<li><strong>Tiny objects</strong> (about 16 bytes or less) gain little: the control block is a large fraction of the body. They could live inline in the control block.</li>
+<li><strong>Generations may become unnecessary</strong> for object arenas: a <code>Ref</code> points at the control block, so validity comes from the counts, and the chunk-epoch fix for decommit (<code>group2.md</code>, section 7) would apply only to the control-block arena. Check before relying on it.</li>
+<li><strong>First work item:</strong> extend the arena benchmark with a burst, 1% survivors, then evacuate case, and measure retained memory, <code>new</code> cost and dereference cost for split against combined. Two cheaper options to try first: page-level <code>MADV_DONTNEED</code> of fully free pages inside a chunk, and merging two sparse chunks whose live slots are disjoint.</li>
+</ul>
 
 
 

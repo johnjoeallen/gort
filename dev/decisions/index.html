@@ -1051,6 +1051,10 @@
 <td>Relocation cannot invalidate a reference, and no borrow error is needed. Direction (D15); micro-benchmark B14 shows no visible per-access cost, real window frequency unmeasured.</td>
 </tr>
 <tr>
+<td>Direction (D17): <code>Ref</code>/<code>WeakRef</code> point at a never-moving control block that holds the counts and the body's location, so a body can move between chunks; <code>WeakRef</code> promotion returns <code>Ref&lt;T&gt;?</code></td>
+<td>Reclaims memory pinned by scattered long-lived objects, and a lingering <code>WeakRef</code> pins only the control block. Unmeasured.</td>
+</tr>
+<tr>
 <td>C stays the backend</td>
 <td>Under the module architecture too.</td>
 </tr>
