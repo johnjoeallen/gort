@@ -29,7 +29,7 @@ fn parseId(path: string): i64 {                             //@N
     return seg.toI64();                                       /*N*/
 }
 fn renderUser(u: User&): string {                           //@N
-    var b = StringBuilder::new();                          /*N*/
+    var b = StringBuilder.make();                          /*N*/
     b.append("{\"id\":");                                      /*N*/
     b.appendI64(u.id);                                        /*N*/
     b.append(",\"name\":");                                    /*N*/
@@ -77,7 +77,7 @@ fn proxy(client: Conn&, addr: Addr, env: Env&) {               //@P frame=4168  
         up.writeAll(buf[..n]);                                /*P*/
         let m = up.read(buf);                                  /*P*/
         client.writeAll(buf[..m]);                            /*P*/
-        logEvent(env, Event::bytes(n, m));                    /*N*/ /*N*/
+        logEvent(env, Event.bytes(n, m));                    /*N*/ /*N*/
     }
 }
 
@@ -102,8 +102,8 @@ fn loadRows(pool: Ref<Pool>, r: Range): Row[] {             //@P frame=112
     pool.release(c);                                           /*N*/
     return rows;
 }
-fn parseRange(q: string): Range { return Range::parse(q); }/*N*/ //@N
-fn summarize(g: Group&): Summary { return Summary::of(g); }  /*N*/ //@N
+fn parseRange(q: string): Range { return Range.parse(q); }/*N*/ //@N
+fn summarize(g: Group&): Summary { return Summary.of(g); }  /*N*/ //@N
 fn renderReport(o: Summary[]): string { return json(o); }   /*N*/ //@N
 
 // ---------- 4. routing + middleware through function values ----------
