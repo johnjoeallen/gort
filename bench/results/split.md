@@ -1,5 +1,8 @@
 # Split control block: moving objects between chunks (D17, B15)
 
+> D17 benchmarks: **1. Allocation, dereference, retained memory** · [2. A whole service](service_split.md)  
+> (first) | [A whole service →](service_split.md)
+
 **Question.** [D17](../../docs/architecture/open-decisions.md#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion) proposes a never-moving control block (counts and a body pointer) in one arena, with the object body in a type arena where it can be moved. What does that cost in time, what does it save in memory, and when?
 
 **Answer for this test: the split costs real time and buys real memory. It is not free the way the D15 header was.**
@@ -70,7 +73,7 @@ Every object dead while a `WeakRef` to it is held (resident MB):
 - **The split pays only where memory is pinned.** If a type's objects die in roughly the order they were made (the "oldest objects" row), neither layout retains anything and the split is pure cost. It earns its keep for types with mixed lifetimes (sessions, cache entries) and where `WeakRef`s outlive their targets.
 - **Pages first.** Releasing free pages needs no indirection. At 1% scattered 64 B survivors it cut 157 MB to 70 MB (combined) with no change to dereference cost. Moving bodies is the further step, to 44 MB, and the only one that works at 10%.
 - **The remaining floor is the control blocks.** They never move, so scattered survivors pin their arena: 24 B x 2M = 48 MB. Moving bodies cannot go below it. A smaller control block, or surviving objects keeping their blocks in a separate arena, would lower it.
-- **For an I/O-bound service** the dereference loss is small next to a database wait, as in the [mixed-request run](mixed.md) for D15, but that run measured the header, not this; it has not been repeated for the split.
+- **For a whole service** see the [second run](service_split.md): 4 to 12% more work per request with one worker, up to 27% with four workers sharing a cache lock, and no difference when the service waits on its database.
 
 ## Caveats
 
