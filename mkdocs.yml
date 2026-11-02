@@ -36,7 +36,7 @@ nav:
       - 1. Why Strata: journey/01-why.md
       - 2. Measuring the foundations: journey/02-foundations.md
       - 3. An HTTP server: journey/03-http.md
-      - 4. Against Rust and Go: journey/04-comparison.md
+      - 4. Measured Against Go, Java and Rust: journey/04-comparison.md
       - 5. mini-redis: journey/05-mini-redis.md
       - 6. Locks that park: journey/06-locks.md
   - Sharing and access checking: sharing.md
