@@ -19,3 +19,4 @@ site/
 /bench/c/handle_bench_O3
 /bench/c/handle_real_O3
 /bench/c/handle_real
+/bench/c/mixed_[0-9]*
