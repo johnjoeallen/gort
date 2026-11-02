@@ -74,7 +74,7 @@ Arena alloc has ~6 ns fixed overhead over slab's Vec push (chunk pick, bump, cou
    lost on decommit (confirmed by a standalone test: gen 7 reads back as 0, and a stale handle is accepted again once the
    counter climbs back, or immediately if it held gen 0). Fixed with a per-chunk epoch in the resident chunk header.
 8. Long-lived objects scattering through shared chunks (6-11x retained after burst) is not solved by chunking or policy;
-   it needs lifetime segregation, which per-type arenas provide by construction.
+   chunking and policy cannot fix it, and per-type arenas separate types, not lifetimes, so a type with mixed lifetimes still pins chunks. Direction (unmeasured): move survivors between chunks through a control block that never moves (D17 in docs/architecture/open-decisions.md).
 
 ## Caveats
 Single thread (no remote frees, no contention); 128 MB working set partly in this CPU's large L3; synthetic workloads;

@@ -82,12 +82,12 @@ Strata is **a Go-like language with a sprinkle of Java**, for network servers an
 Ref<Parent> parent = new Parent(...);
 Ref<Parent> copy = Ref<Parent>(parent);
 WeakRef<Parent> weak = WeakRef<Parent>(parent);
-Ref<Parent> promoted = Ref<Parent>(weak); // throws if expired
+Ref<Parent>? promoted = weak.promote(); // null if the object is gone
 ```
 
-`new T(...)` allocates a new independently managed object, creates its control block and returns `Ref<T>`. Copying a `Ref<T>` increments the strong count rather than copying the object. Converting `WeakRef<T>` to `Ref<T>` atomically increments the strong count *only if it is nonzero*; otherwise it raises `ExpiredReference`.
+`new T(...)` allocates a new independently managed object, creates its control block and returns `Ref<T>`. Copying a `Ref<T>` increments the strong count rather than copying the object. Converting `WeakRef<T>` to `Ref<T>` atomically increments the strong count *only if it is nonzero*; otherwise it returns null. Expiry is an expected result that the type `Ref<T>?` forces the caller to handle, as in Java's `WeakReference.get()`, Rust's `Weak::upgrade` and C++'s `weak_ptr::lock`. (Direction, D17; an earlier draft raised `ExpiredReference`.)
 
-Direct `WeakRef<T>` access may optionally use implicit temporary promotion and raise `ExpiredReference` when expired; this convenience requires specification, especially for compound expressions. `weak.valid()` may check current liveness but **cannot guarantee later access** across threads. Safe multi-operation use requires promotion to a strong reference.
+There is no implicit promotion: a `WeakRef<T>` is never dereferenced directly, because that would hide an operation that can fail (principle 10). `weak.valid()` may check current liveness but **cannot guarantee later access** across threads. Safe multi-operation use requires promotion to a strong reference.
 
 ### 3.2 Parent–child relationships
 
@@ -121,7 +121,7 @@ Parent arena slot
 +------------------------------+
 ```
 
-Strong count reaching zero triggers object destruction and resource cleanup. The slot/control block remains until the final weak owner has been released; implementations can use an implicit weak owner while strong owners exist. Promotion must use an atomic conditional increment, not a separate validity check followed by increment. Count overflow and destruction races must be handled.
+Strong count reaching zero triggers object destruction and resource cleanup. In this layout the whole slot (object space included) remains until the final weak owner has been released; D17 proposes splitting the control block from the body so that only the control block lingers; implementations can use an implicit weak owner while strong owners exist. Promotion must use an atomic conditional increment, not a separate validity check followed by increment. Count overflow and destruction races must be handled.
 
 `Ref<T>[]` is an array of handles, **not** inline `T` objects. Its elements point to objects in the `T` arena; removing an element releases its strong ownership. The array's backing storage is separate.
 

@@ -21,7 +21,7 @@ Before writing any Strata, the expensive questions got small C benchmarks, compa
 - Smaller chunks reclaim better, and geometric growth removes the small-type floor.
 - Against glibc, after freeing everything an arena returns memory (0.3 MB retained against 153 MB).
 - `MADV_DONTNEED` zero-fills, so a generation stored in a slot is lost when a chunk is decommitted. The fix is a per-chunk epoch kept in the resident chunk header.
-- Long-lived objects scattered through shared chunks pin memory. That is solved by lifetime segregation, which per-type arenas give by construction.
+- Long-lived objects scattered through shared chunks pin memory. Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks (Measured: 6 to 11x retained after a burst). Direction: move survivors out of sparse chunks through a control block that never moves ([D17](../architecture/open-decisions.md#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion)).
 
 ## Reference counts across threads
 
