@@ -1,0 +1,106 @@
+RESULT work=alloc mode=combined n=1500000 body=16 fill_ns=6.54 free_random_ns=10.28 churn_pair_ns=13.52 rss_full_kb=50300 rss_after_free_kb=140
+RESULT work=alloc mode=split n=1500000 body=16 fill_ns=9.26 free_random_ns=21.85 churn_pair_ns=37.98 rss_full_kb=76924 rss_after_free_kb=148
+RESULT work=alloc mode=combined n=1500000 body=64 fill_ns=12.69 free_random_ns=16.79 churn_pair_ns=25.88 rss_full_kb=120904 rss_after_free_kb=148
+RESULT work=alloc mode=split n=1500000 body=64 fill_ns=16.33 free_random_ns=29.08 churn_pair_ns=55.32 rss_full_kb=147512 rss_after_free_kb=156
+RESULT work=alloc mode=combined n=1500000 body=256 fill_ns=41.03 free_random_ns=27.73 churn_pair_ns=30.75 rss_full_kb=403568 rss_after_free_kb=204
+RESULT work=alloc mode=split n=1500000 body=256 fill_ns=44.53 free_random_ns=41.91 churn_pair_ns=60.61 rss_full_kb=430420 rss_after_free_kb=192
+RESULT work=deref mode=combined n=2000 body=64 seq_ns=0.314 random_ns=0.298 chase_ns=2.553 mapped_mb=0.2
+RESULT work=deref mode=split n=2000 body=64 seq_ns=0.433 random_ns=0.524 chase_ns=4.468 mapped_mb=0.2
+RESULT work=deref mode=combined n=100000 body=64 seq_ns=0.509 random_ns=0.736 chase_ns=10.556 mapped_mb=7.9
+RESULT work=deref mode=split n=100000 body=64 seq_ns=0.640 random_ns=1.269 chase_ns=21.843 mapped_mb=9.6
+RESULT work=deref mode=combined n=1500000 body=64 seq_ns=1.128 random_ns=2.687 chase_ns=33.693 mapped_mb=117.9
+RESULT work=deref mode=split n=1500000 body=64 seq_ns=1.515 random_ns=4.897 chase_ns=97.848 mapped_mb=143.9
+RESULT work=deref mode=combined n=6000000 body=64 seq_ns=1.846 random_ns=3.982 chase_ns=88.570 mapped_mb=471.8
+RESULT work=deref mode=split n=6000000 body=64 seq_ns=1.846 random_ns=7.746 chase_ns=165.227 mapped_mb=575.7
+RESULT work=alloc mode=split n=1500000 body=16 fill_ns=9.59 free_random_ns=24.47 churn_pair_ns=40.32 rss_full_kb=76984 rss_after_free_kb=208
+RESULT work=alloc mode=combined n=1500000 body=16 fill_ns=6.14 free_random_ns=9.83 churn_pair_ns=13.34 rss_full_kb=50360 rss_after_free_kb=200
+RESULT work=alloc mode=split n=1500000 body=64 fill_ns=16.25 free_random_ns=29.65 churn_pair_ns=54.83 rss_full_kb=147576 rss_after_free_kb=220
+RESULT work=alloc mode=combined n=1500000 body=64 fill_ns=12.89 free_random_ns=16.53 churn_pair_ns=26.03 rss_full_kb=120964 rss_after_free_kb=208
+RESULT work=alloc mode=split n=1500000 body=256 fill_ns=44.46 free_random_ns=44.00 churn_pair_ns=63.27 rss_full_kb=430420 rss_after_free_kb=192
+RESULT work=alloc mode=combined n=1500000 body=256 fill_ns=41.22 free_random_ns=27.77 churn_pair_ns=30.11 rss_full_kb=403608 rss_after_free_kb=244
+RESULT work=deref mode=split n=2000 body=64 seq_ns=0.443 random_ns=0.525 chase_ns=4.468 mapped_mb=0.2
+RESULT work=deref mode=combined n=2000 body=64 seq_ns=0.352 random_ns=0.301 chase_ns=2.549 mapped_mb=0.2
+RESULT work=deref mode=split n=100000 body=64 seq_ns=0.646 random_ns=1.256 chase_ns=21.839 mapped_mb=9.6
+RESULT work=deref mode=combined n=100000 body=64 seq_ns=0.514 random_ns=0.726 chase_ns=10.560 mapped_mb=7.9
+RESULT work=deref mode=split n=1500000 body=64 seq_ns=1.474 random_ns=5.206 chase_ns=94.240 mapped_mb=143.9
+RESULT work=deref mode=combined n=1500000 body=64 seq_ns=1.143 random_ns=2.675 chase_ns=33.740 mapped_mb=117.9
+RESULT work=deref mode=split n=6000000 body=64 seq_ns=1.833 random_ns=7.765 chase_ns=165.617 mapped_mb=575.7
+RESULT work=deref mode=combined n=6000000 body=64 seq_ns=1.586 random_ns=3.939 chase_ns=88.470 mapped_mb=471.8
+RESULT work=alloc mode=combined n=1500000 body=16 fill_ns=6.39 free_random_ns=10.76 churn_pair_ns=13.37 rss_full_kb=50364 rss_after_free_kb=204
+RESULT work=alloc mode=split n=1500000 body=16 fill_ns=9.09 free_random_ns=23.81 churn_pair_ns=39.69 rss_full_kb=76924 rss_after_free_kb=148
+RESULT work=alloc mode=combined n=1500000 body=64 fill_ns=13.00 free_random_ns=16.70 churn_pair_ns=26.26 rss_full_kb=120904 rss_after_free_kb=148
+RESULT work=alloc mode=split n=1500000 body=64 fill_ns=16.13 free_random_ns=29.17 churn_pair_ns=54.76 rss_full_kb=147512 rss_after_free_kb=156
+RESULT work=alloc mode=combined n=1500000 body=256 fill_ns=41.23 free_random_ns=27.31 churn_pair_ns=30.07 rss_full_kb=403548 rss_after_free_kb=184
+RESULT work=alloc mode=split n=1500000 body=256 fill_ns=45.05 free_random_ns=40.88 churn_pair_ns=62.06 rss_full_kb=430420 rss_after_free_kb=192
+RESULT work=deref mode=combined n=2000 body=64 seq_ns=0.329 random_ns=0.302 chase_ns=2.553 mapped_mb=0.2
+RESULT work=deref mode=split n=2000 body=64 seq_ns=0.444 random_ns=0.525 chase_ns=4.468 mapped_mb=0.2
+RESULT work=deref mode=combined n=100000 body=64 seq_ns=0.508 random_ns=0.670 chase_ns=10.538 mapped_mb=7.9
+RESULT work=deref mode=split n=100000 body=64 seq_ns=0.643 random_ns=1.254 chase_ns=21.835 mapped_mb=9.6
+RESULT work=deref mode=combined n=1500000 body=64 seq_ns=1.121 random_ns=2.689 chase_ns=35.695 mapped_mb=117.9
+RESULT work=deref mode=split n=1500000 body=64 seq_ns=1.532 random_ns=4.982 chase_ns=88.056 mapped_mb=143.9
+RESULT work=deref mode=combined n=6000000 body=64 seq_ns=1.613 random_ns=3.951 chase_ns=88.616 mapped_mb=471.8
+RESULT work=deref mode=split n=6000000 body=64 seq_ns=1.794 random_ns=7.738 chase_ns=168.179 mapped_mb=575.7
+RESULT work=alloc mode=split n=1500000 body=16 fill_ns=9.79 free_random_ns=25.11 churn_pair_ns=40.17 rss_full_kb=76924 rss_after_free_kb=148
+RESULT work=alloc mode=combined n=1500000 body=16 fill_ns=6.06 free_random_ns=10.42 churn_pair_ns=13.77 rss_full_kb=50364 rss_after_free_kb=204
+RESULT work=alloc mode=split n=1500000 body=64 fill_ns=16.56 free_random_ns=30.23 churn_pair_ns=56.65 rss_full_kb=147572 rss_after_free_kb=216
+RESULT work=alloc mode=combined n=1500000 body=64 fill_ns=12.96 free_random_ns=16.86 churn_pair_ns=27.78 rss_full_kb=120904 rss_after_free_kb=148
+RESULT work=alloc mode=split n=1500000 body=256 fill_ns=45.64 free_random_ns=44.06 churn_pair_ns=65.39 rss_full_kb=430420 rss_after_free_kb=192
+RESULT work=alloc mode=combined n=1500000 body=256 fill_ns=41.97 free_random_ns=28.46 churn_pair_ns=31.52 rss_full_kb=403548 rss_after_free_kb=184
+RESULT work=deref mode=split n=2000 body=64 seq_ns=0.446 random_ns=0.526 chase_ns=4.469 mapped_mb=0.2
+RESULT work=deref mode=combined n=2000 body=64 seq_ns=0.322 random_ns=0.295 chase_ns=2.552 mapped_mb=0.2
+RESULT work=deref mode=split n=100000 body=64 seq_ns=0.641 random_ns=1.271 chase_ns=21.883 mapped_mb=9.6
+RESULT work=deref mode=combined n=100000 body=64 seq_ns=0.514 random_ns=0.742 chase_ns=10.561 mapped_mb=7.9
+RESULT work=deref mode=split n=1500000 body=64 seq_ns=1.593 random_ns=4.992 chase_ns=99.371 mapped_mb=143.9
+RESULT work=deref mode=combined n=1500000 body=64 seq_ns=1.189 random_ns=2.751 chase_ns=43.266 mapped_mb=117.9
+RESULT work=deref mode=split n=6000000 body=64 seq_ns=1.837 random_ns=7.811 chase_ns=168.433 mapped_mb=575.7
+RESULT work=deref mode=combined n=6000000 body=64 seq_ns=1.618 random_ns=3.925 chase_ns=88.969 mapped_mb=471.8
+RESULT work=alloc mode=combined n=1500000 body=16 fill_ns=6.52 free_random_ns=11.11 churn_pair_ns=16.91 rss_full_kb=50300 rss_after_free_kb=140
+RESULT work=alloc mode=split n=1500000 body=16 fill_ns=9.29 free_random_ns=24.90 churn_pair_ns=44.22 rss_full_kb=76984 rss_after_free_kb=208
+RESULT work=alloc mode=combined n=1500000 body=64 fill_ns=13.31 free_random_ns=16.90 churn_pair_ns=27.55 rss_full_kb=120928 rss_after_free_kb=172
+RESULT work=alloc mode=split n=1500000 body=64 fill_ns=16.52 free_random_ns=31.78 churn_pair_ns=57.48 rss_full_kb=147576 rss_after_free_kb=220
+RESULT work=alloc mode=combined n=1500000 body=256 fill_ns=42.99 free_random_ns=28.33 churn_pair_ns=31.66 rss_full_kb=403608 rss_after_free_kb=244
+RESULT work=alloc mode=split n=1500000 body=256 fill_ns=45.69 free_random_ns=43.94 churn_pair_ns=64.52 rss_full_kb=430420 rss_after_free_kb=192
+RESULT work=deref mode=combined n=2000 body=64 seq_ns=0.355 random_ns=0.312 chase_ns=2.554 mapped_mb=0.2
+RESULT work=deref mode=split n=2000 body=64 seq_ns=0.417 random_ns=0.525 chase_ns=4.472 mapped_mb=0.2
+RESULT work=deref mode=combined n=100000 body=64 seq_ns=0.513 random_ns=0.742 chase_ns=10.557 mapped_mb=7.9
+RESULT work=deref mode=split n=100000 body=64 seq_ns=0.650 random_ns=1.267 chase_ns=21.867 mapped_mb=9.6
+RESULT work=deref mode=combined n=1500000 body=64 seq_ns=1.199 random_ns=2.892 chase_ns=47.950 mapped_mb=117.9
+RESULT work=deref mode=split n=1500000 body=64 seq_ns=1.457 random_ns=4.934 chase_ns=98.503 mapped_mb=143.9
+RESULT work=deref mode=combined n=6000000 body=64 seq_ns=1.624 random_ns=3.933 chase_ns=88.843 mapped_mb=471.8
+RESULT work=deref mode=split n=6000000 body=64 seq_ns=1.785 random_ns=7.809 chase_ns=171.287 mapped_mb=575.7
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=161100 rss_after_free_kb=161164 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=71544 pages_released=44810 rss_after_evac_kb=71544 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=36 release_ms=12 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=196596 rss_after_free_kb=196648 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=112148 pages_released=23120 rss_after_evac_kb=44860 mapped_after_evac_mb=51.4 moved=21970 chunks_freed=2247 free_ms=57 release_ms=9 evac_ms=8 ns_per_move=355.5
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=161036 rss_after_free_kb=161100 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=160528 pages_released=286 rss_after_evac_kb=160528 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=33 release_ms=1 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=196632 rss_after_free_kb=196696 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=196400 pages_released=74 rss_after_evac_kb=65932 mapped_after_evac_mb=64.2 moved=179971 chunks_freed=2044 free_ms=52 release_ms=1 evac_ms=16 ns_per_move=86.3
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=161160 rss_after_free_kb=1880 mapped_after_free_mb=1.6 rss_after_pagerelease_kb=1828 pages_released=26 rss_after_evac_kb=1828 mapped_after_evac_mb=1.6 moved=0 chunks_freed=0 free_ms=41 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=196632 rss_after_free_kb=2204 mapped_after_free_mb=1.9 rss_after_pagerelease_kb=2188 pages_released=8 rss_after_evac_kb=2188 mapped_after_evac_mb=1.9 moved=0 chunks_freed=0 free_ms=67 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=combined n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=269032 rss_after_free_kb=242472 mapped_after_free_mb=236.6 rss_after_pagerelease_kb=52436 pages_released=95018 rss_after_evac_kb=52436 mapped_after_evac_mb=236.6 moved=0 chunks_freed=0 free_ms=20 release_ms=20 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=286928 rss_after_free_kb=263952 mapped_after_free_mb=257.6 rss_after_pagerelease_kb=73248 pages_released=48716 rss_after_evac_kb=24228 mapped_after_evac_mb=27.6 moved=10374 chunks_freed=3681 free_ms=29 release_ms=14 evac_ms=7 ns_per_move=681.0
+RESULT work=weak mode=combined n=2000000 body=64 rss_full_kb=161100 rss_dead_with_weak_kb=161100 mapped_dead_mb=157.2 rss_after_weak_dropped_kb=92
+RESULT work=weak mode=split n=2000000 body=64 rss_full_kb=196636 rss_dead_with_weak_kb=51344 mapped_dead_mb=50.0 rss_after_weak_dropped_kb=160
+RESULT work=weak mode=combined n=1000000 body=256 rss_full_kb=269028 rss_dead_with_weak_kb=269028 mapped_dead_mb=262.6 rss_after_weak_dropped_kb=120
+RESULT work=weak mode=split n=1000000 body=256 rss_full_kb=286992 rss_dead_with_weak_kb=25764 mapped_dead_mb=25.0 rss_after_weak_dropped_kb=172
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=196596 rss_after_free_kb=196648 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=112148 pages_released=23120 rss_after_evac_kb=44860 mapped_after_evac_mb=51.4 moved=21970 chunks_freed=2247 free_ms=57 release_ms=9 evac_ms=7 ns_per_move=330.4
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=161100 rss_after_free_kb=161164 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=71544 pages_released=44810 rss_after_evac_kb=71544 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=31 release_ms=10 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=196592 rss_after_free_kb=196656 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=196360 pages_released=74 rss_after_evac_kb=65892 mapped_after_evac_mb=64.2 moved=179971 chunks_freed=2044 free_ms=53 release_ms=1 evac_ms=15 ns_per_move=83.4
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=161160 rss_after_free_kb=161224 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=160652 pages_released=286 rss_after_evac_kb=160652 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=32 release_ms=1 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=196636 rss_after_free_kb=2208 mapped_after_free_mb=1.9 rss_after_pagerelease_kb=2192 pages_released=8 rss_after_evac_kb=2192 mapped_after_evac_mb=1.9 moved=0 chunks_freed=0 free_ms=64 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=161100 rss_after_free_kb=1820 mapped_after_free_mb=1.6 rss_after_pagerelease_kb=1768 pages_released=26 rss_after_evac_kb=1768 mapped_after_evac_mb=1.6 moved=0 chunks_freed=0 free_ms=39 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=286988 rss_after_free_kb=264012 mapped_after_free_mb=257.6 rss_after_pagerelease_kb=73308 pages_released=48716 rss_after_evac_kb=24288 mapped_after_evac_mb=27.6 moved=10374 chunks_freed=3681 free_ms=29 release_ms=15 evac_ms=7 ns_per_move=673.4
+RESULT work=retain mode=combined n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=269032 rss_after_free_kb=242472 mapped_after_free_mb=236.6 rss_after_pagerelease_kb=52436 pages_released=95018 rss_after_evac_kb=52436 mapped_after_evac_mb=236.6 moved=0 chunks_freed=0 free_ms=18 release_ms=20 evac_ms=0 ns_per_move=0.0
+RESULT work=weak mode=split n=2000000 body=64 rss_full_kb=196508 rss_dead_with_weak_kb=51216 mapped_dead_mb=50.0 rss_after_weak_dropped_kb=32
+RESULT work=weak mode=combined n=2000000 body=64 rss_full_kb=161164 rss_dead_with_weak_kb=161164 mapped_dead_mb=157.2 rss_after_weak_dropped_kb=156
+RESULT work=weak mode=split n=1000000 body=256 rss_full_kb=286992 rss_dead_with_weak_kb=25764 mapped_dead_mb=25.0 rss_after_weak_dropped_kb=172
+RESULT work=weak mode=combined n=1000000 body=256 rss_full_kb=269012 rss_dead_with_weak_kb=269012 mapped_dead_mb=262.6 rss_after_weak_dropped_kb=104
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=161160 rss_after_free_kb=161224 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=71604 pages_released=44810 rss_after_evac_kb=71604 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=31 release_ms=11 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=scatter survivors=19970 ok=1 rss_full_kb=196572 rss_after_free_kb=196624 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=112124 pages_released=23120 rss_after_evac_kb=44836 mapped_after_evac_mb=51.4 moved=21970 chunks_freed=2247 free_ms=56 release_ms=9 evac_ms=7 ns_per_move=334.3
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=161160 rss_after_free_kb=161224 mapped_after_free_mb=157.2 rss_after_pagerelease_kb=160652 pages_released=286 rss_after_evac_kb=160652 mapped_after_evac_mb=157.2 moved=0 chunks_freed=0 free_ms=32 release_ms=1 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=1000 pattern=scatter survivors=199806 ok=1 rss_full_kb=196572 rss_after_free_kb=196636 mapped_after_free_mb=191.9 rss_after_pagerelease_kb=196340 pages_released=74 rss_after_evac_kb=65872 mapped_after_evac_mb=64.2 moved=179971 chunks_freed=2044 free_ms=52 release_ms=1 evac_ms=15 ns_per_move=83.7
+RESULT work=retain mode=combined n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=161116 rss_after_free_kb=1836 mapped_after_free_mb=1.6 rss_after_pagerelease_kb=1784 pages_released=26 rss_after_evac_kb=1784 mapped_after_evac_mb=1.6 moved=0 chunks_freed=0 free_ms=41 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=2000000 body=64 keep_bp=100 pattern=cluster survivors=20000 ok=1 rss_full_kb=196572 rss_after_free_kb=2144 mapped_after_free_mb=1.9 rss_after_pagerelease_kb=2128 pages_released=8 rss_after_evac_kb=2128 mapped_after_evac_mb=1.9 moved=0 chunks_freed=0 free_ms=66 release_ms=0 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=combined n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=269072 rss_after_free_kb=242512 mapped_after_free_mb=236.6 rss_after_pagerelease_kb=52476 pages_released=95018 rss_after_evac_kb=52476 mapped_after_evac_mb=236.6 moved=0 chunks_freed=0 free_ms=18 release_ms=21 evac_ms=0 ns_per_move=0.0
+RESULT work=retain mode=split n=1000000 body=256 keep_bp=100 pattern=scatter survivors=9933 ok=1 rss_full_kb=286992 rss_after_free_kb=264016 mapped_after_free_mb=257.6 rss_after_pagerelease_kb=73312 pages_released=48716 rss_after_evac_kb=24292 mapped_after_evac_mb=27.6 moved=10374 chunks_freed=3681 free_ms=29 release_ms=14 evac_ms=7 ns_per_move=676.9
+RESULT work=weak mode=combined n=2000000 body=64 rss_full_kb=161100 rss_dead_with_weak_kb=161100 mapped_dead_mb=157.2 rss_after_weak_dropped_kb=92
+RESULT work=weak mode=split n=2000000 body=64 rss_full_kb=196632 rss_dead_with_weak_kb=51340 mapped_dead_mb=50.0 rss_after_weak_dropped_kb=156
+RESULT work=weak mode=combined n=1000000 body=256 rss_full_kb=269072 rss_dead_with_weak_kb=269072 mapped_dead_mb=262.6 rss_after_weak_dropped_kb=164
+RESULT work=weak mode=split n=1000000 body=256 rss_full_kb=286944 rss_dead_with_weak_kb=25716 mapped_dead_mb=25.0 rss_after_weak_dropped_kb=124
