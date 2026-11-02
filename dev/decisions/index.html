@@ -1044,7 +1044,7 @@
 </tr>
 <tr>
 <td>Growable containers sit behind a non-moving header; references into them are <code>(header, offset)</code>, a raw address exists only in a deref window (<code>sync</code>/<code>mutate</code>, or until the next may-grow call or park)</td>
-<td>Relocation cannot invalidate a reference, and no borrow error is needed. Direction (D15); per-access cost unmeasured.</td>
+<td>Relocation cannot invalidate a reference, and no borrow error is needed. Direction (D15); micro-benchmark B14 shows no visible per-access cost, real window frequency unmeasured.</td>
 </tr>
 <tr>
 <td>C stays the backend</td>

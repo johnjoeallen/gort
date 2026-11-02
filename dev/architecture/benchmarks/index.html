@@ -1225,6 +1225,12 @@
 <td>The cost of opting in. Also decides whether default-on is ever worth revisiting.</td>
 </tr>
 <tr>
+<td>B14</td>
+<td>Handle indirection (D15)</td>
+<td>Element access through a non-moving header <code>{ptr,len,cap}</code> against a raw pointer: hoisted, reloaded every access, reloaded after a may-grow call every K accesses; (handle, offset) cursor; sequential and random, L1, L2, memory</td>
+<td><strong>First run done</strong> on hand-written C (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle.md"><code>handle.md</code></a>): no visible per-access cost at <code>-O2</code>; at <code>-O3</code> the cost is lost vectorisation in a loop that contains a may-grow call. Best-case loop body, one machine; the real risk (how often windows end) needs a compiler.</td>
+</tr>
+<tr>
 <td>B12</td>
 <td>Mixed realistic service</td>
 <td>Parse, route, query, render, with a shared cache (<code>sync</code>/<code>mutate</code>)</td>
