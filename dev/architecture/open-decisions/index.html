@@ -989,6 +989,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#d16-composition-and-interfaces-instead-of-inheritance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D16. Composition and interfaces instead of inheritance
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1305,6 +1316,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#d16-composition-and-interfaces-instead-of-inheritance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D16. Composition and interfaces instead of inheritance
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1413,6 +1435,20 @@
 <li><strong>Precision of the may-grow summary.</strong> A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.</li>
 <li><strong>Stable identity beyond arrays.</strong> For objects that other objects point to (graph nodes), use <code>Ref&lt;T&gt;</code>: it never moves.</li>
 </ul>
+<h2 id="d16-composition-and-interfaces-instead-of-inheritance">D16. Composition and interfaces instead of inheritance<a class="headerlink" href="#d16-composition-and-interfaces-instead-of-inheritance" title="Permanent link">&para;</a></h2>
+<p><em>Direction, proposed by the author; no prototype.</em> A struct is built from other structs and interfaces. There is no class inheritance.</p>
+<div class="highlight"><pre><span></span><code>struct Dog: Animal with Body {
+    fn name(): string { return "dog" }
+}
+</code></pre></div>
+<ul>
+<li><strong><code>: Animal</code></strong> lists interfaces (the colon reads as in <code>x: T</code> and a generic bound <code>T: Animal</code>: Dog satisfies Animal). The struct must provide every function the interface requires. An interface may give default functions (behaviour, no data), so it can share code without sharing fields. A struct converts to any interface it implements. This is the only subtyping.</li>
+<li><strong><code>with Body</code></strong> lists structs. Each is stored inline in the new struct, as a field, and its fields and functions are promoted, so <code>dog.feed(1.0)</code> forwards to the <code>Body</code>. Promotion is shorthand for writing the forwarding functions: no new type relation and no layout prefix rule, so no slicing. A plain field <code>body: Body</code> is not embedded and promotes nothing. Both parts are optional (<code>struct Dog: Animal</code>, <code>struct Dog with Body</code>, <code>struct Dog: Animal, Named with Body, Tail</code>). No keyword is reserved for it (<code>is</code> is left free for a possible type test).</li>
+<li><strong>No open recursion.</strong> A function of <code>Body</code> that calls <code>feed</code> calls <code>Body.feed</code>, never a <code>Dog</code> override. Dynamic dispatch exists only at an interface call. A <code>Dog</code> function with the same name as a promoted one hides it for callers of <code>Dog</code> and does not change what <code>Body</code> does internally.</li>
+<li><strong>Why not class inheritance.</strong> Open recursion turns every self-call into a dynamic call, and calls through interfaces compile against a declared effect bound (default may-park). That would degrade the may-park inference, the <code>[nopark]</code> and lock-body checks, and the access summaries the sharing rules use, program-wide. It is also where fragile-base-class bugs come from.</li>
+<li><strong>Fallback if examples need it:</strong> a <code>sealed</code> single-inheritance base with <code>override</code>, where the compiler sees the whole hierarchy and can keep the effect precise.</li>
+</ul>
+<p>Open points: the name of the inline field (<code>dog.body</code>?); clashes when two incorporated structs promote the same name (compile error until the author disambiguates); whether <code>with</code> may name an interface-typed field; <code>cleanup()</code> order (fields in reverse order of declaration, incorporated structs in the same order); how interface access modes (sharing, <code>sync</code>/<code>mutate</code>) are stated; and whether <code>: Animal</code> can be declared outside the struct (as Go and Rust allow) or only in its header.</p>
 
 
 
