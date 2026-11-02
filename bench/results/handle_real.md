@@ -1,5 +1,8 @@
 # Handle indirection with realistic loop bodies (D15, second run)
 
+> D15 handle benchmarks: [1. Handle indirection: simple loop](handle.md) · **2. Realistic loop bodies** · [3. Mixed request](mixed.md)  
+> [← Handle indirection: simple loop](handle.md) | [Mixed request →](mixed.md)
+
 **Question.** Same as the [first run](handle.md): what does it cost to reach array elements through a non-moving header (`h->ptr`) instead of
 a raw pointer? The first run summed an array, the easiest loop to be unfair to a handle. Here every element does real work, and every variant takes a lock.
 
@@ -79,3 +82,7 @@ only to the in-memory work *between* those calls, so this benchmark is deliberat
 Measured: for bodies that do real work, reaching the data through a non-moving header costs about 1 to 3% (0.01 to 0.3 ns per element), the largest percentage loss
 is on an almost-empty body without a lock, and a lock around the element hides it completely. Direction, not measured: this is small enough to accept for the safety it
 buys, provided the compiler does not end windows needlessly.
+
+---
+> D15 handle benchmarks: [1. Handle indirection: simple loop](handle.md) · **2. Realistic loop bodies** · [3. Mixed request](mixed.md)  
+> [← Handle indirection: simple loop](handle.md) | [Mixed request →](mixed.md)

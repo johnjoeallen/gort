@@ -1,5 +1,8 @@
 # Mixed request: parse, authenticate, cache, database wait, render (D15, B12)
 
+> D15 handle benchmarks: [1. Handle indirection: simple loop](handle.md) · [2. Realistic loop bodies](handle_real.md) · **3. Mixed request**  
+> [← Realistic loop bodies](handle_real.md) | (last) →
+
 **Question.** The [realistic run](handle_real.md) timed loops with no I/O. A real request parses, checks a lock-protected cache, often waits on a database,
 then renders. Does reaching container data through a non-moving header (D15) show up in the **whole request**?
 
@@ -73,3 +76,7 @@ loss could apply to; the result says the total did not move.
 Measured: with a realistic request (parse, authenticate, lock-protected lookup, database wait, growable-buffer rendering), reaching container data through a non-moving header is indistinguishable from a raw pointer
 in work per request, throughput and latency (within 3% noise, worst case +2.1% for the pessimistic reload-every-access build). Direction, not measured: this supports the D15 recommendation for I/O-shaped servers; the open
 risk remains how often a compiler would end deref windows in real Strata code.
+
+---
+> D15 handle benchmarks: [1. Handle indirection: simple loop](handle.md) · [2. Realistic loop bodies](handle_real.md) · **3. Mixed request**  
+> [← Realistic loop bodies](handle_real.md) | (last) →

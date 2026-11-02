@@ -1,5 +1,8 @@
 # Handle indirection: what does it cost? (D15, first run)
 
+> D15 handle benchmarks: **1. Handle indirection: simple loop** · [2. Realistic loop bodies](handle_real.md) · [3. Mixed request](mixed.md)  
+> ← (first) | [Realistic loop bodies →](handle_real.md)
+
 **Question.** A growable array is a small fixed header `{ptr, len, cap}` and every element access goes through `h->ptr`, so the array can move
 without breaking references. How much slower is that than holding a raw pointer?
 
@@ -55,3 +58,7 @@ Called every 16th element instead, the call is 0.11 to 0.23 ns per element. Here
 
 Each result above is from the final run; correctness check in the same program: 17 grows moved the array 6 times, a reference stored as
 (handle, offset) still read the right element afterwards, and a raw pointer taken earlier no longer pointed at it.
+
+---
+> D15 handle benchmarks: **1. Handle indirection: simple loop** · [2. Realistic loop bodies](handle_real.md) · [3. Mixed request](mixed.md)  
+> ← (first) | [Realistic loop bodies →](handle_real.md)
