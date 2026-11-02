@@ -78,6 +78,7 @@ Also part of each exported function's contract, and of each exported type (see [
 ```
 per borrowed or Ref parameter:  access = none | read | write      (through the receiver and by-value fields)
                                 escape = none | retained | published (stored beyond the call / given to spawn or a message)
+                                grow   = no | may                 (may move a growable container's storage; D15)
 result:                         fresh  = yes | no                 (a new allocation nothing else refers to)
 per type field:                 mutability = write-once | mutable
 ```

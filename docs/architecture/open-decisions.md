@@ -93,3 +93,25 @@ Still open:
 - **Visibility.** What a package exports to others, and how encapsulated `sync` code (spec 7.2) is protected from being bypassed. Not specified yet.
 - **Nesting.** Dots mean folder nesting. Whether a nested package can see its parent's declarations (Java: it cannot) is undecided; recommendation: it cannot.
 - **Versions.** The `.smod` carries the package version ([modules](modules.md)); how a source tree states which version of an imported package it expects.
+
+## D15. Growable arrays, relocation and stable references
+
+*Direction, proposed by the author and not yet prototyped beyond the HTTP buffers.* A growable array can move its backing store when it grows. The rule that keeps every reference safe is that **no reference into a growable container is a raw address**.
+
+- **Handle.** A growable container (`T[]`, string builder, map storage) is a small header that never moves: `{ptr, len, cap}` plus, when the container is shared, its lock word. Only the backing store behind `ptr` moves; growing updates `ptr` in place. This is the shape `Ref<T>` already has (an individually allocated object that stays put).
+- **Interior references are `(handle, offset)`.** `&v[3]`, a slice, an iterator and a stored cursor name the container and a position. They cannot dangle, so `let r = &v[0]; v.push(x); use(r)` is legal and correct. This is the offsets rule of the HTTP prototype (a `Request` is a pair of offsets), applied by the compiler instead of the programmer.
+- **Deref window.** The raw address exists only inside a window in which the compiler has loaded `ptr` and nothing can move the store.
+    - *Shared container:* the window is the `sync` or `mutate` block (spec 7.3, R1 and R4). Growing needs `mutate`; a reader inside `sync` therefore excludes a grow.
+    - *Unshared container:* no lock (R6). The window ends at any call whose mutation summary says it may grow the container, and at every park point. After that the compiler reloads `ptr`. Calls through interfaces, function values or foreign code are treated as may-grow.
+- **Only growable containers get a handle.** Fixed-size structs and objects never relocate, so they are referenced directly. Indirection for every object would cost locality and an allocation per object for no safety gain.
+- **Effect on D2.** No raw array address is frame-resident across a park (a locked window cannot span one, and an unlocked window ends at the park), so borrows into growable arrays do not force an eager frame. Borrows of other locals are still [D2](#d2-borrowed-locals-and-the-lazy-shape).
+- **Contract.** The mutation summary in the `.smod` (modules.md, "Access and escape summaries") gains a `may-grow` bit per container parameter, so a caller can end its deref window exactly. Widening it is a breaking change.
+
+Costs and open points:
+
+- **One dependent load** of `ptr` per access outside a hoisted window. Loops with no may-grow call hoist it; loops that call something that may grow pay it per iteration. Unmeasured; needs a benchmark (loop over an array with and without a may-grow call, against a raw pointer).
+- **FFI.** C needs a stable address. An `extern` call takes a *pinned* borrow: the container is excluded from growing for the call. A library that retains the pointer needs a non-moving allocation (a fixed-capacity array or a dedicated virtual region), declared in the binding contract (spec 5.2).
+- **Large arrays.** A dedicated virtual-address reservation grows in place, so its `ptr` never changes and its handle test is free. Whether to use one is the older question in [open questions](../open-questions.md); it becomes an optimisation under this rule, not a correctness requirement.
+- **Precision of the may-grow summary.** A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.
+- **Stable identity beyond arrays.** For objects that other objects point to (graph nodes), use `Ref<T>`: it never moves.
+

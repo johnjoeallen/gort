@@ -151,6 +151,10 @@ The exact string representation, encoding, equality and substring ownership sema
 
 The compiler may place objects in task-local storage only if it proves they cannot outlive the task or be observed through escaping strong/weak references. It must preserve identity, destructor timing, weak-reference semantics and synchronization behaviour; it must not optimize by silently invalidating handles. Start with independently reclaimable allocations for all `new` objects and treat placement optimizations as later work.
 
+### 4.5 Growable containers and relocation
+
+Direction (docs/architecture/open-decisions.md D15). A growable container is a small non-moving header (`{ptr, len, cap}`, plus a lock word when shared) over a backing store that may move when it grows. A reference into a container is `(header, offset)`, never a raw address, so growing cannot invalidate it and no borrow error is needed for `let r = &v[0]; v.push(x)`. The raw address exists only inside a deref window: the `sync`/`mutate` block for a shared container (growing needs `mutate`), or, for an unshared one, the span until the next call that may grow it or the next park, after which the compiler reloads `ptr`. Fixed-size objects are referenced directly and have no header indirection. A call into C pins the container for its duration; retaining a pointer needs a non-moving allocation named in the binding contract (5.2).
+
 ## 5. Reference and lifetime analysis
 
 Lifetime parameters are **not** written as named generics. Borrowing is expressed with `T&`; the compiler infers which parameters, object fields or static objects the returned borrow depends on.
@@ -345,7 +349,7 @@ A resource type may define an automatically invoked cleanup method. The exact ow
 1. **Compiler implementation:** Build a fresh compiler or adapt a mature front-end/backend, and which Goose virtual-memory techniques are independently worth reproducing?
 2. **Ref thread safety:** Direction (7.3): sharing is per instance, set when a reference is published across a vthread boundary; compiler-proven local objects use plain counts. Open: the cost of a per-reference flag test against always-atomic for non-local references (`docs/sharing.md`).
 3. **Access model:** Direction (7.3): a block is required where the object is not provably local and the field is mutable; shareability is inferred, never declared. Open: write-once fields across modules and interface access modes.
-4. **Arrays:** When should a growable array use a dedicated virtual region rather than a relocatable managed buffer? How are thousands of independently sized arrays represented?
+4. **Arrays:** Direction (4.5, D15): a handle plus `(handle, offset)` interior references, so relocation never invalidates a reference. Open: when a dedicated virtual region is worth it, how thousands of independently sized arrays are represented, and the cost of the per-access load (unmeasured).
    *Direction chosen for small bounded buffers (prototyped in `bench/http`, `stra/http`, `c/generated/http`):* the runtime provides `u8[]` as a pooled size-class array
    (512 B, 2 KB, 8 KB, 16 KB in the prototype). It starts in the smallest class, compacts when full, and `grow()` copies it into the
    next class; the source states no size, only a limit where one matters (a maximum header block). Code that needs a stable
@@ -375,7 +379,7 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
 8. **Virtual-thread stacks:** Largely superseded by 6.1 (resumable frames). Remains for the stackful baseline and for fast-path native-stack depth in recursive functions. Related open items (lazy frames with borrowed locals, FFI, fusion): `docs/architecture/open-decisions.md`.
 9. **Synchronized callbacks and escaping values:** How to handle callbacks, function pointers, composite references and nested transactions safely.
 10. **API stability:** Direction: contract hashes per symbol, format/ABI versions, contract diffs and a rule that widening an effect is breaking (`docs/architecture/modules.md`). Open: the enforcement policy and the spelling of the optional effect assertion.
-11. **Compilation architecture:** where continuation lowering happens, the minimum IR for cross-module optimisation, fusion across modules, debugging maps, dynamic loading (`docs/architecture/open-decisions.md`, D1 to D14).
+11. **Compilation architecture:** where continuation lowering happens, the minimum IR for cross-module optimisation, fusion across modules, debugging maps, dynamic loading (`docs/architecture/open-decisions.md`, D1 to D15).
 
 ## 11. Suggested implementation sequence
 

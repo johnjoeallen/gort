@@ -4,12 +4,12 @@
 
 - Per-instance sharing: does the flag test on each reference-count operation cost more than always-atomic for non-local references? See [sharing](sharing.md).
 - Sharing (direction chosen, see [sharing](sharing.md)): the cost of the per-instance shared flag, publishing a graph, where the lock word lives, write-once fields across modules, access modes on interfaces.
-- When does a growable array get a dedicated virtual region instead of a relocatable buffer?
+- Relocation (direction chosen, see [D15](architecture/open-decisions.md#d15-growable-arrays-relocation-and-stable-references)): a non-moving header and `(handle, offset)` references. Open: the per-access cost, when a dedicated virtual region is worth it, FFI pinning, and the precision of the may-grow summary.
 - Exact string representation, slicing and UTF-8 indexing.
 - How does a throw interact with a scope that still has child vthreads?
 - Stack model: fixed reserve with guard pages, or segmented stacks.
 - How are exported lifetime and effect metadata versioned? Direction in [architecture](architecture/modules.md); policy open.
-- Architecture decisions D1 to D14 (D14: packages and imports) (where lowering happens, borrowed locals with lazy frames, minimum IR, effects in public interfaces, fusion across modules, debugging maps, dynamic loading, blocking FFI, slice-check overhead and loop warnings): [open decisions](architecture/open-decisions.md).
+- Architecture decisions D1 to D15 (D14: packages and imports, D15: relocation and stable references) (where lowering happens, borrowed locals with lazy frames, minimum IR, effects in public interfaces, fusion across modules, debugging maps, dynamic loading, blocking FFI, slice-check overhead and loop warnings): [open decisions](architecture/open-decisions.md).
 
 ## Not yet built or measured
 

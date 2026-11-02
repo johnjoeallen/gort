@@ -181,6 +181,10 @@ if (sh) rwlock_read_exit(&store->lock);          // on every exit path, includin
 
 Reference counts follow the same split. An object the compiler proves local uses plain counts. A reference to a non-local object tests the flag: plain count if clear, atomic if set. That test per copy and release is a real cost, and the alternative (always atomic for non-local) is simpler and slower; `bench/c/refcount_bench.c` is where it gets measured (Open).
 
+## Growable containers
+
+A container that can relocate its storage (arrays, builders, map tables) is reached through a non-moving header, and references into it are `(header, offset)`. Growing a shared container needs `mutate`, reading it needs `sync`, so a raw address is valid exactly inside the block that holds it and a grow cannot happen under a reader (R1, R4, R7). An unshared container has no lock; its raw address is valid until the next call that may grow it or the next park. See spec 4.5 and [D15](architecture/open-decisions.md#d15-growable-arrays-relocation-and-stable-references).
+
 ## Open
 
 - **Publishing a graph.** Setting the flag on everything reachable costs a walk at the publish. Alternatives: refuse to publish an object whose graph has local-only parts that are not themselves being published; or make `spawn` and message sends take only values whose reachable graph is already shared or immutable.
