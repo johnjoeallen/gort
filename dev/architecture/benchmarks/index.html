@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Designing a Rust alternative with Goose-style arenas, one measured step at a time">
+        <meta name="description" content="Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time">
       
       
       
@@ -1128,14 +1128,14 @@
 
 
 <h1 id="evaluation-plan">Evaluation plan<a class="headerlink" href="#evaluation-plan" title="Permanent link">&para;</a></h1>
-<p>The question is not "is Strata faster?" It is: <strong>does Strata reach the same performance class as Java virtual threads and Rust async, with a measurably simpler program?</strong> Both halves are measured. A result that is slightly slower with much less source ceremony is a success; a result that is faster with a more complicated model is not the goal.</p>
+<p>The question is not "is Strata faster?" It is: <strong>does Strata reach the same performance class as Go and Java virtual threads, with a program no more complicated than Go's?</strong> Rust async is measured as a reference ceiling, not as a rival. Both halves are measured. A result that is slightly slower with much less source ceremony is a success; a result that is faster with a more complicated model is not the goal.</p>
 <h2 id="what-exists-and-what-it-does-not-show">What exists, and what it does not show<a class="headerlink" href="#what-exists-and-what-it-does-not-show" title="Permanent link">&para;</a></h2>
 <p>The HTTP, mini-redis and micro benchmarks in <code>bench/</code> are promising (see <code>docs/journey/</code> and <code>bench/results/</code>). They are hand-written C beside hand-written Rust/Go/Java. They do <strong>not</strong> show that a compiler can generate the same code, and the simple HTTP handler is syscall-bound at roughly 3 microseconds a request, so throughput there is nearly equal by construction. They are not representative of applications with deep call chains, databases, TLS, dispatch or cancellation. Treat them as evidence about the runtime, nothing more.</p>
 <h2 id="ground-rules">Ground rules<a class="headerlink" href="#ground-rules" title="Permanent link">&para;</a></h2>
 <ol>
 <li><strong>Equivalent behaviour.</strong> Same protocol, same limits, same error behaviour, same cleanup, on the same wire. Each variant passes the same black-box test suite before it is timed (the existing <code>run_tests.sh</code> pattern).</li>
-<li><strong>Comparable I/O models.</strong> Strata (readiness plus epoll) against Tokio (epoll) and Java virtual threads on the JDK's NIO selector. Not against blocking thread-per-request unless that is the stated question.</li>
-<li><strong>Idiomatic baselines.</strong> The Rust and Java versions are written by someone who would ship them, with the executor and pool settings tuned and recorded.</li>
+<li><strong>Comparable I/O models.</strong> Strata (readiness plus epoll) against Go (goroutines and the runtime's netpoller) and Java virtual threads on the JDK's NIO selector, with Tokio (epoll) as the reference ceiling. Not against blocking thread-per-request unless that is the stated question.</li>
+<li><strong>Idiomatic baselines.</strong> The Go, Java and Rust versions are written by someone who would ship them, with the executor and pool settings tuned and recorded.</li>
 <li><strong>Pre-registered bars.</strong> Before measuring, write down what counts as "same class" (for example, within a stated factor on throughput and p99 latency, and no worse on memory). The factor is set once and not adjusted afterwards. <strong>No factor is proposed here</strong>; it is a decision for the author once the first end-to-end numbers exist.</li>
 <li><strong>Report variance.</strong> Repeated runs, pinned CPUs, fixed frequency, warm-up for the JVM, p50/p99/p99.9, not only means.</li>
 <li><strong>Scheduler cost is separated from application cost.</strong> Each workload is run with a <em>null</em> body (spawn, park, resume, finish) to get the pure scheduling and frame overhead, and with the real body. Reported as: <code>total = scheduling + application</code>.</li>
@@ -1240,14 +1240,14 @@
 </table>
 <p>Metrics for all: throughput, CPU utilisation (user, system), p50/p99/p99.9 latency, resident memory, allocations, context switches.</p>
 <h2 id="ceremony-metrics-the-half-that-matters-most-here">Ceremony metrics (the half that matters most here)<a class="headerlink" href="#ceremony-metrics-the-half-that-matters-most-here" title="Permanent link">&para;</a></h2>
-<p>For each application, written equivalently in Strata, Rust and Java:</p>
+<p>For each application, written equivalently in Strata, Go, Java and Rust (Go is the main comparison for ceremony):</p>
 <ul>
 <li>Lines of code and number of tokens.</li>
 <li>Count of <code>async</code>/<code>await</code>, <code>Pin</code>, <code>Box&lt;dyn ...&gt;</code>, lifetime names, <code>Arc</code>/<code>Mutex</code> wrapper types, executor/runtime setup lines.</li>
 <li>Count of explicit cancellation or resource-handling constructs.</li>
 <li>Whether a reviewer who has not seen the code can state where it may wait (needs tooling support for Strata; its quality is part of the result).</li>
 </ul>
-<p>The Rust and Java versions are not made artificially verbose; the comparison is only meaningful for code each community would write.</p>
+<p>The Go, Java and Rust versions are not made artificially verbose; the comparison is only meaningful for code each community would write.</p>
 <h2 id="build-and-tooling-measurements">Build and tooling measurements<a class="headerlink" href="#build-and-tooling-measurements" title="Permanent link">&para;</a></h2>
 <p>Because the module architecture trades build time for runtime, these are measured as results, not assumed:</p>
 <ul>

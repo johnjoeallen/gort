@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Designing a Rust alternative with Goose-style arenas, one measured step at a time">
+        <meta name="description" content="Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time">
       
       
       
@@ -1019,7 +1019,11 @@
 <td>Strata would have no equivalents.</td>
 </tr>
 <tr>
-<td>Performance goal: same class as Rust async and Java vthreads, with a simpler model</td>
+<td>Positioning: a Go-like language with a sprinkle of Java, for servers and services; not a systems language and not a Rust or C/C++ competitor</td>
+<td>Its runtime and its trade of control for simplicity rule out systems work. Types are structs that carry their functions (Java style, a deliberate break with Go). Comparison set is Go and Java; Rust is a performance reference. Beyond them (intent, unbuilt): no GC, compile-time-checked sharing. See spec 1.1.</td>
+</tr>
+<tr>
+<td>Performance goal: same class as Go and Java vthreads (Rust async as a reference ceiling), with a simpler model</td>
 <td>Superiority is not claimed; ceremony is measured alongside speed.</td>
 </tr>
 <tr>
