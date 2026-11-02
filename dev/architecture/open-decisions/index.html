@@ -1486,7 +1486,14 @@
 <li><strong><code>new</code> becomes two allocations</strong> (control block and body), which could roughly double its 5 to 10 ns. Types that do not opt in could keep the combined slot of 3.3; two layouts cost compiler complexity.</li>
 <li><strong>Tiny objects</strong> (about 16 bytes or less) gain little: the control block is a large fraction of the body. They could live inline in the control block.</li>
 <li><strong>Generations may become unnecessary</strong> for object arenas: a <code>Ref</code> points at the control block, so validity comes from the counts, and the chunk-epoch fix for decommit (<code>group2.md</code>, section 7) would apply only to the control-block arena. Check before relying on it.</li>
-<li><strong>First work item:</strong> extend the arena benchmark with a burst, 1% survivors, then evacuate case, and measure retained memory, <code>new</code> cost and dereference cost for split against combined. Two cheaper options to try first: page-level <code>MADV_DONTNEED</code> of fully free pages inside a chunk, and merging two sparse chunks whose live slots are disjoint.</li>
+<li><strong>Measured, micro-benchmark only</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>, B15; single thread, hand-written C):<ul>
+<li><em>Time (loss).</em> <code>new</code> is 9 to 45% slower, a free 58 to 135% slower, a free-plus-allocate pair about 2x. A dereference through the control block is 13 to 97% slower for independent reads and <strong>75 to 174% slower on a pointer chase</strong> (two cache lines in two arenas). This is much more than the D15 header (0 to 3%), which sits next to its array.</li>
+<li><em>Memory (gain).</em> Dead objects held by a <code>WeakRef</code>: 157 MB falls to 50 MB (64 B bodies), 263 MB to 25 MB (256 B). After a burst leaving 1% scattered survivors: 44 MB with moving, 70 MB with page release only, 157 MB with nothing. At 10% survivors only moving helps (64 MB against 157 MB).</li>
+<li><em>Memory (cost).</em> A live object is 96 B against 80 B for a 64 B body (+22% on a full heap), and the control blocks of scattered survivors stay pinned (about 24 B each), which is the floor of the 44 MB.</li>
+<li><em>When it pays.</em> Not when objects die roughly in allocation order (nothing is retained and the split is pure cost); for types with mixed lifetimes and for long-lived <code>WeakRef</code>s.</li>
+</ul>
+</li>
+<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: concurrency, the cost of making a move safe against readers, the effect on a whole service.</li>
 </ul>
 
 

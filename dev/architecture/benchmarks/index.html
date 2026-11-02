@@ -1236,6 +1236,12 @@
 <td>Parse, route, query, render, with a shared cache (<code>sync</code>/<code>mutate</code>)</td>
 <td>The end-to-end result everything else supports. <strong>First run done for D15</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>): parse, authenticate, locked cache lookup, simulated database wait, growable-buffer render, on the C runtime; the handle build is within noise of a raw pointer in work per request, throughput and latency (worst case +2.1% for reload-at-every-access). In-process requests, simulated database, hand-written C: not yet the full B12.</td>
 </tr>
+<tr>
+<td>B15</td>
+<td>Split control block (D17)</td>
+<td>Combined slot against a never-moving control block with a movable body: allocation, dereference (sequential, random, pointer chase), memory kept after a burst, dead objects held by a <code>WeakRef</code></td>
+<td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Single thread; concurrency and a whole-service run still to do.</td>
+</tr>
 </tbody>
 </table>
 <p>Metrics for all: throughput, CPU utilisation (user, system), p50/p99/p99.9 latency, resident memory, allocations, context switches.</p>
