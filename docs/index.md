@@ -1,6 +1,6 @@
-<p align="center" markdown>
-  ![Strata](assets/logo-light.svg#only-light){ height="90" }
-  ![Strata](assets/logo-dark.svg#only-dark){ height="90" }
+<p align="center">
+  <img alt="Strata" src="assets/logo-light.svg#only-light" height="90">
+  <img alt="Strata" src="assets/logo-dark.svg#only-dark" height="90">
 </p>
 
 # Strata

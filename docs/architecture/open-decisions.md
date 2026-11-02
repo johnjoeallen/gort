@@ -115,3 +115,20 @@ Costs and open points:
 - **Precision of the may-grow summary.** A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.
 - **Stable identity beyond arrays.** For objects that other objects point to (graph nodes), use `Ref<T>`: it never moves.
 
+## D16. Composition and interfaces instead of inheritance
+
+*Direction, proposed by the author; no prototype.* A struct is built from other structs and interfaces. There is no class inheritance.
+
+```
+struct Dog: Animal with Body {
+    fn name(): string { return "dog" }
+}
+```
+
+- **`: Animal`** lists interfaces (the colon reads as in `x: T` and a generic bound `T: Animal`: Dog satisfies Animal). The struct must provide every function the interface requires. An interface may give default functions (behaviour, no data), so it can share code without sharing fields. A struct converts to any interface it implements. This is the only subtyping.
+- **`with Body`** lists structs. Each is stored inline in the new struct, as a field, and its fields and functions are promoted, so `dog.feed(1.0)` forwards to the `Body`. Promotion is shorthand for writing the forwarding functions: no new type relation and no layout prefix rule, so no slicing. A plain field `body: Body` is not embedded and promotes nothing. Both parts are optional (`struct Dog: Animal`, `struct Dog with Body`, `struct Dog: Animal, Named with Body, Tail`). No keyword is reserved for it (`is` is left free for a possible type test).
+- **No open recursion.** A function of `Body` that calls `feed` calls `Body.feed`, never a `Dog` override. Dynamic dispatch exists only at an interface call. A `Dog` function with the same name as a promoted one hides it for callers of `Dog` and does not change what `Body` does internally.
+- **Why not class inheritance.** Open recursion turns every self-call into a dynamic call, and calls through interfaces compile against a declared effect bound (default may-park). That would degrade the may-park inference, the `[nopark]` and lock-body checks, and the access summaries the sharing rules use, program-wide. It is also where fragile-base-class bugs come from.
+- **Fallback if examples need it:** a `sealed` single-inheritance base with `override`, where the compiler sees the whole hierarchy and can keep the effect precise.
+
+Open points: the name of the inline field (`dog.body`?); clashes when two incorporated structs promote the same name (compile error until the author disambiguates); whether `with` may name an interface-typed field; `cleanup()` order (fields in reverse order of declaration, incorporated structs in the same order); how interface access modes (sharing, `sync`/`mutate`) are stated; and whether `: Animal` can be declared outside the struct (as Go and Rust allow) or only in its header.
