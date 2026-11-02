@@ -54,6 +54,16 @@ The only large losses are for a nearly empty body with **no lock** (the whole el
 With any real lock around the element, the lock costs 3 to 4 ns and the reload is not visible. In the 64 MB array (a batch of 256, W=0) the loss was
 +7 to +10% (0.13 to 0.18 ns) for the every-element and every-access variants.
 
+## How to read this for an I/O-bound service
+
+Strata targets servers, where most of a request is spent in blocking calls: a database query, a remote call, a socket or file read. The handle cost applies
+only to the in-memory work *between* those calls, so this benchmark is deliberately the conservative case: CPU-bound loops over container data with no I/O in them.
+
+- **Scale.** A database round trip or socket wait takes tens of microseconds to milliseconds; the handle costs 0.01 to 0.3 ns per element. After each park the base pointer is reloaded once, about a nanosecond, so a request with ten parks adds roughly ten nanoseconds. The simple HTTP handler in this repo already costs about 3 microseconds per request and is syscall-bound.
+- **I/O is never inside a locked window.** `sync` and `mutate` bodies cannot park (a database call inside one is a compile error), so a shared container's window is a lock, a tight in-memory loop and an unlock, the shape measured here. For an unshared container the window simply ends at each park.
+- **Where the cost can matter** is the CPU-bound parts of a request: sorting, grouping and mapping rows (`handleReport` in `stra/experiments/handlers.stra`), parsing headers or frames, rendering JSON, bulk imports. Those loops are a small share of an I/O-bound request.
+- **Not measured here:** a mixed request (parse, query, render, with real parks, benchmark B12); cache effects when many vthreads interleave and a container's header is evicted between a park and its resume; the cost of the park itself (separately measured in [`lazy.md`](lazy.md), hand-written C).
+
 ## Caveats
 
 - **The noise is bigger than the table suggests.** Two copies of the same raw loop differed by a median 0.3%, but by up to 19% (90th percentile 9%).
