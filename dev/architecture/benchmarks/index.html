@@ -1234,7 +1234,7 @@
 <td>B12</td>
 <td>Mixed realistic service</td>
 <td>Parse, route, query, render, with a shared cache (<code>sync</code>/<code>mutate</code>)</td>
-<td>The end-to-end result everything else supports.</td>
+<td>The end-to-end result everything else supports. <strong>First run done for D15</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>): parse, authenticate, locked cache lookup, simulated database wait, growable-buffer render, on the C runtime; the handle build is within noise of a raw pointer in work per request, throughput and latency (worst case +2.1% for reload-at-every-access). In-process requests, simulated database, hand-written C: not yet the full B12.</td>
 </tr>
 </tbody>
 </table>
