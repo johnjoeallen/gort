@@ -1240,7 +1240,7 @@
 <td>B15</td>
 <td>Split control block (D17)</td>
 <td>Combined slot against a never-moving control block with a movable body: allocation, dereference (sequential, random, pointer chase), memory kept after a burst, dead objects held by a <code>WeakRef</code></td>
-<td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Single thread; concurrency and a whole-service run still to do.</td>
+<td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Second run, a whole service (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>): +4 to +27% work per request, no difference when database-bound; moving costs about 7% of throughput while it runs.</td>
 </tr>
 </tbody>
 </table>

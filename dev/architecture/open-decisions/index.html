@@ -1493,7 +1493,13 @@
 <li><em>When it pays.</em> Not when objects die roughly in allocation order (nothing is retained and the split is pure cost); for types with mixed lifetimes and for long-lived <code>WeakRef</code>s.</li>
 </ul>
 </li>
-<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: concurrency, the cost of making a move safe against readers, the effect on a whole service.</li>
+<li><strong>Measured, a whole service</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>, the mixed-request service with a cache of <code>Ref&lt;User&gt;</code> objects):<ul>
+<li><em>Time (loss).</em> Work per request +4 to +12% with one worker and +6 to +27% with four; throughput -2 to -10% (one worker) and -16 to -21% (four) where requests are served from the cache; no difference where the service waits on its database. With four workers the longer critical section (a second dependent miss inside <code>sync</code>) raises failed lock attempts per request from 3.9 to 7.0.</li>
+<li><em>Memory.</em> Steady state is 14 to 17% larger. After 90% of the cache is evicted at random and traffic narrows, only moving returns memory: 44 MB resident at the end against 54 MB for the combined layout and 63 MB for the split without the mover.</li>
+<li><em>Moving while the service runs.</em> Readers exist only inside <code>sync</code>, so a move takes <code>mutate</code> on the cache lock for one chunk at a time (longest hold 48 us); no grace period or epoch tracking is needed. 54,000 bodies cost 48 ms of mover CPU and about 7% of the workers' throughput while it ran.</li>
+</ul>
+</li>
+<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: sharded cache locks, a hit that clones a <code>Ref</code> and reads the body after leaving the lock, mutable shared objects, and a service with real sockets.</li>
 </ul>
 
 
