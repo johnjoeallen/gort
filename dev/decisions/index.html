@@ -1020,7 +1020,7 @@
 </tr>
 <tr>
 <td>Positioning: a Go-like language with a sprinkle of Java, for servers and services; not a systems language and not a Rust or C/C++ competitor</td>
-<td>Its runtime and its trade of control for simplicity rule out systems work. Types are structs that carry their functions (Java style, a deliberate break with Go); no inheritance, <code>struct Dog: Animal with Body</code> (Direction, D16). Comparison set is Go and Java; Rust is a performance reference. Beyond them (intent, unbuilt): no GC, compile-time-checked sharing. See spec 1.1.</td>
+<td>Its runtime and its trade of control for simplicity rule out systems work. Types are structs that carry their functions, written inside the struct or implemented out of line as <code>fn T::name</code> (Java and C++ styles, both supported; a deliberate break with Go); no inheritance, <code>struct Dog: Animal with Body</code> (Direction, D16). Comparison set is Go and Java; Rust is a performance reference. Beyond them (intent, unbuilt): no GC, compile-time-checked sharing. See spec 1.1.</td>
 </tr>
 <tr>
 <td>Performance goal: same class as Go and Java vthreads (Rust async as a reference ceiling), with a simpler model</td>
