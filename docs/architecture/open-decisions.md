@@ -109,7 +109,7 @@ Still open:
 
 Costs and open points:
 
-- **One dependent load** of `ptr` per access outside a hoisted window. Loops with no may-grow call hoist it; loops that call something that may grow pay it per iteration. Unmeasured; needs a benchmark (loop over an array with and without a may-grow call, against a raw pointer).
+- **One dependent load** of `ptr` per access outside a hoisted window. *Measured, micro-benchmark only* ([`handle.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/handle.md), B14): reloading on every access is not visible at `-O2` and equals a raw pointer when hoisted. At `-O3` a window that ends every iteration costs vectorisation (about 0.14 to 0.23 ns/element in L1), and a may-grow call in the loop costs the call (0.7 to 0.9 ns), not the reload. The test body was one dependent add, the best case for hiding a load, and it ran on one machine, so what remains open is how often real windows end, which needs a compiler.
 - **FFI.** C needs a stable address. An `extern` call takes a *pinned* borrow: the container is excluded from growing for the call. A library that retains the pointer needs a non-moving allocation (a fixed-capacity array or a dedicated virtual region), declared in the binding contract (spec 5.2).
 - **Large arrays.** A dedicated virtual-address reservation grows in place, so its `ptr` never changes and its handle test is free. Whether to use one is the older question in [open questions](../open-questions.md); it becomes an optimisation under this rule, not a correctness requirement.
 - **Precision of the may-grow summary.** A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.

@@ -16,3 +16,4 @@ __pycache__/
 /bench/c/conc_alloc
 /bench/c/promote_stress
 site/
+/bench/c/handle_bench_O3

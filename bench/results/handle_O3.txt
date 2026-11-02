@@ -1,0 +1,55 @@
+correctness: 17 grows, store moved 6 times; (handle,offset) read OK; raw pointer now DANGLING (its address is not the live element)
+
+== 4 KB (L1), 512 elements
+ sequential sum
+  raw                0.137 ns/elem
+  raw+bar            0.234 ns/elem
+  hoisted            0.156 ns/elem
+  reload             0.234 ns/elem
+  cursor             0.234 ns/elem
+  call only 1        0.742 ns/elem
+  every 1            0.742 ns/elem
+  call only 16       0.137 ns/elem
+  every 16           0.137 ns/elem
+  call only 256      0.137 ns/elem
+  every 256          0.137 ns/elem
+ random gather
+  raw                0.234 ns/elem
+  raw+bar            0.234 ns/elem
+  reload             0.234 ns/elem
+
+== 256 KB (L2), 32768 elements
+ sequential sum
+  raw                0.164 ns/elem
+  raw+bar            0.181 ns/elem
+  hoisted            0.164 ns/elem
+  reload             0.181 ns/elem
+  cursor             0.181 ns/elem
+  call only 1        0.721 ns/elem
+  every 1            0.724 ns/elem
+  call only 16       0.114 ns/elem
+  every 16           0.114 ns/elem
+  call only 256      0.138 ns/elem
+  every 256          0.114 ns/elem
+ random gather
+  raw                0.186 ns/elem
+  raw+bar            0.224 ns/elem
+  reload             0.244 ns/elem
+
+== 64 MB (memory), 8388608 elements
+ sequential sum
+  raw                0.181 ns/elem
+  raw+bar            0.181 ns/elem
+  hoisted            0.181 ns/elem
+  reload             0.181 ns/elem
+  cursor             0.181 ns/elem
+  call only 1        0.725 ns/elem
+  every 1            0.726 ns/elem
+  call only 16       0.115 ns/elem
+  every 16           0.115 ns/elem
+  call only 256      0.103 ns/elem
+  every 256          0.115 ns/elem
+ random gather
+  raw                0.597 ns/elem
+  raw+bar            0.602 ns/elem
+  reload             0.622 ns/elem
