@@ -20,7 +20,7 @@
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/logo-mark-light.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
@@ -98,8 +98,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -234,8 +233,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
     Strata
@@ -952,7 +950,7 @@
 <div class="highlight"><pre><span></span><code>strata-design.md     the design specification
 stra/                Strata source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
   runtime/             runtime interface and the parts writable in Strata
-  http/                HTTP library and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
+  http/                HTTP library (store.stra holds the process-wide state the handlers use) and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
   redis/               mini-redis library and server.stra
   experiments/         handler classification study
 c/
