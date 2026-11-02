@@ -27,7 +27,7 @@
     
     
       
-        <title>4. Against Rust and Go - Strata</title>
+        <title>4. Measured Against Go, Java and Rust - Strata</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#4-against-rust-and-go" class="md-skip">
+        <a href="#4-measured-against-go-java-and-rust" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              4. Against Rust and Go
+              4. Measured Against Go, Java and Rust
             
           </span>
         </div>
@@ -471,7 +471,7 @@
   <span class="md-ellipsis">
     
   
-    4. Against Rust and Go
+    4. Measured Against Go, Java and Rust
   
 
     
@@ -489,7 +489,7 @@
   <span class="md-ellipsis">
     
   
-    4. Against Rust and Go
+    4. Measured Against Go, Java and Rust
   
 
     
@@ -513,6 +513,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#java-virtual-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Java virtual threads
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#how-to-read-it" class="md-nav__link">
@@ -987,6 +998,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#java-virtual-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Java virtual threads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-to-read-it" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1017,8 +1039,8 @@
   
 
 
-<h1 id="4-against-rust-and-go">4. Against Rust and Go<a class="headerlink" href="#4-against-rust-and-go" title="Permanent link">&para;</a></h1>
-<p>The same design was written in Rust (Tokio) and Go (a pipelined server, and plain <code>net/http</code>), driven by the same tests and load generator.</p>
+<h1 id="4-measured-against-go-java-and-rust">4. Measured Against Go, Java and Rust<a class="headerlink" href="#4-measured-against-go-java-and-rust" title="Permanent link">&para;</a></h1>
+<p>Strata is positioned as a Go-like language with a sprinkle of Java (see <a href="../01-why/">Why</a>), so Go and Java are the comparison that sets the bar and Rust (Tokio) is a reference ceiling. This chapter has what was measured: the same design written in Rust and Go (a pipelined server, and plain <code>net/http</code>), driven by the same tests and load generator, and a Java virtual-thread microbenchmark. The Strata column is hand-written C that follows the design, not output of a Strata compiler, which does not exist yet.</p>
 <table>
 <thead>
 <tr>
@@ -1067,10 +1089,39 @@
 </tr>
 </tbody>
 </table>
+<h2 id="java-virtual-threads">Java virtual threads<a class="headerlink" href="#java-virtual-threads" title="Permanent link">&para;</a></h2>
+<p>There is no Java HTTP server in this comparison yet. What exists is a microbenchmark of idle units and yields on one scheduler thread (OpenJDK 25, <a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/group1.md">group 1</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Java virtual thread</th>
+<th>Tokio and C fibers, same benchmark (no Go figure)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Idle unit, nothing held</td>
+<td>809 bytes of heap</td>
+<td>Tokio task 395; pooled C fiber 4,113</td>
+</tr>
+<tr>
+<td>Idle unit, 4 KB held</td>
+<td>4,848 bytes of heap (10,401 resident, with touched garbage)</td>
+<td>Tokio 4,491; C fiber 8,209</td>
+</tr>
+<tr>
+<td>Yield and resume</td>
+<td>530 to 670 ns (an upper bound)</td>
+<td>Tokio about 33 ns; C fiber 13 to 39 ns</td>
+</tr>
+</tbody>
+</table>
+<p>Java is the closest model to Strata's (blocking-style code on cheap threads), so it is the comparison that matters most, and it is the one with the least evidence. The microbenchmark is not a request benchmark: the Java yield figure includes a carrier hand-off and the numbers say nothing about throughput or latency under load. A Java and a Go server written for the <a href="../../architecture/benchmarks/">evaluation plan</a>, with tuned settings, are still to do.</p>
 <h2 id="how-to-read-it">How to read it<a class="headerlink" href="#how-to-read-it" title="Permanent link">&para;</a></h2>
 <div class="admonition warning">
 <p class="admonition-title">Caveats</p>
-<p>Real handlers do real work, which shrinks the throughput gap a lot. What survives is memory per connection, in-connection concurrency, the timer floor and Go's garbage-collection tail. All runs are single runs on loopback.</p>
+<p>Real handlers do real work, which shrinks the throughput gap a lot. Go's runtime is the model Strata is closest to in ceremony, and it is the comparison to watch. What survives is memory per connection, in-connection concurrency, the timer floor and Go's garbage-collection tail. All runs are single runs on loopback.</p>
 </div>
 <p>Browsers do not pipeline HTTP/1.1 (they multiplex over HTTP/2), so the pipelined number says more about the runtime's cost per request than about web traffic.</p>
 
