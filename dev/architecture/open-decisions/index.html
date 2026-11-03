@@ -1505,7 +1505,13 @@
 <li><em>Moving with clones.</em> A move takes every shard lock and skips a chunk if any of its objects has <code>strong &gt; 1</code> or is held by a request alone. The flush scenario still ends at 49 MB resident against 63 MB (split without the mover) and 54 MB (combined); 1 of 330 chunks was skipped, because a request holds its clone only across a non-parking render. A Ref held across a park (D2) would pin chunks far more often: not measured.</li>
 </ul>
 </li>
-<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: a Ref held across a park, mutable shared objects, a single very hot object, and a service with real sockets.</li>
+<li><strong>Measured, a Ref held across a park and Refs held for good</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/hold.md"><code>hold.md</code></a>):<ul>
+<li><em>Held across a park</em> (100 us to 10 ms after every hit): no cost in steady state, and the mover recovers the same memory (35 MB resident at the end against 63 MB without it) while wasting up to about 78% of its attempts on pinned chunks.</li>
+<li><em>Held for good</em> (a Ref stored somewhere long-lived): with 0.1% of hits keeping their Ref the mover recovers 9 MB instead of 14 MB (54 MB at the end, against 49 MB without stashing and 63 MB with no mover), and at 1% nothing, because a scattered pin blocks its whole chunk. The mover is all-or-nothing per chunk; moving only the unpinned bodies was not tried.</li>
+<li><em>For D2.</em> A Ref held across a park needs no special rule for moving; a stored Ref is the case that defeats it.</li>
+</ul>
+</li>
+<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: moving only the unpinned bodies of a pinned chunk, concentrated (rather than random) long-lived Refs, mutable shared objects, a single very hot object, and a service with real sockets.</li>
 </ul>
 
 
