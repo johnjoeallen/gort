@@ -33,7 +33,7 @@ Every claim on these pages carries one of four statuses, so that speculation is 
 
 **Implementation model (Direction).** Compiler-generated resumable frames, which are stackless continuations. The compiler finds the calls that may park, gives each function that can suspend a frame holding exactly the state live across its suspension points, and generates a state machine. There is no per-vthread machine stack.
 
-Nothing in the language may depend on which implementation is used. A program that behaves correctly under stackful fibers must behave identically under resumable frames. That is the test for any proposed feature, and it is why the existing stackful runtime stays useful as a reference (see [suspension](suspension.md#where-stackful-execution-remains)).
+Nothing in the language may depend on which implementation is used. A program that behaves correctly under stackful fibers must behave identically under resumable frames. That is the test for any proposed feature, and it is why the existing stackful runtime stays useful as a reference (see [suspension](suspension.md#9-where-stackful-execution-remains)).
 
 "Park" and "suspend" mean the same thing. The specification and the C runtime say *park*, so this section does too, and calls the inferred property the **may-park effect**.
 
@@ -92,4 +92,4 @@ Executable
 
 Whether module compilation lowers fully, or lowering waits for the link, is [open](open-decisions.md#d1-where-continuation-lowering-happens). The recommendation is both: lower at module compile so a build with no optimisation never needs the retained IR, and re-lower only what fusion changes.
 
-A minor source change must not mean a whole-program rebuild. The rules that guarantee this are in [recompilation rules](modules.md#when-a-module-needs-recompiling).
+A minor source change must not mean a whole-program rebuild. The rules that guarantee this are in [recompilation rules](modules.md#6-when-a-module-needs-recompiling).
