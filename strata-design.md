@@ -36,7 +36,7 @@ Strata is **a Go-like language with a sprinkle of Java**, for network servers an
 ## 2. Design principles
 
 1. Ordinary values should remain inexpensive and need no reference-count header.
-2. Programmer-visible reference kinds express ownership; the compiler infers borrowing lifetimes.
+2. Programmer-visible reference kinds express ownership. There is no separate borrow type (D18): a reference to an object is a `Ref<T>`.
 3. Dynamic allocation is explicit through `new`, and produces a strong owning `Ref<T>`.
 4. `WeakRef<T>` breaks strong-reference cycles by not keeping the object alive.
 5. Synchronization is lexical and compiler-enforced; higher-level libraries hide it from application code.
@@ -70,7 +70,7 @@ Strata is **a Go-like language with a sprinkle of Java**, for network servers an
 | Type / construct | Meaning | Lifetime / reclamation |
 |---|---|---|
 | `T` | Ordinary value | Compiler-managed scope, stack, or task storage |
-| `T&` | Borrowed reference | Inferred, statically checked; cannot outlive its referent |
+| `Ref<T>` passed down | Another owner of the same object | Every `Ref<T>` holds a count: a copy or a pass increments it and the drop decrements it (D18 item 7). There is no count-less reference |
 | `Ref<T>` | Owning reference to a dynamic object | Strong count; destroy object at zero |
 | `WeakRef<T>` | Non-owning observation of a dynamic object | Weak count; control block survives until no weak owners remain |
 | `string` | Immutable string value | Implementation-managed storage, reclaimed when unreferenced |
@@ -121,7 +121,7 @@ Parent arena slot
 +------------------------------+
 ```
 
-Strong count reaching zero triggers object destruction and resource cleanup. In this layout the whole slot (object space included) remains until the final weak owner has been released; D17 proposes splitting the control block from the body so that only the control block lingers; implementations can use an implicit weak owner while strong owners exist. Promotion must use an atomic conditional increment, not a separate validity check followed by increment. Count overflow and destruction races must be handled.
+Strong count reaching zero triggers object destruction and resource cleanup. In this layout the whole slot (object space included) remains until the final weak owner has been released; The split of the control block from the body that D17 proposed was rejected (D18): the slot stays in one piece and never moves, so a lingering `WeakRef` keeps the whole slot. Implementations can use an implicit weak owner while strong owners exist. Promotion must use an atomic conditional increment, not a separate validity check followed by increment. Count overflow and destruction races must be handled.
 
 `Ref<T>[]` is an array of handles, **not** inline `T` objects. Its elements point to objects in the `T` arena; removing an element releases its strong ownership. The array's backing storage is separate.
 
@@ -162,21 +162,23 @@ The exact string representation, encoding, equality and substring ownership sema
 
 ### 4.4 Escape analysis
 
-The compiler may place objects in task-local storage only if it proves they cannot outlive the task or be observed through escaping strong/weak references. It must preserve identity, destructor timing, weak-reference semantics and synchronization behaviour; it must not optimize by silently invalidating handles. Start with independently reclaimable allocations for all `new` objects and treat placement optimizations as later work.
+The compiler may place objects in task-local storage only if it proves they cannot outlive the task or be observed through escaping strong/weak references. It must preserve identity, destructor timing, weak-reference semantics and synchronization behaviour; it must not optimize by silently invalidating handles. Start with independently reclaimable allocations for all `new` objects and treat placement optimizations as later work. There is no repair after the fact: an object cannot be promoted out of task storage, because no object moves between chunks (D18), so where the proof fails the object is allocated in the shared arena.
 
 ### 4.5 Growable containers and relocation
 
-Direction (docs/architecture/open-decisions.md D15). A growable container is a small non-moving header (`{ptr, len, cap}`, plus a lock word when shared) over a backing store that may move when it grows. A reference into a container is `(header, offset)`, never a raw address, so growing cannot invalidate it and no borrow error is needed for `let r = &v[0]; v.push(x)`. The raw address exists only inside a deref window: the `sync`/`mutate` block for a shared container (growing needs `mutate`), or, for an unshared one, the span until the next call that may grow it or the next park, after which the compiler reloads `ptr`. Fixed-size objects are referenced directly and have no header indirection. A call into C pins the container for its duration; retaining a pointer needs a non-moving allocation named in the binding contract (5.2).
+Storage classes, locals, scopes and dispatch are decided together in docs/architecture/open-decisions.md D18: a plain object is a slot with an inline control block that never moves; arrays have an external control block and a block in a chunk of the element type (`Array<T>` fixed, `GrowableArray<T>` reallocated when it outgrows its block); a local that owns counts releases them at scope exit.
+
+Direction (docs/architecture/open-decisions.md D15). A growable container is a small non-moving header (`{ptr, len, cap}`, plus a lock word when shared) over a backing store that may move when it grows. A reference into a container is `(header, offset)`, never a raw address, so growing cannot invalidate it and no error is needed for a reference into a container followed by `v.push(x)`. The raw address exists only inside a deref window: the `sync`/`mutate` block for a shared container (growing needs `mutate`), or, for an unshared one, the span until the next call that may grow it or the next park, after which the compiler reloads `ptr`. Fixed-size objects are referenced directly and have no header indirection. A call into C pins the container for its duration; retaining a pointer needs a non-moving allocation named in the binding contract (5.2).
 
 ## 5. Reference and lifetime analysis
 
-Lifetime parameters are **not** written as named generics. Borrowing is expressed with `T&`; the compiler infers which parameters, object fields or static objects the returned borrow depends on.
+Lifetime parameters are **not** written as named generics. There is no borrow type (D18): a returned reference is a `Ref<T>` that owns a count, so it needs no origin.
 
 ```cpp
 // app/choose.stra
 package app
 
-fn choose(a: Customer&, b: Customer&, first: bool): Customer& {
+fn choose(a: Ref<Customer>, b: Ref<Customer>, first: bool): Ref<Customer> {
     if first { return a; }
     return b;
 }
@@ -186,10 +188,10 @@ The inferred contract records that a returned reference may originate from eithe
 
 ### 5.1 Separate compilation
 
-A compiled native Strata library exports an interface artifact containing type definitions, generic information, borrow origins, relevant mutation/escape effects, and lifetime constraints. For example:
+A compiled native Strata library exports an interface artifact containing type definitions, generic information, ownership modes, relevant mutation/escape effects, and lifetime constraints. For example:
 
 ```text
-choose(Customer&, Customer&, bool) -> Customer&
+choose(Ref<Customer>, Ref<Customer>, bool) -> Ref<Customer>
 return origins: parameter 0 | parameter 1
 ```
 
@@ -209,7 +211,7 @@ Strata aims for Java-virtual-thread-style programming: thousands of logical task
 // app/serve.stra
 package app
 
-fn serve(listener: Listener&) {
+fn serve(listener: Ref<Listener>) {
     loop {
         let socket = listener.accept();
         vthreadSpawn(handleClient, socket);
@@ -267,7 +269,7 @@ mutate(cache) {
 }
 ```
 
-The compiler rejects mutation inside `sync`, unsynchronized access to objects that may be concurrently mutated (precisely defined in 7.3: an object that is not provably local, through a mutable field), and borrowed references that escape a protected block. References used *within* the block may be borrowed; values crossing the boundary require an independent lifetime (e.g., copy/move or a safely acquired owning reference). Deep copies must be explicit in the semantic specification for compound values, even if the source syntax elides the operation.
+The compiler rejects mutation inside `sync`, unsynchronized access to objects that may be concurrently mutated (precisely defined in 7.3: an object that is not provably local, through a mutable field), and hoisted pointers that escape a protected block. A pointer used *within* the block is hoisted from a `Ref` the scope holds; values crossing the boundary require an independent lifetime (e.g., copy/move or a safely acquired owning reference). Deep copies must be explicit in the semantic specification for compound values, even if the source syntax elides the operation.
 
 Locks are automatically released on every exit path, including errors, exceptions and any supported non-local returns.
 
@@ -314,7 +316,7 @@ There is one reference kind, `Ref<T>`, and no declaration of sharedness. The com
 - `sync` is read-only. Calling a function whose summary writes the argument inside `sync` is a compile error naming the chain (`needs mutate(x), have sync(x)`), checked from the callee's contract, so it works across separately compiled modules.
 - Passing a local object to `spawn`, a message, a global, a non-local object or an escaping closure **publishes** it: the compiler treats it as non-local from that point, and at run time its shared flag is set before the handoff. The flag only goes from clear to set.
 - On an unshared object `sync`/`mutate` test the flag once and do nothing. Behaviour never depends on whether an object is shared, only cost does.
-- Borrows taken inside a block cannot leave it.
+- A pointer hoisted inside a block cannot leave it. When the dereference goes through a container item or a field (`a.b.c`, `list[i]`), the compiler **injects a local `Ref<T>`** copied out of that item or field before hoisting; it owns a count until scope exit, so a call that removes the object from its container cannot free it under the hoisted pointer.
 
 A module-level `var` is local to each vthread. A module-level `let` is one binding for the whole process, initialised before any vthread starts: the object it holds is published at that point, so a `let` holding a `Ref<T>` is how a process-wide table is declared (`stra/http/store.stra`). There is no `shared var` keyword.
 
@@ -383,13 +385,13 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
    escapes. A throw runs the cleanups of every scope it leaves; cleanup methods never park and never throw. `spawn f(...)`
    requires f to declare no `throws`, so a vthread's root function handles its own errors. Open: how a throw interacts with a
    scope that still has child vthreads (the prototype source assumes the scope waits for them first), and whether a handler
-   type such as `fn(u8[]&): Resp throws Exception` is the right way to say "may throw anything".
+   type such as `fn(u8[]): Resp throws Exception` is the right way to say "may throw anything".
    *Syntax direction (illustrative, used in `stra/http/server.stra`):* nullable `T?` with null-check narrowing instead of an
    Option type; methods declared inside the type, with `self` available but optional (needed only to disambiguate a member from
    a parameter and to refer to the value itself); tagged enums with an exhaustive `switch` whose arms are `Pattern -> { ... }` (no `case` keyword, no fallthrough, commas to list several
    values, `default` required for non-enum switches; ranges, guards, bindings and destructuring deferred) (`enum Cost { Bounded(Duration) Unbounded }`);
    `let`/`var`; camelCase function names.
-8. **Virtual-thread stacks:** Largely superseded by 6.1 (resumable frames). Remains for the stackful baseline and for fast-path native-stack depth in recursive functions. Related open items (lazy frames with borrowed locals, FFI, fusion): `docs/architecture/open-decisions.md`.
+8. **Virtual-thread stacks:** Largely superseded by 6.1 (resumable frames). Remains for the stackful baseline and for fast-path native-stack depth in recursive functions. Related open items (lazy frames with locals whose address a callee holds, FFI, fusion): `docs/architecture/open-decisions.md`.
 9. **Synchronized callbacks and escaping values:** How to handle callbacks, function pointers, composite references and nested transactions safely.
 10. **API stability:** Direction: contract hashes per symbol, format/ABI versions, contract diffs and a rule that widening an effect is breaking (`docs/architecture/modules.md`). Open: the enforcement policy and the spelling of the optional effect assertion.
 11. **Compilation architecture:** where continuation lowering happens, the minimum IR for cross-module optimisation, fusion across modules, debugging maps, dynamic loading (`docs/architecture/open-decisions.md`, D1 to D15).
@@ -398,7 +400,7 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
 
 ### Phase 0 — Feasibility spike
 
-Prototype a standalone Strata front-end and minimal C emitter. Study Goose’s compiler-managed storage and test borrowed-return analysis and independently allocated type slots. Select reusable implementation ideas based on measured feasibility, without assuming source-level compatibility.
+Prototype a standalone Strata front-end and minimal C emitter. Study Goose’s compiler-managed storage and test escape analysis and independently allocated type slots. Select reusable implementation ideas based on measured feasibility, without assuming source-level compatibility.
 
 ### Phase 1 — Ownership foundations
 

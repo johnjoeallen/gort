@@ -4,13 +4,13 @@
 package redis
 
 enum Command {
-    Get(key: u8[]&)
-    Set(key: u8[]&, value: u8[]&, expire: Duration?)
-    Publish(channel: u8[]&, message: u8[]&)
+    Get(key: u8[])
+    Set(key: u8[], value: u8[], expire: Duration?)
+    Publish(channel: u8[], message: u8[])
     Subscribe(first: usize)                              // channel names are Args items first..count
     Unsubscribe(first: usize)                            // none given: all
     Ping(message: u8[]?)
-    Unknown(name: u8[]&)
+    Unknown(name: u8[])
 
     fn name(): string {                                  // original: Command::get_name
         switch (self) {
@@ -25,7 +25,7 @@ enum Command {
     }
 
     // The command in `r.frame()`. Wrong shapes are ProtocolErrors (the original: EndOfStream or "expected end of frame" errors that end the connection).
-    static fn parse(r: Reader&, lim: Limits&): Command throws ProtocolError {
+    static fn parse(r: Ref<Reader>, lim: Ref<Limits>): Command throws ProtocolError {
         let a = r.frame()
         let name = text(r, 0)
         if (name.equalsIgnoreCase("get")) {
@@ -64,12 +64,12 @@ enum Command {
     }
 }
 
-fn expectCount(a: Args&, n: usize) throws ProtocolError {
+fn expectCount(a: Ref<Args>, n: usize) throws ProtocolError {
     if (a.count != n) throw ProtocolError("protocol error; wrong number of arguments")
 }
 
 // An argument as bytes: simple or bulk (the original's next_bytes).
-fn blob(r: Reader&, i: usize): u8[]& throws ProtocolError {
+fn blob(r: Ref<Reader>, i: usize): u8[] throws ProtocolError {
     let arg = r.frame().items[i]
     switch (arg.kind) {
         Simple, Bulk -> { return r.bytes(arg) }
@@ -78,19 +78,19 @@ fn blob(r: Reader&, i: usize): u8[]& throws ProtocolError {
 }
 
 // A command name or key: bytes that must be valid UTF-8 (the original's next_string), and at most maxKey long when it is a key.
-fn text(r: Reader&, i: usize): u8[]& throws ProtocolError {
+fn text(r: Ref<Reader>, i: usize): u8[] throws ProtocolError {
     let b = blob(r, i)
     if (!b.isUtf8()) throw ProtocolError("protocol error; invalid string")
     return b
 }
-fn key(r: Reader&, i: usize, lim: Limits&): u8[]& throws ProtocolError {
+fn key(r: Ref<Reader>, i: usize, lim: Ref<Limits>): u8[] throws ProtocolError {
     let b = text(r, i)
     if (b.length > lim.maxKey) throw ProtocolError("protocol error; key too long")
     return b
 }
 
 // An integer argument: an integer element, or digits in a simple/bulk one (the original's next_int).
-fn number(r: Reader&, i: usize): u64 throws ProtocolError {
+fn number(r: Ref<Reader>, i: usize): u64 throws ProtocolError {
     let arg = r.frame().items[i]
     switch (arg.kind) {
         Integer -> { return arg.number }

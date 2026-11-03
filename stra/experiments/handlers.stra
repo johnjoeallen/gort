@@ -28,7 +28,7 @@ fn parseId(path: string): i64 {                             //@N
     let seg = path.splitLast('/');                            /*N*/
     return seg.toI64();                                       /*N*/
 }
-fn renderUser(u: User&): string {                           //@N
+fn renderUser(u: Ref<User>): string {                           //@N
     var b = StringBuilder.make();                          /*N*/
     b.append("{\"id\":");                                      /*N*/
     b.appendI64(u.id);                                        /*N*/
@@ -37,7 +37,7 @@ fn renderUser(u: User&): string {                           //@N
     b.append("}");                                             /*N*/
     return b.finish();                                         /*N*/
 }
-fn writeJson(conn: Conn&, body: string) {                     //@P frame=48
+fn writeJson(conn: Ref<Conn>, body: string) {                     //@P frame=48
     conn.write(HEADER_200_JSON);                               /*P*/
     conn.write(body);                                          /*P*/
 }
@@ -48,10 +48,10 @@ fn dbQuery(pool: Ref<Pool>, sql: string, id: i64): Row {    //@P frame=120
     pool.release(c);                                           /*N*/
     return r;
 }
-fn rowToUser(r: Row&): User {                              //@N
+fn rowToUser(r: Ref<Row>): User {                              //@N
     return User { id: r.i64(0), name: r.str(1) };              /*N*/ /*N*/
 }
-fn handleGetUser(conn: Conn&, req: Request&, env: Env&) {    //@P frame=64
+fn handleGetUser(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {    //@P frame=64
     let id = parseId(req.path);                               /*N*/
     let hit = cacheGet(env.users, id);                        /*P*/
     if hit.isSome() {
@@ -65,10 +65,10 @@ fn handleGetUser(conn: Conn&, req: Request&, env: Env&) {    //@P frame=64
 }
 
 // ---------- 2. streaming proxy ----------
-fn logEvent(env: Env&, ev: Event) {                           //@N
+fn logEvent(env: Ref<Env>, ev: Event) {                           //@N
     env.logRing.tryPush(ev);                                 /*N*/  // bounded ring; a separate task drains it
 }
-fn proxy(client: Conn&, addr: Addr, env: Env&) {               //@P frame=4168  // 72 B of state + the 4 KB buf live across every park
+fn proxy(client: Ref<Conn>, addr: Addr, env: Ref<Env>) {               //@P frame=4168  // 72 B of state + the 4 KB buf live across every park
     let up = connect(addr);                                    /*P*/
     var buf = [u8; 4096];
     loop {
@@ -82,7 +82,7 @@ fn proxy(client: Conn&, addr: Addr, env: Env&) {               //@P frame=4168  
 }
 
 // ---------- 3. report: higher-order, mostly compute ----------
-fn handleReport(conn: Conn&, req: Request&, env: Env&) {      //@P frame=88
+fn handleReport(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {      //@P frame=88
     let range = parseRange(req.query);                        /*N*/
     let rows = loadRows(env.pool, range);                     /*P*/
     let sorted = sortBy(rows, |a, b| a.ts < b.ts);            /*N*/ /*N*/  // closure is a compile-time value
@@ -103,14 +103,14 @@ fn loadRows(pool: Ref<Pool>, r: Range): Row[] {             //@P frame=112
     return rows;
 }
 fn parseRange(q: string): Range { return Range.parse(q); }/*N*/ //@N
-fn summarize(g: Group&): Summary { return Summary.of(g); }  /*N*/ //@N
+fn summarize(g: Ref<Group>): Summary { return Summary.of(g); }  /*N*/ //@N
 fn renderReport(o: Summary[]): string { return json(o); }   /*N*/ //@N
 
 // ---------- 4. routing + middleware through function values ----------
-fn health(conn: Conn&, req: Request&, env: Env&) {             //@N
+fn health(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {             //@N
     conn.writeNowait(HEADER_200_OK);                          /*N*/  // small response written to a buffered socket
 }
-fn auth(conn: Conn&, req: Request&, env: Env&, next: Handler) {//@P frame=80
+fn auth(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>, next: Handler) {//@P frame=80
     let tok = req.header("authorization");                     /*N*/
     let ok = verifyToken(env.keys, tok);                      /*P*/  // takes sync(keys)
     if !ok { writeJson(conn, ERR_401); return; }              /*P*/
@@ -119,13 +119,13 @@ fn auth(conn: Conn&, req: Request&, env: Env&, next: Handler) {//@P frame=80
 fn verifyToken(keys: Ref<KeySet>, tok: string): bool {      //@P frame=40
     sync(keys) { return keys.verify(tok); }                    /*P*/ /*N*/
 }
-fn dispatch(conn: Conn&, req: Request&, env: Env&) {           //@P frame=72
+fn dispatch(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {           //@P frame=72
     let h = env.routes.get(req.path);                          /*N*/
     auth(conn, req, env, h);                                   /*P*/
 }
 
 // ---------- 5. recursive directory walk (parks per node) ----------
-fn walk(dir: Path, env: Env&, acc: Stats&) {                   //@P frame=64
+fn walk(dir: Path, env: Ref<Env>, acc: Ref<Stats>) {                   //@P frame=64
     let entries = readDir(dir);                               /*B*/  // blocking syscalls via the blocking pool
     for e in entries {
         if e.isDir() { walk(e.path, env, acc); }              /*P*/  // recursion, one heap frame per level
@@ -134,12 +134,12 @@ fn walk(dir: Path, env: Env&, acc: Stats&) {                   //@P frame=64
 }
 
 // ---------- 6. foreign library calls ----------
-fn thumbnail(conn: Conn&, req: Request&, env: Env&) {          //@P frame=96
+fn thumbnail(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {          //@P frame=96
     let img = req.body();                                      /*N*/
     let out = c_resize(img.ptr(), img.len(), 256);             /*B*/  // CPU-bound C library, declared `extern blocking`: run on the blocking pool, so it must not stall the worker
     writeJson(conn, encodeB64(out));                         /*P*/ /*N*/
 }
-fn[nopark] checksum(buf: Bytes&): u32 { return c_crc32(buf.ptr(), buf.len()); }  /*N*/ /*N*/ /*N*/ //@N  // plain extern fn: a promise of a short call; [nopark] makes it usable under a lock and in a cleanup
+fn[nopark] checksum(buf: Ref<Bytes>): u32 { return c_crc32(buf.ptr(), buf.len()); }  /*N*/ /*N*/ /*N*/ //@N  // plain extern fn: a promise of a short call; [nopark] makes it usable under a lock and in a cleanup
 
 // ---------- 7. pub/sub fan-out ----------
 fn broadcast(subs: Ref<SubList>, msg: Msg) {                   //@P frame=56
@@ -149,7 +149,7 @@ fn broadcast(subs: Ref<SubList>, msg: Msg) {                   //@P frame=56
         }
     }
 }
-fn subscriber(conn: Conn&, env: Env&) {                        //@P frame=64
+fn subscriber(conn: Ref<Conn>, env: Ref<Env>) {                        //@P frame=64
     loop {
         let m = env.bus.qget();                                /*P*/
         conn.writeAll(m.bytes());                             /*P*/ /*N*/
@@ -178,7 +178,7 @@ fn subscriber(conn: Conn&, env: Env&) {                        //@P frame=64
 //     sleep(1ms);                                           // ERROR: park source in a [nopark] function (pause -> sleep)
 // }
 //
-// fn spin(cache: Ref<Cache>, flag: Flag&) {
+// fn spin(cache: Ref<Cache>, flag: Ref<Flag>) {
 //     mutate(cache) {
 //         while !flag.isSet() { }                           // WARNING (always on in a lock body): unbounded loop under a lock
 //     }

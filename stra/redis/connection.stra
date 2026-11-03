@@ -6,8 +6,8 @@ package redis
 import runtime
 
 struct Reader {
-    conn: Conn&
-    lim: Limits&
+    conn: Ref<Conn>
+    lim: Ref<Limits>
     buf: u8[]? = null
     start: usize = 0
     end: usize = 0
@@ -15,7 +15,7 @@ struct Reader {
     args: Args? = null                                   // pooled; held only while a frame is arriving or being handled
     len: usize = 0                                      // length of the frame returned last; finish() consumes it
 
-    static fn of(conn: Conn&, lim: Limits&): Reader { return Reader { conn: conn, lim: lim } }
+    static fn of(conn: Ref<Conn>, lim: Ref<Limits>): Reader { return Reader { conn: conn, lim: lim } }
 
     // The next complete command frame, if one can be had without waiting: Input.Frame (the offsets are in `args`), Idle, or Closed.
     // Closed means EOF at a frame boundary; EOF in the middle of a frame is an IoError (the original: "connection reset by peer").
@@ -54,8 +54,8 @@ struct Reader {
         if (start == end) self.buf = null                 // drained: back to the pool
     }
 
-    fn frame(): Args& { assert(args != null); return args }   // the arguments of the frame Input.Frame announced
-    fn bytes(a: Arg&): u8[]& { return buf[start + a.start..start + a.end] }
+    fn frame(): Ref<Args> { assert(args != null); return args }   // the arguments of the frame Input.Frame announced
+    fn bytes(a: Ref<Arg>): u8[] { return buf[start + a.start..start + a.end] }
     fn readable(): Wakeup { return conn.readableWakeup() }
 
     // Room for `needed` bytes counted from `start`: compact, then grow class by class. false: that is over maxFrame.

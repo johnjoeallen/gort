@@ -15,7 +15,7 @@ struct Scanner {
     fn reset() { self.pos = 0; self.left = 0; self.started = false }
 
     // Continues the scan over `data` (the buffered bytes from the frame's first byte). Fills `args` as elements complete.
-    fn advance(data: u8[]&, args: Args&, lim: Limits&): Scan throws ProtocolError, FrameTooLarge {
+    fn advance(data: u8[], args: Ref<Args>, lim: Ref<Limits>): Scan throws ProtocolError, FrameTooLarge {
         if (!started) {
             let line = readLine(data, pos)
             if (line == null) {
@@ -73,14 +73,14 @@ struct Scanner {
 
 // The line starting at `from`: where its text ends and where the next line begins. null: no complete line yet.
 struct Line { end: usize, next: usize }
-fn readLine(data: u8[]&, from: usize): Line? {
+fn readLine(data: u8[], from: usize): Line? {
     let i = data[from..].find("\r\n")
     if (i == null) return null
     return Line { end: from + i, next: from + i + 2 }
 }
 
 // Digits only, at most u64. (The original uses the `atoi` crate; this is all it is used for.)
-fn parseDecimal(text: u8[]&): u64 throws ProtocolError {
+fn parseDecimal(text: u8[]): u64 throws ProtocolError {
     if (text.length == 0 || text.length > 20) throw ProtocolError("protocol error; invalid number")
     var v: u64 = 0
     for (c in text) {

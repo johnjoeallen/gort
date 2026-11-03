@@ -12,7 +12,7 @@ const PER_TURN: usize = 64                               // commands one connect
 // ---------- accept loop and shutdown ----------
 // Connections are children of one scope. Leaving the scope (when `shutdown` is set) waits for every child, and each child leaves its loop
 // when it sees the flag: that is the whole of the original's Shutdown + broadcast + mpsc "completion" + Semaphore dance.
-fn serve(listener: Listener&, db: Db&, lim: Limits&, shutdown: Flag&, live: Limiter&) {
+fn serve(listener: Ref<Listener>, db: Ref<Db>, lim: Ref<Limits>, shutdown: Ref<Flag>, live: Ref<Limiter>) {
     scope {
         var backoff = 1
         while (!shutdown.isSet()) {
@@ -39,7 +39,7 @@ fn refuse(conn: Conn) {
 
 // ---------- one connection ----------
 // A vthread's root: handles its own errors, so it declares no `throws`.
-fn runConnection(conn: Conn, db: Db&, lim: Limits&, shutdown: Flag&, live: Limiter&) {
+fn runConnection(conn: Conn, db: Ref<Db>, lim: Ref<Limits>, shutdown: Ref<Flag>, live: Ref<Limiter>) {
     var reader = Reader.of(conn, lim)
     var writer = Writer.of(conn)
     try {
@@ -57,11 +57,11 @@ fn runConnection(conn: Conn, db: Db&, lim: Limits&, shutdown: Flag&, live: Limit
 }
 
 // Best effort: the connection is being closed anyway, so a failed send is not worth reporting.
-fn sendError(writer: Writer&, text: string) {
+fn sendError(writer: Ref<Writer>, text: string) {
     try { writer.error(text); writer.flush() } catch (e: IoError) { }
 }
 
-fn commandLoop(reader: Reader&, writer: Writer&, db: Db&, lim: Limits&, shutdown: Flag&) throws IoError, ProtocolError, FrameTooLarge {
+fn commandLoop(reader: Ref<Reader>, writer: Ref<Writer>, db: Ref<Db>, lim: Ref<Limits>, shutdown: Ref<Flag>) throws IoError, ProtocolError, FrameTooLarge {
     var burst = 0
     while (!shutdown.isSet()) {
         let input = reader.tryNextFrame()
@@ -109,7 +109,7 @@ fn commandLoop(reader: Reader&, writer: Writer&, db: Db&, lim: Limits&, shutdown
 struct Subscriptions {
     names: Bytes[] = []
     mailbox: Ref<Mailbox<Message>>
-    db: Db&
+    db: Ref<Db>
 
     // Runs when the loop ends by any route (return, exception). It never parks, so it cannot take the database lock (entering one parks):
     // it hands each remaining subscription to the reaper queue, and the purge vthread unsubscribes it. db.release is [nopark], so the compiler
@@ -117,7 +117,7 @@ struct Subscriptions {
     fn cleanup() { for (n in names) db.release(n, mailbox) }
 }
 
-fn subscribeLoop(reader: Reader&, writer: Writer&, db: Db&, lim: Limits&, shutdown: Flag&, first: usize) throws IoError, ProtocolError, FrameTooLarge {
+fn subscribeLoop(reader: Ref<Reader>, writer: Ref<Writer>, db: Ref<Db>, lim: Ref<Limits>, shutdown: Ref<Flag>, first: usize) throws IoError, ProtocolError, FrameTooLarge {
     var subs = Subscriptions { mailbox: Mailbox<Message>.make(lim.subQueue), db: db }
     addChannels(reader, writer, subs, lim, first)
     reader.finish()
@@ -157,7 +157,7 @@ fn subscribeLoop(reader: Reader&, writer: Writer&, db: Db&, lim: Limits&, shutdo
     }
 }
 
-fn addChannels(reader: Reader&, writer: Writer&, subs: Subscriptions&, lim: Limits&, first: usize) throws IoError {
+fn addChannels(reader: Ref<Reader>, writer: Ref<Writer>, subs: Ref<Subscriptions>, lim: Ref<Limits>, first: usize) throws IoError {
     for (i in first..reader.frame().count) {
         let name = reader.bytes(reader.frame().items[i])
         try {
@@ -170,7 +170,7 @@ fn addChannels(reader: Reader&, writer: Writer&, subs: Subscriptions&, lim: Limi
     }
 }
 
-fn dropChannels(reader: Reader&, writer: Writer&, subs: Subscriptions&, first: usize) throws IoError {
+fn dropChannels(reader: Ref<Reader>, writer: Ref<Writer>, subs: Ref<Subscriptions>, first: usize) throws IoError {
     if (first == reader.frame().count) {                                      // none named: all of them (the original's rule)
         for (n in subs.names.copy()) removeChannel(writer, subs, n)
     } else {
@@ -178,13 +178,13 @@ fn dropChannels(reader: Reader&, writer: Writer&, subs: Subscriptions&, first: u
     }
 }
 
-fn removeChannel(writer: Writer&, subs: Subscriptions&, name: u8[]&) throws IoError {
+fn removeChannel(writer: Ref<Writer>, subs: Ref<Subscriptions>, name: u8[]) throws IoError {
     subs.db.unsubscribe(name, subs.mailbox)
     subs.names.removeValue(name)
     replySubscription(writer, "unsubscribe", name, subs.names.count)
 }
 
-fn replySubscription(writer: Writer&, verb: string, name: u8[]&, count: usize) throws IoError {
+fn replySubscription(writer: Ref<Writer>, verb: string, name: u8[], count: usize) throws IoError {
     writer.arrayHeader(3); writer.bulk(verb); writer.bulk(name); writer.integer(count as u64); writer.flush()
 }
 

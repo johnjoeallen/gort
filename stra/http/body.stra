@@ -33,7 +33,7 @@ enum Framing {
     }
 
     // Reads the headers. Throws BadBody for Content-Length together with Transfer-Encoding: chunked, or a repeated or non-numeric Content-Length.
-    static fn parse(head: u8[]&): Framing throws BadBody {
+    static fn parse(head: u8[]): Framing throws BadBody {
         var length: u64? = null
         var chunked = false
         for (line in head.lines().skip(1)) {
@@ -57,7 +57,7 @@ enum Sink {
     Memory(u8[])             // the standard reader: appended to an array that grows as needed (bounded by the limit the decoder enforces)
     Spool(File?)             // the upload reader: an unnamed temporary file, created at the first byte
 
-    fn write(bytes: u8[]&, dir: string) throws IoError {   // (the file write is offloaded blocking I/O)
+    fn write(bytes: u8[], dir: string) throws IoError {   // (the file write is offloaded blocking I/O)
         switch (self) {
             Memory(data) -> { data.append(bytes) }
             Spool(f)     -> {
@@ -81,7 +81,7 @@ struct BodyDecoder {
         return BodyDecoder { framing: framing, limit: limit, done: framing == Framing.Fixed(0) }
     }
 
-    fn deliver(bytes: u8[]&, sink: Sink&, dir: string) throws IoError {
+    fn deliver(bytes: u8[], sink: Ref<Sink>, dir: string) throws IoError {
         digest.update(bytes)
         self.total += bytes.length
         sink.write(bytes, dir)
@@ -89,7 +89,7 @@ struct BodyDecoder {
 
     // Feeds the next bytes of the connection's input. Payload bytes go to `sink`; returns how many input bytes it consumed. It stops at the
     // end of the body, so a pipelined request behind it is left alone.
-    fn feed(input: u8[]&, sink: Sink&, dir: string): usize throws BadBody, PayloadTooLarge, IoError {
+    fn feed(input: u8[], sink: Ref<Sink>, dir: string): usize throws BadBody, PayloadTooLarge, IoError {
         var i = 0
         switch (framing) {
             NoBody -> { self.done = true }
@@ -149,7 +149,7 @@ struct Body {
     data: u8[]
     digest: u32
 
-    fn bytes(): u8[]& { return data[0..data.length] }
+    fn bytes(): u8[] { return data[0..data.length] }
     fn length(): u64 { return data.length }
     fn digest(): u32 { return digest }
 }
@@ -161,7 +161,7 @@ struct Upload {
     length: u64
     digest: u32
 
-    fn file(): File& { return spool }   // read it, link it into place, or map it
+    fn file(): Ref<File> { return spool }   // read it, link it into place, or map it
     fn map(): Mapping throws IoError { return spool.map() }   // an explicit read-only mmap; unmapped when dropped
     fn length(): u64 { return length }
     fn digest(): u32 { return digest }

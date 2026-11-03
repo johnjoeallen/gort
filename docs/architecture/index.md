@@ -44,14 +44,14 @@ Strata source (.stra)
     |
     v
 Parsing, name resolution, type checking
-Borrow/lifetime inference, effect inference (local)
+Escape and effect inference (local)
     |
     v
 Typed Strata IR (per module, ownership and effects explicit)
     |
     v
 Compiled Strata module (.smod) -------------------------------+
-    |  interface: types, signatures, borrow origins,           |
+    |  interface: types, signatures, ownership modes,           |
     |             effect summaries, dispatch contracts         |
     |  retained IR (generic bodies, inlinable bodies, the rest)|
     |  call-graph edges, park-point tables                     |
@@ -80,7 +80,7 @@ Executable
 
 | Step | Module compile | Application link | Notes |
 |---|---|---|---|
-| Parse, type check, borrow and effect inference within the module | Yes | | Needs only the module and the interfaces it imports |
+| Parse, type check, escape and effect inference within the module | Yes | | Needs only the module and the interfaces it imports |
 | Typed IR and module file | Yes | | |
 | Lower every function to the Level-0 calling convention | Yes (**Direction**) | | Makes a module linkable with no IR from anyone else |
 | Check imported contract hashes | | Yes | Also at module compile, against the interface used |

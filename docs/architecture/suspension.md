@@ -154,7 +154,7 @@ Illustrative Strata source and C. Neither is compiler output.
 package http
 
 // Opted in: the compiler inserts a slice check in this loop. May, yields only.
-fn[yield] parseHeaders(buf: u8[]&): Headers throws BadRequest {
+fn[yield] parseHeaders(buf: u8[]): Headers throws BadRequest {
     var h = Headers();
     var i = 0;
     while i < buf.len {              // back-edge: slice check inserted here
@@ -166,29 +166,29 @@ fn[yield] parseHeaders(buf: u8[]&): Headers throws BadRequest {
 }
 
 // No attribute: nothing inserted. No loop effect, so Never: usable under a lock.
-fn hash(key: u8[]&): u64 {
+fn hash(key: u8[]): u64 {
     var x: u64 = 14695981039346656037;
     for b in key { x = (x ^ b) * 1099511628211; }
     return x;
 }
 
-fn lookup(cache: Ref<Cache>, key: u8[]&): i64? {
+fn lookup(cache: Ref<Cache>, key: u8[]): i64? {
     let h = hash(key);               // Never: fine
     sync(cache) {                    // the body may call only Never functions
         return cache.entries.get(h); // get() is Never unless it is [yield] or parks
     }
 }
 
-fn[nopark] broken(k: u8[]&) {
+fn[nopark] broken(k: u8[]) {
     sleep(1ms);                      // error: park source in a nopark function
                                      //   broken -> sleep (extern parks)
 }
 
-fn[nopark] spin(flag: Flag&) {
+fn[nopark] spin(flag: Ref<Flag>) {
     while !flag.isSet() { }          // warning (loops): unbounded loop in a nopark function
 }
 
-fn tight(cache: Ref<Cache>, r: Reader&) {
+fn tight(cache: Ref<Cache>, r: Ref<Reader>) {
     mutate(cache) {
         scanForever(r);              // warning (always on in a lock body): scanForever loops unbounded
     }                                //   tight -> scanForever
@@ -208,8 +208,8 @@ imaging/
 package[yield] imaging                    // package default: functions here get slice checks
 
 struct Renderer {                         // no attribute: inherits [yield] from the package
-    fn render(page: Page&): string { for b in page.blocks { ... } }   // gets checks
-    fn[noyield] crc(data: u8[]&): u32 { ... }                          // the function overrides: plain C
+    fn render(page: Ref<Page>): string { for b in page.blocks { ... } }   // gets checks
+    fn[noyield] crc(data: u8[]): u32 { ... }                          // the function overrides: plain C
 }
 
 // imaging/metrics.stra
@@ -217,7 +217,7 @@ package[yield] imaging                    // the same line as in renderer.stra
 
 struct Metrics[noyield] {                 // the type overrides the package default
     fn width(c: u32): u32 { return c < 128 ? 1 : 2 }                  // no checks (the type says noyield)
-    fn[yield] widest(text: string&): u32 { for c in text { ... } }    // the function overrides the type
+    fn[yield] widest(text: string): u32 { for c in text { ... } }    // the function overrides the type
 }
 
 fn[nopark] isAscii(c: u32): bool { return c < 128 }                   // asserts it never parks
@@ -244,7 +244,7 @@ st_t parseHeaders_call(task_t *t, u8buf *buf, Headers *out) {
         if (--t->worker->slice <= 0) {              // slice check
             // a yield is a real park: spill live values into a frame
             parse_frame *f = frame_new(t, parseHeaders_resume, /*state*/ 1);
-            f->buf = buf; f->h = h; f->i = i;        // buf is a borrowed parameter, see D2
+            f->buf = buf; f->h = h; f->i = i;        // buf is a Ref parameter: a counted handle to a slot that never moves, see D2
             run_queue_push_back(t);
             return PARKED;
         }
@@ -261,7 +261,7 @@ st_t parseHeaders_call(task_t *t, u8buf *buf, Headers *out) {
 
 - `hash` has no counter and no status, so the C compiler can inline it freely.
 - On the common path a check costs a decrement and a branch per iteration. Strip-mining would test once per block. Neither cost nor strip-mining is measured yet (B13).
-- If `buf` pointed at a native-stack local in the caller, the caller would need a frame-resident local, or the yield would leave a dangling borrow ([D2](open-decisions.md#d2-borrowed-locals-and-the-lazy-shape)).
+- If `buf` pointed at a native-stack local in the caller, the caller would need a frame-resident local, or the yield would leave a dangling pointer ([D2](open-decisions.md#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape)).
 
 ## 2. Lowering to resumable frames
 
@@ -330,7 +330,7 @@ Frames come from a per-function arena, sized exactly. This matches the existing 
 ```
 // db/query.stra
 package db                                  // compiled separately         Park(query) = May   (calls Conn.recv)
-fn query(sql: string&, id: i64): Row throws DbError {
+fn query(sql: string, id: i64): Row throws DbError {
     let c = pool.acquire();                 // May: waits for a free connection
     c.send(encode(sql, id));                // May
     return decode(c.recv());                // May
@@ -339,7 +339,7 @@ fn query(sql: string&, id: i64): Row throws DbError {
 // app/handle.stra
 package app
 import db
-fn handle(req: Request&): Response throws DbError {
+fn handle(req: Ref<Request>): Response throws DbError {
     let row = db.query("select ...", req.id);   // inferred May; nothing written
     return render(row);                         // Never
 }
@@ -378,16 +378,16 @@ st_t app_handle_resume(task_t *t, handle_frame *f) {
 
 One real hazard shows in `t->innermost->out = ...`: the callee was given a pointer into the caller's native stack. Pointers to locals that are live across a park are the subject of the next subsection.
 
-### Borrows and locals that cannot be moved
+### Locals whose address a callee holds
 
 The lazy form copies locals into a frame only when a park occurs. A copy changes the address. Two things can hold the old address:
 
-1. A **borrow** (`T&`) to a local, given to a callee that is part of the park chain, or kept in another local.
+1. A **raw pointer to a stack local** that the compiler hands to a callee in the park chain, or keeps in another local. A `Ref<T>` is not this case: it holds a count on a slot that never moves (D18 item 7). Only values that are not counted objects (stack values, fixed arrays inside a frame) can be reached by raw pointer.
 2. A **result or out pointer** (above), which the unwinding step can rebind because it is compiler-generated.
 
-Case 2 is mechanical. Case 1 is not: `let buf = readBuffer(); conn.recv(buf&)` is exactly this shape, and extremely common.
+Case 2 is mechanical. Case 1 is not: `let buf = readBuffer(); conn.recv(buf)` is exactly this shape, and extremely common.
 
-**Direction:** a local that is borrowed *and* live across a call that may park is **frame-resident** from its declaration, in a frame created at function entry. A function with any frame-resident local uses the eager shape for that function. Other functions in the chain stay lazy. The borrow-origin analysis (spec section 5) already has what is needed to decide this; the new fact is only that the flag *borrowed across a may-park call* is recorded for each local. This is a real constraint on how often `lazy` applies, and not measured: the toy benchmark has no borrowed locals. See [open decision D2](open-decisions.md#d2-borrowed-locals-and-the-lazy-shape).
+**Direction:** a local whose address is passed *and* live across a call that may park is **frame-resident** from its declaration, in a frame created at function entry. A function with any frame-resident local uses the eager shape for that function. Other functions in the chain stay lazy. The escape analysis already has what is needed to decide this; the new fact is only that the flag *address held across a may-park call* is recorded for each local. This is a real constraint on how often `lazy` applies, and not measured: the toy benchmark has no such locals. See [open decision D2](open-decisions.md#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape).
 
 ## 3. Calls that never suspend
 
@@ -427,7 +427,7 @@ Cleanup of a resource runs when its scope exits, by normal return, `THROWN` or `
 |---|---|
 | `Ref<T>` live across a park | Held in a frame slot; the slot is an owner. Frame destruction (normal, thrown or cancelled) releases it. A parked task therefore keeps its objects alive. |
 | `WeakRef<T>` live across a park | Held in a slot. Promotion is a separate step after the resume, as everywhere (spec 3.1). The compiler must not hoist a promotion across a park point: the object may have expired meanwhile. |
-| Borrow `T&` live across a park | Allowed if the referent outlives the parked task. The lifetime analysis (spec section 5) already tracks origins; the new check is that **every referent a borrow can point to is either frame-resident, a `Ref` held by the frame, or static**. A borrow of a native-stack local is the case handled above. |
+| Raw pointer to a local, live across a park | Allowed if the referent outlives the parked task. A `Ref<T>` live across a park needs no check: it owns a count. For a raw pointer, the new check is that **every referent it can point to is either frame-resident, a `Ref` held by the frame, or static**. A borrow of a native-stack local is the case handled above. |
 | Task temporary arena | Belongs to the vthread, not to a frame. Survives parks. Reclaimed at task exit after cleanups. |
 | Per-function frame arenas | Runtime-owned like per-type arenas. A frame can be freed on a different worker from the one that allocated it (a task can resume anywhere once migration exists), so frees must be cross-thread-safe; the same requirement as `new`. |
 | Escape analysis (spec 4.4) | A value that does not escape the task may live in the task arena or in a frame slot. The compiler must preserve destructor timing across parks. |

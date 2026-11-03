@@ -18,35 +18,35 @@ let routes = [
     Route.upload("/import",   importRows,  Cost.Unbounded, 2.gb),  // a huge document: spooled, then mapped and streamed
 ]
 
-fn index(head: u8[]&): Resp { return ok(HELLO) }
+fn index(head: u8[]): Resp { return ok(HELLO) }
 
-fn echo(head: u8[]&): Resp {
+fn echo(head: u8[]): Resp {
     sleep(queryUs(head))   // stands in for a DB call
     return ok(pathParam(head) + "\n")
 }
 
-fn report(head: u8[]&): Resp { return ok(expensiveSummary()) }   // long, but never parks: Never, not [yield], so it holds the worker for its ~1 ms (hence Cost.Unbounded)
+fn report(head: u8[]): Resp { return ok(expensiveSummary()) }   // long, but never parks: Never, not [yield], so it holds the worker for its ~1 ms (hence Cost.Unbounded)
 
-fn save(head: u8[]&): Resp { return ok(HELLO) }   // server.c: POST / has no body and changes no state;
+fn save(head: u8[]): Resp { return ok(HELLO) }   // server.c: POST / has no body and changes no state;
                                                   //     it exists to be an UNSAFE request (a barrier)
 
 // Handlers that take a body. Which reader ran decided where it lives.
-fn receive(head: u8[]&, body: Body&): Resp {   // server.c: POST /api
+fn receive(head: u8[], body: Ref<Body>): Resp {   // server.c: POST /api
     return ok("stored " + body.length() + " bytes in memory crc32=" + hex(body.digest()) + "\n")
 }
 
-fn createUser(head: u8[]&, body: Body&): Resp throws Exception {
+fn createUser(head: u8[], body: Ref<Body>): Resp throws Exception {
     // The standard reader capped this body (maxBody, 1 MB by default) and holds all of it in memory. The parser has its own limits as
     // well: a small body can still be a deeply nested one.
     let user = json.parse<User>(body.bytes(), JsonLimits { maxDepth: 32, maxStringBytes: 4096 })
     return created(users.insert(user))
 }
 
-fn storeUpload(head: u8[]&, upload: Upload&): Resp {   // server.c: POST /upload
+fn storeUpload(head: u8[], upload: Ref<Upload>): Resp {   // server.c: POST /upload
     return ok("stored " + upload.length() + " bytes in file crc32=" + hex(upload.digest()) + "\n")
 }
 
-fn[yield] importRows(head: u8[]&, upload: Upload&): Resp throws Exception {   // (CPU-bound over a big input: declared Unbounded; [yield] lets the compiler yield in the row loop, so other connections and cancellation get a turn)
+fn[yield] importRows(head: u8[], upload: Ref<Upload>): Resp throws Exception {   // (CPU-bound over a big input: declared Unbounded; [yield] lets the compiler yield in the row loop, so other connections and cancellation get a turn)
     // The body is already a file; the handler never holds the document as a value. It maps the file and runs a streaming parser over it,
     // so memory stays constant however large the upload is.
     let rows = json.stream<Row>(upload.map())
@@ -61,7 +61,7 @@ struct Server {
     table: ResponseTable
     cfg: ServerConfig
 
-    fn lookup(head: u8[]&): Route?                                         // pure, so no frame; null: no such route
+    fn lookup(head: u8[]): Route?                                         // pure, so no frame; null: no such route
     fn handleSequential(conn: Conn): Ending throws IoError                 // one request at a time (the baseline)
     fn handlePipelined(conn: Conn): Ending throws IoError                  // pipelined requests run concurrently, responses in order (the default)
     fn runConnection(conn: Conn)                                           // a connection's vthread root: handles its own errors, so it can be spawned
@@ -70,7 +70,7 @@ struct Server {
 
 // ---------- implementations ----------
 // The route lookup is pure, so no frame (server.c: route(), is_post(), is_slow()). null: no such route.
-fn Server::lookup(head: u8[]&): Route? { return routes.find(head) }
+fn Server::lookup(head: u8[]): Route? { return routes.find(head) }
 
 // The handler never sees a buffer, a length or a move. Everything buffer-related lives in Reader.
 fn Server::handleSequential(conn: Conn): Ending throws IoError {

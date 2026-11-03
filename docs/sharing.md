@@ -6,7 +6,7 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 ## The rules
 
-**R1. When is a block required?** Reading or writing through a `Ref<T>` (or a borrow derived from it) needs a block naming that reference when **both** hold:
+**R1. When is a block required?** Reading or writing through a `Ref<T>` needs a block naming that reference when **both** hold:
 
 1. the object is not *provably local*, and
 2. the accessed field, or anything stored by value inside it, is *mutable*.
@@ -21,11 +21,11 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R6. Cost on an unshared object.** `sync`/`mutate` test the flag once at entry. If it is clear, they do nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
 
-**R7. Borrows.** A borrow taken inside a block cannot leave it (return, store, capture). A `T&` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
+**R7. Hoisted pointers.** A raw pointer hoisted inside a block cannot leave it (return, store, capture); a `Ref<T>` copied out takes a count and can. When the dereference goes through a container item or a field (`a.b.c`, `list[i]`), the compiler **injects a local `Ref<T>`** copied out of that item or field before hoisting; it owns a count until scope exit, so a call that removes the object from its container cannot free it under the hoisted pointer. A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
 
 **R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.
 
-**Globals and `spawn`.** A module-level `let` is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level `var` is local to each vthread. `stra/http/store.stra` shows a `let users: Ref<UserTable>`. A borrow passed to `spawn` inside a `scope` is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.
+**Globals and `spawn`.** A module-level `let` is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level `var` is local to each vthread. `stra/http/store.stra` shows a `let users: Ref<UserTable>`. A `Ref<T>` to a local passed to `spawn` inside a `scope` is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.
 
 **Fresh results.** A function whose result is a new allocation that nothing else refers to is marked `fresh` in its summary, so `let db = Db.make(lim)` is local in the caller until it escapes. Without `fresh` the caller must treat the result as incoming.
 
@@ -39,7 +39,7 @@ A test or a command-line tool builds a store and reads it back in one vthread. N
 // tools/load.stra
 package tools
 
-fn loadAndCount(path: string&): usize {
+fn loadAndCount(path: string): usize {
     let store = new Store {}              // local
     for line in readLines(path) {
         store.entries.insert(Bytes.copyOf(line.key), Entry { value: new Value { bytes: line.value.copy() }, expiresAt: null })
@@ -63,14 +63,14 @@ struct Db {                               // every field is set in make() and ne
     reaper: Ref<Mailbox<Reap>>
     lim: Limits
     // ...
-    fn get(key: u8[]&): Ref<Value>? {
+    fn get(key: u8[]): Ref<Value>? {
         sync(store) {                     // R1: store is incoming and Store.entries is mutable
             let e = store.entries.get(key)
             return e == null ? null : e.value
         }
     }
 
-    fn[nopark] release(channel: u8[]&, mb: Ref<Mailbox<Message>>) {
+    fn[nopark] release(channel: u8[], mb: Ref<Mailbox<Message>>) {
         reaper.tryPush(Reap { ... })      // reaper is write-once and Mailbox is an extern handle (R8): no block; [nopark] lets cleanup() call it
     }
 }
@@ -87,7 +87,7 @@ struct Db {                               // every field is set in make() and ne
 // redis/stats.stra
 package redis
 
-fn size(db: Db&): usize {
+fn size(db: Ref<Db>): usize {
     return db.store.entries.count         // error: store.entries is mutable and db is incoming
 }                                         //   fix: sync(db.store) { return db.store.entries.count }
 ```
@@ -109,7 +109,7 @@ package redis
 
 fn peekKeys(store: Ref<Store>): Map<Bytes, Entry>& {
     sync(store) {
-        return store.entries              // error: a borrow taken in a sync block cannot leave it
+        return store.entries              // error: a pointer hoisted in a sync block cannot leave it
     }
 }
 ```
@@ -122,7 +122,7 @@ The messages name the chain and the fix. A missing block on a reference that tur
 // redis/main.stra
 package redis
 
-fn main(args: Args&) {
+fn main(args: Ref<Args>) {
     let db = Db.make(lim)                 // fresh: local so far
     db.purgeWake.notify()                 // Signal is a runtime handle, not db's mutable state
     spawn db.purgeLoop()                  // R5: db is published here

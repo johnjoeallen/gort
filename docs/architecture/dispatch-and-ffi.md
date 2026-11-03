@@ -16,7 +16,7 @@ This is the answer to "previously valid programs becoming unsafe when implementa
 
 ## Function values and callbacks
 
-A function-typed value (`fn(u8[]&): Resp throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
+A function-typed value (`fn(u8[]): Resp throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
 
 Functions that take function-typed parameters have a conditional summary `Cond(P)`: `forEach(list, f)` parks iff `f` may. At a call site where `f` is statically known, the condition collapses and the call binds to the plain or the suspendable form. At one where it is not, the parameter's declared bound is used.
 
@@ -44,9 +44,9 @@ C declarations carry no ownership or effect information (spec 5.2). A Strata bin
 // bindings/crc.stra
 package bindings
 
-extern fn crc32(data: u8[]&): u32                  // plain: Never. Assumed short and non-blocking.
+extern fn crc32(data: u8[]): u32                  // plain: Never. Assumed short and non-blocking.
 extern parks fn sleep(d: Duration)                   // existing: a runtime primitive that registers and parks
-extern blocking fn pqExec(c: PgConn&, sql: string&) // proposed: may block the OS thread (see below)
+extern blocking fn pqExec(c: Ref<PgConn>, sql: string) // proposed: may block the OS thread (see below)
 ```
 
 An `extern fn` without a modifier is a **promise** that it returns quickly and does not block. The compiler cannot verify the promise and nothing in the runtime enforces it. A violation stalls one worker for the length of the call (the same failure mode as a Java thread stuck while pinned); a watchdog may report it (see the table).
@@ -60,7 +60,7 @@ A foreign C function is native stack that cannot be captured, so it cannot be su
 | Strategy | What happens | Cost and limits |
 |---|---|---|
 | **1. Nonblocking binding** (best) | Use a readiness/async API of the library (nonblocking sockets, `epoll`, `io_uring`); the Strata wrapper calls it and parks on the descriptor. | Library must offer it. No extra thread. |
-| **2. Offload to a blocking pool** (**Direction** for `extern blocking`) | The call is a park point: the vthread parks, a pool thread runs the call, and a completion wakes the vthread. | A thread hop per call (some microseconds); a bounded pool, so a full pool queues work (and that wait is itself a park). Arguments must outlive the park: borrowed arguments must be **frame-resident**, not on the native stack (same rule as [here](suspension.md#borrows-and-locals-that-cannot-be-moved)). Thread-affine libraries need a pinned thread (strategy 3). |
+| **2. Offload to a blocking pool** (**Direction** for `extern blocking`) | The call is a park point: the vthread parks, a pool thread runs the call, and a completion wakes the vthread. | A thread hop per call (some microseconds); a bounded pool, so a full pool queues work (and that wait is itself a park). Arguments must outlive the park: arguments that are addresses of locals must be **frame-resident**, not on the native stack (same rule as [here](suspension.md#borrows-and-locals-that-cannot-be-moved)). Thread-affine libraries need a pinned thread (strategy 3). |
 | **3. Dedicated thread** | A thread owns a library (a connection, a context) and Strata sends it work and awaits replies as messages. | Serialises that library's calls; good for thread-affine code. |
 | **4. Run on the worker** | Plain `extern fn`: the call blocks the worker. | Only right for calls that are truly short. Stalls everything on that worker. |
 | **5. Compensating worker** | A monitor notices a worker stuck in foreign code past a threshold and starts another worker so the scheduler keeps a core busy. | Does not fix the stuck call. Useful as a backstop and as a diagnostic, not a design. |

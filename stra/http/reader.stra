@@ -10,7 +10,7 @@ import runtime
 // unconsumed input, so an idle connection owns none; it goes back to the pool when the input is fully consumed
 // and when the Reader is dropped.
 struct Reader {
-    conn: Conn&
+    conn: Ref<Conn>
     buf: u8[]? = null                                        // a runtime growable array; unallocated while the connection is idle
     maxHead: usize                                           // the largest header block accepted
     yieldBytes: usize                                        // body bytes processed per turn before yielding
@@ -19,7 +19,7 @@ struct Reader {
     end: usize = 0
     consumed: usize = 0                                      // end of the request most recently returned
 
-    static fn of(conn: Conn&, cfg: ServerConfig&): Reader {
+    static fn of(conn: Ref<Conn>, cfg: Ref<ServerConfig>): Reader {
         return Reader { conn: conn, maxHead: cfg.maxHead, yieldBytes: cfg.yieldBytes, uploadDir: cfg.uploadDir }
     }
 
@@ -58,8 +58,8 @@ struct Reader {
         return tryNextRequest()
     }
 
-    fn head(req: Request&): u8[]& { return buf[req.start..req.end] }   // resolved against the buffer's current address
-    fn consume(req: Request&) { self.start = req.end }   // advance, no copy
+    fn head(req: Ref<Request>): u8[] { return buf[req.start..req.end] }   // resolved against the buffer's current address
+    fn consume(req: Ref<Request>) { self.start = req.end }   // advance, no copy
     fn releaseIfDrained() { if (start == end) self.buf = null }   // dropping the array returns it to its pool
 
     // The next complete request head in buf[start..end], if one is there. Does not read from the socket.
@@ -94,7 +94,7 @@ struct Reader {
     }
 
     // The STANDARD reader: the whole body, in memory, at most `limit` (the caller passes ServerConfig.maxBody).
-    fn readBody(head: u8[]&, limit: u64): Body throws IoError, BadBody, PayloadTooLarge {
+    fn readBody(head: u8[], limit: u64): Body throws IoError, BadBody, PayloadTooLarge {
         var sink = Sink.Memory(u8[]())
         let decoder = streamBody(head, limit, sink)
         switch (sink) {
@@ -104,7 +104,7 @@ struct Reader {
     }
 
     // The UPLOAD reader: the body goes to an unnamed temporary file as it arrives; `limit` is the route's (never above ServerConfig.uploadMax).
-    fn readUpload(head: u8[]&, limit: u64): Upload throws IoError, BadBody, PayloadTooLarge {
+    fn readUpload(head: u8[], limit: u64): Upload throws IoError, BadBody, PayloadTooLarge {
         var sink = Sink.Spool(null)
         let decoder = streamBody(head, limit, sink)
         switch (sink) {
@@ -117,7 +117,7 @@ struct Reader {
     // in the buffer. Parks while the client sends, and YIELDS every `yieldBytes` of body so one big body cannot starve the other connections
     // on this worker (server.c: yield=). On an exception the rest of the body is unread, so the caller must close the connection. `head` is
     // read only before the buffer moves.
-    fn streamBody(head: u8[]&, limit: u64, sink: Sink&): BodyDecoder throws IoError, BadBody, PayloadTooLarge {
+    fn streamBody(head: u8[], limit: u64, sink: Ref<Sink>): BodyDecoder throws IoError, BadBody, PayloadTooLarge {
         let framing = Framing.parse(head)
         switch (framing) {
             NoBody -> { throw BadBody() }                                      // a route with a body reader needs a body

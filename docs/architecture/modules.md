@@ -8,7 +8,7 @@ The module separates what is needed for correctness from what only enables optim
 
 | Tier | Purpose | Contents | If absent |
 |---|---|---|---|
-| **A: Contract** | Correctness | Exported types and layouts, signatures, borrow origins, effect summaries, interface/dispatch contracts, generic constraints, ownership metadata, versions and hashes | The module cannot be used. |
+| **A: Contract** | Correctness | Exported types and layouts, signatures, ownership modes, effect summaries, interface/dispatch contracts, generic constraints, ownership metadata, versions and hashes | The module cannot be used. |
 | **B: Instantiation IR** | Correctness for generics and exposed bodies | IR of generic functions and types, and of functions the author exposes for inlining | Generic code cannot be instantiated downstream. (Unless generics use a shared-code representation; see D6.) |
 | **C: Optimisation IR** | Speed and size | IR of every non-generic function, call-graph edges with targets, park-point and liveness tables, frame layouts | Still correct and linkable through Level-0 entries; no cross-module inlining, devirtualisation or fusion. |
 | (cache) | Build speed | Per-target C and native objects, keyed by hashes | Rebuilt on demand. |
@@ -28,8 +28,8 @@ imports
 exports                                            [Tier A]
   types: layout (or "opaque"), fields visible, cleanup method, copy/move rules,
          whether sync-able (has a lock word)
-  functions: signature, per-parameter ownership mode (borrow, consume, Ref),
-             borrow origins of the return value, effect summary, throws list
+  functions: signature, per-parameter ownership mode (consume, Ref),
+             escape summary of the return value, effect summary, throws list
   interfaces: method list, per-method effect bound, vtable layout, versioning rule
   generic definitions: constraints, effect conditions (Cond(P))
   constants and static data a caller may fold
@@ -69,14 +69,14 @@ invariants: cleanup methods are Never; foreign=blocking implies park=May
 
 `Cond(P)` is stored symbolically, so a downstream module can resolve it with its own arguments. A conditional effect through a type parameter (`T.compare` that might park) is stored as `Cond({T})` and resolved at instantiation.
 
-Summaries are **inferred**, then **exported as part of the contract**. The consequence, already noted for borrow origins in spec 5.1: changing an implementation can change the contract with no source signature change. The compiler reports it ([versioning](#4-versioning-and-compatibility)).
+Summaries are **inferred**, then **exported as part of the contract**. The consequence, already noted for escape summaries in spec 5.1: changing an implementation can change the contract with no source signature change. The compiler reports it ([versioning](#4-versioning-and-compatibility)).
 
 ### Access and escape summaries
 
 Also part of each exported function's contract, and of each exported type (see [sharing](../sharing.md)):
 
 ```
-per borrowed or Ref parameter:  access = none | read | write      (through the receiver and by-value fields)
+per Ref parameter:  access = none | read | write      (through the receiver and by-value fields)
                                 escape = none | retained | published (stored beyond the call / given to spawn or a message)
                                 grow   = no | may                 (may move a growable container's storage; D15)
 result:                         fresh  = yes | no                 (a new allocation nothing else refers to)
@@ -121,7 +121,7 @@ Keeping the frame body private is what makes incremental compilation work: a cal
 
 The IR is what a consumer uses to *regenerate* code, so it must carry what the generated C needs, and no more:
 
-- Typed, structured control flow with ownership operations explicit: move, borrow, `Ref` copy and release, `new`, cleanup scopes, `sync`/`mutate` regions, throw edges.
+- Typed, structured control flow with ownership operations explicit: move, `Ref` copy and release, `new`, cleanup scopes, `sync`/`mutate` regions, throw edges.
 - Effects on every call site, and park points marked, so that frame lowering is a function of the IR alone.
 - **Not** raw source text, comments, formatting or macro structure.
 - Stable under a format version number; the consumer refuses a newer major version.
@@ -135,7 +135,7 @@ The minimum IR needed for cross-module optimisation is [open (D3)](open-decision
 - **Contract hash**, per exported symbol: a hash of exactly its Tier A entry (and for generics and exposed bodies, the Tier B IR). It is the unit of compatibility.
 - **Module interface hash**: a hash of all contract hashes, for a fast check.
 - **Advisory data** (`loops`) is excluded from every hash above.
-- **Compatibility rule (Direction):** an implementation change that alters no contract hash is compatible. A change that narrows an effect (`May` to `Never`), reduces `throws`, or adds an export is *backward compatible*. A change that widens an effect (`Never` to `May`), adds to `throws`, changes layout or changes a borrow origin is **breaking**, whether or not the signature text changed.
+- **Compatibility rule (Direction):** an implementation change that alters no contract hash is compatible. A change that narrows an effect (`May` to `Never`), reduces `throws`, or adds an export is *backward compatible*. A change that widens an effect (`Never` to `May`), adds to `throws`, changes layout or changes an escape summary is **breaking**, whether or not the signature text changed.
 - **Semantic version policy:** breaking contract changes require a major version; the compiler can compare two versions of a module and print the contract diff (which symbols changed and which dimension). This answers spec 10.10 (API stability) at the tooling level; the policy itself is [Open](open-decisions.md#d4-representing-effects-in-public-interfaces).
 
 ### The native cache key
@@ -157,7 +157,7 @@ Any input changing gives a different key; a stale entry is never reused, only le
 
 ### Incremental compilation (default for development)
 
-1. For each module, in dependency order: read the interfaces of imports (Tier A only), type-check, infer effects and borrows, produce IR, lower to Level 0, emit C, cache the object.
+1. For each module, in dependency order: read the interfaces of imports (Tier A only), type-check, infer effects and escapes, produce IR, lower to Level 0, emit C, cache the object.
 2. Link the objects and the runtime with the system linker. No IR from other modules is read.
 3. **Early cut-off:** if a module's interface hash is unchanged after recompilation, its dependants are not touched, even though its objects changed (they relink, not recompile).
 
@@ -168,7 +168,7 @@ Correctness across separately compiled modules rests on Tier A plus Level 0. Cal
 1. Resolve all modules (names, versions, contract hashes). A mismatch between an importer's recorded hash and the provider's is an error naming the symbol.
 2. Build the closed-world call graph from Tier C edges and the build configuration (entry points, open interfaces).
 3. Check effects across modules with the summaries: a `Cond(P)` is resolved against real arguments; indirect calls are checked against implementations; a violated bound is an error.
-4. Re-run lifetime/borrow checks that cross modules (only the contracts are needed).
+4. Re-run lifetime checks that cross modules (only the contracts are needed).
 5. Decide optimisations: devirtualise calls with a single reachable implementation, inline small functions, fuse or embed frame chains, specialise generics.
 6. Re-lower and re-emit only the functions changed by step 5. Everything else keeps its cached Level-0 object.
 7. Run the C compiler and linker; ideally with LTO as an independent layer.

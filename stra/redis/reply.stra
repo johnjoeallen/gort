@@ -6,11 +6,11 @@ package redis
 import runtime
 
 struct Writer {
-    conn: Conn&
+    conn: Ref<Conn>
     out: OutBuf? = null
     used: usize = 0
 
-    static fn of(conn: Conn&): Writer { return Writer { conn: conn } }
+    static fn of(conn: Ref<Conn>): Writer { return Writer { conn: conn } }
 
     fn simple(text: string)  throws IoError { put("+"); put(text); put("\r\n") }
     fn error(text: string)   throws IoError { put("-"); put(text); put("\r\n") }
@@ -19,7 +19,7 @@ struct Writer {
     fn arrayHeader(n: usize) throws IoError { put("*"); putDecimal(n as u64) }
 
     // A bulk string. Small ones are copied into the buffer; one that does not fit is sent from where it is (after the buffered header), no copy.
-    fn bulk(bytes: u8[]&) throws IoError {
+    fn bulk(bytes: u8[]) throws IoError {
         put("$"); putDecimal(bytes.length as u64)
         if (bytes.length <= OUTSZ - used) { put(bytes) }
         else { flush(); writeAll(conn, bytes) }          // parks while the client is slow
@@ -34,7 +34,7 @@ struct Writer {
         self.used = 0
     }
 
-    fn put(bytes: u8[]&) throws IoError {
+    fn put(bytes: u8[]) throws IoError {
         var rest = bytes
         while (rest.length > 0) {
             if (out == null) self.out = outPool.get()

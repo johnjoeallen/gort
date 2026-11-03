@@ -39,7 +39,7 @@ Syntax used here (a proposal, not yet in the design doc):
   * Methods are declared inside the type. `self` is available in every non-static method and is OPTIONAL: members can be
     used bare (`head`) or as `self.head`. It is needed only to tell a member from a parameter or local of the same name,
     and to refer to the value itself (`switch (self)`). By convention here, reads are bare and writes say `self.`.
-  * `let` is immutable, `var` is mutable. `T&` is a borrowed reference (design section 3); there is no shared/mutable split.
+  * `let` is immutable, `var` is mutable. `Ref<T>` is the reference type (D18); there is no shared/mutable split.
   * Tagged enums: `enum E { A(payload) B C(x, y) }` with an exhaustive `switch (e) { A(p) -> { ... } B -> { ... } }`. Each arm
     is `Pattern -> { block }`: no `case` keyword, no fallthrough. Several values share an arm with a comma (`"GET", "HEAD" -> {}`).
     A switch on a non-enum value needs a `default -> { ... }` arm. `break label` leaves a labelled loop from inside a switch.
