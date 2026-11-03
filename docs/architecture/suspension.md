@@ -154,7 +154,7 @@ Illustrative Strata source and C. Neither is compiler output.
 package http
 
 // Opted in: the compiler inserts a slice check in this loop. May, yields only.
-fn[yield] parseHeaders(buf: u8[]): Headers throws BadRequest {
+fn[yield] parseHeaders(buf: Array<u8>): Headers throws BadRequest {
     var h = Headers();
     var i = 0;
     while i < buf.len {              // back-edge: slice check inserted here
@@ -166,20 +166,20 @@ fn[yield] parseHeaders(buf: u8[]): Headers throws BadRequest {
 }
 
 // No attribute: nothing inserted. No loop effect, so Never: usable under a lock.
-fn hash(key: u8[]): u64 {
+fn hash(key: Array<u8>): u64 {
     var x: u64 = 14695981039346656037;
     for b in key { x = (x ^ b) * 1099511628211; }
     return x;
 }
 
-fn lookup(cache: Ref<Cache>, key: u8[]): i64? {
+fn lookup(cache: Ref<Cache>, key: Array<u8>): i64? {
     let h = hash(key);               // Never: fine
     sync(cache) {                    // the body may call only Never functions
         return cache.entries.get(h); // get() is Never unless it is [yield] or parks
     }
 }
 
-fn[nopark] broken(k: u8[]) {
+fn[nopark] broken(k: Array<u8>) {
     sleep(1ms);                      // error: park source in a nopark function
                                      //   broken -> sleep (extern parks)
 }
@@ -208,8 +208,8 @@ imaging/
 package[yield] imaging                    // package default: functions here get slice checks
 
 struct Renderer {                         // no attribute: inherits [yield] from the package
-    fn render(page: Ref<Page>): string { for b in page.blocks { ... } }   // gets checks
-    fn[noyield] crc(data: u8[]): u32 { ... }                          // the function overrides: plain C
+    fn render(page: Ref<Page>): String { for b in page.blocks { ... } }   // gets checks
+    fn[noyield] crc(data: Array<u8>): u32 { ... }                          // the function overrides: plain C
 }
 
 // imaging/metrics.stra
@@ -217,7 +217,7 @@ package[yield] imaging                    // the same line as in renderer.stra
 
 struct Metrics[noyield] {                 // the type overrides the package default
     fn width(c: u32): u32 { return c < 128 ? 1 : 2 }                  // no checks (the type says noyield)
-    fn[yield] widest(text: string): u32 { for c in text { ... } }    // the function overrides the type
+    fn[yield] widest(text: String): u32 { for c in text { ... } }    // the function overrides the type
 }
 
 fn[nopark] isAscii(c: u32): bool { return c < 128 }                   // asserts it never parks
@@ -330,7 +330,7 @@ Frames come from a per-function arena, sized exactly. This matches the existing 
 ```
 // db/query.stra
 package db                                  // compiled separately         Park(query) = May   (calls Conn.recv)
-fn query(sql: string, id: i64): Row throws DbError {
+fn query(sql: String, id: i64): Row throws DbError {
     let c = pool.acquire();                 // May: waits for a free connection
     c.send(encode(sql, id));                // May
     return decode(c.recv());                // May

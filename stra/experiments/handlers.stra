@@ -24,11 +24,11 @@ fn cachePut(cache: Ref<Cache>, key: i64, u: User) {           //@P frame=56
         cache.entries.insert(key, u);                          /*N*/
     }
 }
-fn parseId(path: string): i64 {                             //@N
+fn parseId(path: String): i64 {                             //@N
     let seg = path.splitLast('/');                            /*N*/
     return seg.toI64();                                       /*N*/
 }
-fn renderUser(u: Ref<User>): string {                           //@N
+fn renderUser(u: Ref<User>): String {                           //@N
     var b = StringBuilder.make();                          /*N*/
     b.append("{\"id\":");                                      /*N*/
     b.appendI64(u.id);                                        /*N*/
@@ -37,11 +37,11 @@ fn renderUser(u: Ref<User>): string {                           //@N
     b.append("}");                                             /*N*/
     return b.finish();                                         /*N*/
 }
-fn writeJson(conn: Ref<Conn>, body: string) {                     //@P frame=48
+fn writeJson(conn: Ref<Conn>, body: String) {                     //@P frame=48
     conn.write(HEADER_200_JSON);                               /*P*/
     conn.write(body);                                          /*P*/
 }
-fn dbQuery(pool: Ref<Pool>, sql: string, id: i64): Row {    //@P frame=120
+fn dbQuery(pool: Ref<Pool>, sql: String, id: i64): Row {    //@P frame=120
     let c = pool.acquire();                                    /*P*/
     c.sendQuery(sql, id);                                     /*P*/
     let r = c.readRow();                                      /*P*/
@@ -90,7 +90,7 @@ fn handleReport(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {      //@P f
     let out = map(groups, |g| summarize(g));                   /*N*/ /*N*/
     writeJson(conn, renderReport(out));                      /*P*/ /*N*/
 }
-fn loadRows(pool: Ref<Pool>, r: Range): Row[] {             //@P frame=112
+fn loadRows(pool: Ref<Pool>, r: Range): Array<Row> {             //@P frame=112
     var rows = Row[];
     let c = pool.acquire();                                    /*P*/
     c.sendQuery(SQL_REPORT, r.from, r.to);                    /*P*/
@@ -102,9 +102,9 @@ fn loadRows(pool: Ref<Pool>, r: Range): Row[] {             //@P frame=112
     pool.release(c);                                           /*N*/
     return rows;
 }
-fn parseRange(q: string): Range { return Range.parse(q); }/*N*/ //@N
+fn parseRange(q: String): Range { return Range.parse(q); }/*N*/ //@N
 fn summarize(g: Ref<Group>): Summary { return Summary.of(g); }  /*N*/ //@N
-fn renderReport(o: Summary[]): string { return json(o); }   /*N*/ //@N
+fn renderReport(o: Array<Summary>): String { return json(o); }   /*N*/ //@N
 
 // ---------- 4. routing + middleware through function values ----------
 fn health(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {             //@N
@@ -116,7 +116,7 @@ fn auth(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>, next: Handler) {//@P 
     if !ok { writeJson(conn, ERR_401); return; }              /*P*/
     next(conn, req, env);                                      /*I:P*/  // targets: getUser, report, health -> mixed
 }
-fn verifyToken(keys: Ref<KeySet>, tok: string): bool {      //@P frame=40
+fn verifyToken(keys: Ref<KeySet>, tok: String): bool {      //@P frame=40
     sync(keys) { return keys.verify(tok); }                    /*P*/ /*N*/
 }
 fn dispatch(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {           //@P frame=72

@@ -73,7 +73,7 @@ Strata is **a Go-like language with a sprinkle of Java**, for network servers an
 | `Ref<T>` passed down | Another owner of the same object | Every `Ref<T>` holds a count: a copy or a pass increments it and the drop decrements it (D18 item 7). There is no count-less reference |
 | `Ref<T>` | Owning reference to a dynamic object | Strong count; destroy object at zero |
 | `WeakRef<T>` | Non-owning observation of a dynamic object | Weak count; control block survives until no weak owners remain |
-| `string` | Immutable string value | Implementation-managed storage, reclaimed when unreferenced |
+| `String` | Immutable string, like an immutable `Ref<Array<u8>>` | Reference counted. A literal lives in a permanent block that a zero count does not free; a substring copies out of its parent (D18 item 7). A `Array<u8>` is a plain byte array, not a `String` |
 | `T[]` | Growable array | Compiler-managed or explicitly allocated backing storage; exact allocation policy TBD |
 
 ### 3.1 Dynamic objects
@@ -149,7 +149,7 @@ Variable-sized fields such as strings and array buffers need their own backing a
 
 ### 4.3 Strings
 
-Proposed default: immutable `string` values with compiler-understood semantics but runtime-provided storage and operations.
+Proposed default: immutable `String` values with compiler-understood semantics but runtime-provided storage and operations.
 
 - Literals may reside in static read-only data.
 - Short runtime strings may be inline (small-string optimization).
@@ -166,7 +166,7 @@ The compiler may place objects in task-local storage only if it proves they cann
 
 ### 4.5 Growable containers and relocation
 
-Storage classes, locals, scopes and dispatch are decided together in docs/architecture/open-decisions.md D18: a plain object is a slot with an inline control block that never moves; arrays have an external control block and a block in a chunk of the element type (`Array<T>` fixed, `GrowableArray<T>` reallocated when it outgrows its block); a local that owns counts releases them at scope exit.
+Storage classes, locals, scopes and dispatch are decided together in docs/architecture/open-decisions.md D18: a plain object is a slot with an inline control block that never moves; arrays have an external control block and a block in a chunk of the element type (`Array<T>` fixed, `Array<T[]>` reallocated when it outgrows its block); a local that owns counts releases them at scope exit.
 
 Direction (docs/architecture/open-decisions.md D15). A growable container is a small non-moving header (`{ptr, len, cap}`, plus a lock word when shared) over a backing store that may move when it grows. A reference into a container is `(header, offset)`, never a raw address, so growing cannot invalidate it and no error is needed for a reference into a container followed by `v.push(x)`. The raw address exists only inside a deref window: the `sync`/`mutate` block for a shared container (growing needs `mutate`), or, for an unshared one, the span until the next call that may grow it or the next park, after which the compiler reloads `ptr`. Fixed-size objects are referenced directly and have no header indirection. A call into C pins the container for its duration; retaining a pointer needs a non-moving allocation named in the binding contract (5.2).
 
@@ -365,7 +365,7 @@ A resource type may define an automatically invoked cleanup method. The exact ow
 2. **Ref thread safety:** Direction (7.3): sharing is per instance, set when a reference is published across a vthread boundary; compiler-proven local objects use plain counts. Open: the cost of a per-reference flag test against always-atomic for non-local references (`docs/sharing.md`).
 3. **Access model:** Direction (7.3): a block is required where the object is not provably local and the field is mutable; shareability is inferred, never declared. Open: write-once fields across modules and interface access modes.
 4. **Arrays:** Direction (4.5, D15): a handle plus `(handle, offset)` interior references, so relocation never invalidates a reference. Open: when a dedicated virtual region is worth it, how thousands of independently sized arrays are represented, and how often real deref windows end (the per-access load was not visible in a micro-benchmark, B14).
-   *Direction chosen for small bounded buffers (prototyped in `bench/http`, `stra/http`, `c/generated/http`):* the runtime provides `u8[]` as a pooled size-class array
+   *Direction chosen for small bounded buffers (prototyped in `bench/http`, `stra/http`, `c/generated/http`):* the runtime provides `Array<u8>` as a pooled size-class array
    (512 B, 2 KB, 8 KB, 16 KB in the prototype). It starts in the smallest class, compacts when full, and `grow()` copies it into the
    next class; the source states no size, only a limit where one matters (a maximum header block). Code that needs a stable
    address must use offsets (a request is a pair of offsets), so moving is safe. Large and unbounded arrays (bodies, big
@@ -385,7 +385,7 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
    escapes. A throw runs the cleanups of every scope it leaves; cleanup methods never park and never throw. `spawn f(...)`
    requires f to declare no `throws`, so a vthread's root function handles its own errors. Open: how a throw interacts with a
    scope that still has child vthreads (the prototype source assumes the scope waits for them first), and whether a handler
-   type such as `fn(u8[]): Resp throws Exception` is the right way to say "may throw anything".
+   type such as `fn(Array<u8>): Resp throws Exception` is the right way to say "may throw anything".
    *Syntax direction (illustrative, used in `stra/http/server.stra`):* nullable `T?` with null-check narrowing instead of an
    Option type; methods declared inside the type, with `self` available but optional (needed only to disambiguate a member from
    a parameter and to refer to the value itself); tagged enums with an exhaustive `switch` whose arms are `Pattern -> { ... }` (no `case` keyword, no fallthrough, commas to list several

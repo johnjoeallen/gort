@@ -8,7 +8,7 @@ import runtime
 struct Reader {
     conn: Ref<Conn>
     lim: Ref<Limits>
-    buf: u8[]? = null
+    buf: Array<u8>? = null
     start: usize = 0
     end: usize = 0
     scanner: Scanner = Scanner {}
@@ -30,7 +30,7 @@ struct Reader {
                 }
             } else if (buf == null) {
                 if (!conn.readableHint()) return Input.Idle        // idle: allocate nothing
-                self.buf = u8[](); self.start = 0; self.end = 0
+                self.buf = Array<u8>(); self.start = 0; self.end = 0
             }
             let n = conn.tryRecv(buf[end..buf.capacity])           // never parks
             if (n == null) {
@@ -55,7 +55,7 @@ struct Reader {
     }
 
     fn frame(): Ref<Args> { assert(args != null); return args }   // the arguments of the frame Input.Frame announced
-    fn bytes(a: Ref<Arg>): u8[] { return buf[start + a.start..start + a.end] }
+    fn bytes(a: Ref<Arg>): Array<u8> { return buf[start + a.start..start + a.end] }
     fn readable(): Wakeup { return conn.readableWakeup() }
 
     // Room for `needed` bytes counted from `start`: compact, then grow class by class. false: that is over maxFrame.

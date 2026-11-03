@@ -3,7 +3,7 @@
 package http
 import runtime
 
-struct Resp  { bytes: u8[]&, keepAlive: bool }          // static text built at startup, or built by the handler
+struct Resp  { bytes: Array<u8>&, keepAlive: bool }          // static text built at startup, or built by the handler
 struct Request { start: usize, end: usize }              // offsets of the head inside the reader's buffer, not a pointer
                                                          // (the buffer may move when it grows; see results/http.md)
 exception TooLarge                                       // the header block does not fit in the buffer

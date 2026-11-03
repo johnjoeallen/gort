@@ -5,7 +5,7 @@ package runtime
 // Ring<T> is only a container: a fixed-capacity circular queue. It knows nothing about requests or completion.
 // Its storage comes from a pool (256 B for depth 32), so a connection with nothing in flight owns none.
 struct Ring<T> {
-    slots: T?[]
+    slots: Array<T?>
     head: usize = 0
     count: usize = 0
 

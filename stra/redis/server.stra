@@ -57,7 +57,7 @@ fn runConnection(conn: Conn, db: Ref<Db>, lim: Ref<Limits>, shutdown: Ref<Flag>,
 }
 
 // Best effort: the connection is being closed anyway, so a failed send is not worth reporting.
-fn sendError(writer: Ref<Writer>, text: string) {
+fn sendError(writer: Ref<Writer>, text: String) {
     try { writer.error(text); writer.flush() } catch (e: IoError) { }
 }
 
@@ -107,7 +107,7 @@ fn commandLoop(reader: Ref<Reader>, writer: Ref<Writer>, db: Ref<Db>, lim: Ref<L
 // Waits on three sources at once: the socket (SUBSCRIBE/UNSUBSCRIBE), the connection's mailbox (messages) and shutdown.
 // Original: StreamMap of per-channel streams + select!. Here one mailbox per connection carries every channel's messages, in publish order.
 struct Subscriptions {
-    names: Bytes[] = []
+    names: Array<Bytes> = []
     mailbox: Ref<Mailbox<Message>>
     db: Ref<Db>
 
@@ -178,19 +178,19 @@ fn dropChannels(reader: Ref<Reader>, writer: Ref<Writer>, subs: Ref<Subscription
     }
 }
 
-fn removeChannel(writer: Ref<Writer>, subs: Ref<Subscriptions>, name: u8[]) throws IoError {
+fn removeChannel(writer: Ref<Writer>, subs: Ref<Subscriptions>, name: Array<u8>) throws IoError {
     subs.db.unsubscribe(name, subs.mailbox)
     subs.names.removeValue(name)
     replySubscription(writer, "unsubscribe", name, subs.names.count)
 }
 
-fn replySubscription(writer: Ref<Writer>, verb: string, name: u8[], count: usize) throws IoError {
+fn replySubscription(writer: Ref<Writer>, verb: String, name: Array<u8>, count: usize) throws IoError {
     writer.arrayHeader(3); writer.bulk(verb); writer.bulk(name); writer.integer(count as u64); writer.flush()
 }
 
 // ---------- main ----------
 // Options (server.c main): port (default 6379) workers cpu0 maxconns maxframe maxbulk maxkeys maxtopics maxsubs subqueue lag=disconnect|notice
-fn main(args: string[]) {
+fn main(args: Array<String>) {
     let lim = Limits.fromArgs(args)
     let port = args.getInt("port", 6379)
     let db = Db.make(lim)                                                     // fresh, so local here; published (shared) when the worker closures capture it below

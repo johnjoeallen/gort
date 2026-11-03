@@ -16,7 +16,7 @@ This is the answer to "previously valid programs becoming unsafe when implementa
 
 ## Function values and callbacks
 
-A function-typed value (`fn(u8[]): Resp throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
+A function-typed value (`fn(Array<u8>): Resp throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
 
 Functions that take function-typed parameters have a conditional summary `Cond(P)`: `forEach(list, f)` parks iff `f` may. At a call site where `f` is statically known, the condition collapses and the call binds to the plain or the suspendable form. At one where it is not, the parameter's declared bound is used.
 
@@ -44,9 +44,9 @@ C declarations carry no ownership or effect information (spec 5.2). A Strata bin
 // bindings/crc.stra
 package bindings
 
-extern fn crc32(data: u8[]): u32                  // plain: Never. Assumed short and non-blocking.
+extern fn crc32(data: Array<u8>): u32                  // plain: Never. Assumed short and non-blocking.
 extern parks fn sleep(d: Duration)                   // existing: a runtime primitive that registers and parks
-extern blocking fn pqExec(c: Ref<PgConn>, sql: string) // proposed: may block the OS thread (see below)
+extern blocking fn pqExec(c: Ref<PgConn>, sql: String) // proposed: may block the OS thread (see below)
 ```
 
 An `extern fn` without a modifier is a **promise** that it returns quickly and does not block. The compiler cannot verify the promise and nothing in the runtime enforces it. A violation stalls one worker for the length of the call (the same failure mode as a Java thread stuck while pinned); a watchdog may report it (see the table).

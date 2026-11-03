@@ -4,9 +4,9 @@
 package redis
 import runtime
 
-exception ProtocolError { message: string }              // malformed input. The server answers "-ERR <message>" and closes (the original closes silently)
+exception ProtocolError { message: String }              // malformed input. The server answers "-ERR <message>" and closes (the original closes silently)
 exception FrameTooLarge                                  // a declared length or the frame as a whole is over its limit; "-ERR frame too large", then close
-exception StoreFull { message: string }                  // maxKeys, maxTopics or maxSubs reached; the command is refused, the connection stays
+exception StoreFull { message: String }                  // maxKeys, maxTopics or maxSubs reached; the command is refused, the connection stays
 
 enum ArgKind { Simple, Bulk, Integer, Null }             // the element kinds the original accepts inside a command array
 

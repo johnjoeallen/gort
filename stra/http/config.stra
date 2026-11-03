@@ -8,7 +8,7 @@ struct ServerConfig {
     maxHead: usize = 16.kb         // largest accepted header block (431 beyond it)                                server.c: maxhead=
     maxBody: u64 = 1.mb            // the STANDARD reader's limit: an ordinary route never sees a larger body (413)  server.c: maxbody=
     uploadMax: u64 = 4.gb          // the UPLOAD reader's limit: separate, much larger; a route can lower it         server.c: uploadmax=
-    uploadDir: string = "/var/tmp" // where uploads are spooled (unnamed temporary files)                           server.c: tmpdir=
+    uploadDir: String = "/var/tmp" // where uploads are spooled (unnamed temporary files)                           server.c: tmpdir=
     yieldBytes: usize = 64.kb      // body bytes a connection processes in one turn before it yields to the others  server.c: yield=
     depth: usize = 16              // pipelined requests in flight per connection                                    server.c: depth=
     lingerTime: Duration = 2.s     // after the server ends a connection while the client may still be sending: keep reading this long   server.c: linger= (ms)

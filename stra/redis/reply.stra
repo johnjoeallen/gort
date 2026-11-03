@@ -12,14 +12,14 @@ struct Writer {
 
     static fn of(conn: Ref<Conn>): Writer { return Writer { conn: conn } }
 
-    fn simple(text: string)  throws IoError { put("+"); put(text); put("\r\n") }
-    fn error(text: string)   throws IoError { put("-"); put(text); put("\r\n") }
+    fn simple(text: String)  throws IoError { put("+"); put(text); put("\r\n") }
+    fn error(text: String)   throws IoError { put("-"); put(text); put("\r\n") }
     fn integer(v: u64)       throws IoError { put(":"); putDecimal(v) }
     fn nullBulk()            throws IoError { put("$-1\r\n") }
     fn arrayHeader(n: usize) throws IoError { put("*"); putDecimal(n as u64) }
 
     // A bulk string. Small ones are copied into the buffer; one that does not fit is sent from where it is (after the buffered header), no copy.
-    fn bulk(bytes: u8[]) throws IoError {
+    fn bulk(bytes: Array<u8>) throws IoError {
         put("$"); putDecimal(bytes.length as u64)
         if (bytes.length <= OUTSZ - used) { put(bytes) }
         else { flush(); writeAll(conn, bytes) }          // parks while the client is slow
@@ -34,7 +34,7 @@ struct Writer {
         self.used = 0
     }
 
-    fn put(bytes: u8[]) throws IoError {
+    fn put(bytes: Array<u8>) throws IoError {
         var rest = bytes
         while (rest.length > 0) {
             if (out == null) self.out = outPool.get()

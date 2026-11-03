@@ -4,15 +4,15 @@
 package redis
 
 enum Command {
-    Get(key: u8[])
-    Set(key: u8[], value: u8[], expire: Duration?)
-    Publish(channel: u8[], message: u8[])
+    Get(key: Array<u8>)
+    Set(key: Array<u8>, value: Array<u8>, expire: Duration?)
+    Publish(channel: Array<u8>, message: Array<u8>)
     Subscribe(first: usize)                              // channel names are Args items first..count
     Unsubscribe(first: usize)                            // none given: all
-    Ping(message: u8[]?)
-    Unknown(name: u8[])
+    Ping(message: Array<u8>?)
+    Unknown(name: Array<u8>)
 
-    fn name(): string {                                  // original: Command::get_name
+    fn name(): String {                                  // original: Command::get_name
         switch (self) {
             Get(_) -> { return "get" }
             Set(_, _, _) -> { return "set" }
@@ -69,7 +69,7 @@ fn expectCount(a: Ref<Args>, n: usize) throws ProtocolError {
 }
 
 // An argument as bytes: simple or bulk (the original's next_bytes).
-fn blob(r: Ref<Reader>, i: usize): u8[] throws ProtocolError {
+fn blob(r: Ref<Reader>, i: usize): Array<u8> throws ProtocolError {
     let arg = r.frame().items[i]
     switch (arg.kind) {
         Simple, Bulk -> { return r.bytes(arg) }
@@ -78,12 +78,12 @@ fn blob(r: Ref<Reader>, i: usize): u8[] throws ProtocolError {
 }
 
 // A command name or key: bytes that must be valid UTF-8 (the original's next_string), and at most maxKey long when it is a key.
-fn text(r: Ref<Reader>, i: usize): u8[] throws ProtocolError {
+fn text(r: Ref<Reader>, i: usize): Array<u8> throws ProtocolError {
     let b = blob(r, i)
     if (!b.isUtf8()) throw ProtocolError("protocol error; invalid string")
     return b
 }
-fn key(r: Ref<Reader>, i: usize, lim: Ref<Limits>): u8[] throws ProtocolError {
+fn key(r: Ref<Reader>, i: usize, lim: Ref<Limits>): Array<u8> throws ProtocolError {
     let b = text(r, i)
     if (b.length > lim.maxKey) throw ProtocolError("protocol error; key too long")
     return b

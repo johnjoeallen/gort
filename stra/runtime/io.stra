@@ -3,7 +3,7 @@ package runtime
 
 // ---------- sending ----------
 // Sends all of `bytes`. A short send leaves the rest in the frame while the vthread waits for space.
-fn writeAll(conn: Ref<Conn>, bytes: u8[]) throws IoError {
+fn writeAll(conn: Ref<Conn>, bytes: Array<u8>) throws IoError {
     var rest = bytes
     while (rest.length > 0) {
         let n = conn.send(rest)   // EAGAIN: park until writable

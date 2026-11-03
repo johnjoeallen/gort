@@ -19,7 +19,7 @@ struct Prefix {
         if (!resp.keepAlive) self.closes = true             // nothing is admitted after a closing request, so it is the last
     }
     fn isEmpty(): bool { return length == 0 }
-    fn bytes(): u8[] { return (out == null) ? NO_BYTES : out.data[..length] }
+    fn bytes(): Array<u8> { return (out == null) ? NO_BYTES : out.data[..length] }
     fn endsWithClose(): bool { return closes }
 }
 

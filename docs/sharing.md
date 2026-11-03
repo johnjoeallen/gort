@@ -39,7 +39,7 @@ A test or a command-line tool builds a store and reads it back in one vthread. N
 // tools/load.stra
 package tools
 
-fn loadAndCount(path: string): usize {
+fn loadAndCount(path: String): usize {
     let store = new Store {}              // local
     for line in readLines(path) {
         store.entries.insert(Bytes.copyOf(line.key), Entry { value: new Value { bytes: line.value.copy() }, expiresAt: null })
@@ -50,36 +50,52 @@ fn loadAndCount(path: string): usize {
 
 Under the earlier `SharedRef` idea this would have needed a different type or a separate shared variant. Here it is the same `Store` and the same code as the server uses.
 
-## Example 2: what `Db` needs and what it does not
+## Example 2: which accesses need a block
+
+`Db` is shared by every connection, so its fields are *incoming* (R2). For each access the question is the one in R1: is the field mutable? A field that is set once in `make()` and never written again is write-once (R3), and reading it needs no block, however many workers share the `Db`.
 
 ```cpp
 // redis/db.stra
 package redis
 
-struct Db {                               // every field is set in make() and never written again: write-once
-    store: Ref<Store>
-    purgeWake: Signal
-    closed: Flag
-    reaper: Ref<Mailbox<Reap>>
-    lim: Limits
+struct Db {
+    // Write-once: each of these is set in make() and never assigned again.
+    store: Ref<Store>                 // the reference never changes, but the Store it points to does (see below)
+    purgeWake: Signal                 // extern runtime type: synchronises itself (R8)
+    closed: Flag                      // extern runtime type (R8)
+    reaper: Ref<Mailbox<Reap>>        // the reference is write-once; Mailbox is an extern runtime type (R8)
+    lim: Limits                       // plain data, never written after make()
     // ...
-    fn get(key: u8[]): Ref<Value>? {
-        sync(store) {                     // R1: store is incoming and Store.entries is mutable
+
+    fn get(key: Array<u8>): Ref<Value>? {
+        // Reading `store` (the field of Db) needs no block: it is write-once.
+        // Reading `store.entries` does: Store.entries is mutable (set and purgeExpired write it),
+        // and the Store is incoming, so R1 requires a block naming the reference. sync is enough for a read (R4).
+        sync(store) {
             let e = store.entries.get(key)
             return e == null ? null : e.value
         }
     }
 
-    fn[nopark] release(channel: u8[], mb: Ref<Mailbox<Message>>) {
-        reaper.tryPush(Reap { ... })      // reaper is write-once and Mailbox is an extern handle (R8): no block; [nopark] lets cleanup() call it
+    fn[nopark] release(channel: Array<u8>, mb: Ref<Mailbox<Message>>) {
+        // No block. `reaper` is write-once, and Mailbox is an extern runtime type that
+        // synchronises itself (R8). tryPush never parks, so [nopark] is true and cleanup() may call release().
+        reaper.tryPush(Reap { ... })
     }
 }
 ```
+
 `stra/redis/db.stra` is written this way, with these notes in its header.
 
-- `db.store` and `db.lim` are read with no block, because those fields never change after `make`. This is why the existing code already writes `sync(store)` and not `sync(db)`.
-- `store.entries` is mutated by `set`, `purgeExpired` and others, so reads and writes of it go through `sync`/`mutate`.
-- `Value` is "immutable once built". After `get` returns the `Ref<Value>` the caller reads `v.bytes` with no block, which is exactly what the comment in `db.stra` relies on when it writes the reply after the lock is released.
+| Access | Block? | Why |
+|---|---|---|
+| `db.store`, `db.lim` (reading the field) | none | write-once (R3): nothing ever changes them after `make` |
+| `store.entries` read | `sync(store)` | `entries` is mutable and the `Store` is incoming (R1); a read needs only `sync` (R4) |
+| `store.entries` written (`set`, `purgeExpired`) | `mutate(store)` | writing needs the exclusive mode (R4) |
+| `db.purgeWake`, `db.closed`, `db.reaper.tryPush(...)` | none | `extern` runtime types synchronise themselves (R8) |
+| `v.bytes` on the `Ref<Value>` that `get` returned | none | `Value` is immutable once built (R3), so the caller reads it after the lock is released |
+
+This is why the code writes `sync(store)` and not `sync(db)`: the lock belongs to the object with the mutable field, not to the `Db` that merely holds a reference to it.
 
 ## Example 3: errors the compiler reports
 

@@ -16,7 +16,7 @@ package runtime
 
 exception IoError                                        // a socket or file operation failed
 
-// Input buffers are growable arrays supplied by the runtime (`u8[]`); the source never states a size. The runtime keeps a few size
+// Input buffers are growable arrays supplied by the runtime (`Array<u8>`); the source never states a size. The runtime keeps a few size
 // classes (runtime/rt_buf.h: 512 B, 2 KB, 8 KB, 16 KB). A buffer starts in the smallest class, compacts when its tail is full, and
 // `grow()` moves it to the next class only when it is full of one unfinished header block. Because a Request is a pair of
 // offsets, a move invalidates nothing. The one number a program does choose is the largest header block it accepts
@@ -52,10 +52,10 @@ extern struct Task<T> {
 // ---------- sockets ----------
 
 extern struct Conn {
-    parks fn recv(buf: u8[]): usize throws IoError      // parks on EAGAIN until readable (W_RD). 0 = the peer closed
-    parks fn send(bytes: u8[]): usize throws IoError    // parks on EAGAIN until writable (W_WR)
-    fn tryRecv(buf: u8[]): usize? throws IoError        // never parks. null = nothing to read right now, 0 = the peer closed
-    fn trySend(bytes: u8[]): usize?                     // never parks, never throws. null = would block. For best-effort cleanup
+    parks fn recv(buf: Array<u8>): usize throws IoError      // parks on EAGAIN until readable (W_RD). 0 = the peer closed
+    parks fn send(bytes: Array<u8>): usize throws IoError    // parks on EAGAIN until writable (W_WR)
+    fn tryRecv(buf: Array<u8>): usize? throws IoError        // never parks. null = nothing to read right now, 0 = the peer closed
+    fn trySend(bytes: Array<u8>): usize?                     // never parks, never throws. null = would block. For best-effort cleanup
     parks fn waitReadable() throws IoError               // parks until the socket has input, holding no buffer
     fn readableHint(): bool                              // has the poller reported input since the last EAGAIN? (rd_ready)
     fn readableWakeup(): Wakeup                          // a wait source for waitAny
@@ -73,7 +73,7 @@ extern struct Listener {
 
 // ---------- memory and files ----------
 
-extern impl u8[] {                                       // the runtime's growable array: starts in the smallest size class, owns nothing until used
+extern impl Array<u8> {                                       // the runtime's growable array: starts in the smallest size class, owns nothing until used
     fn capacity(): usize                                 // the current class size
     fn grow()                                            // moves the contents to the next size class and frees the old block
     fn moveWithin(range, to)                             // memmove inside the array
@@ -87,8 +87,8 @@ extern struct OutPool {
 }
 
 extern struct File {
-    static fn openTemp(dir: string): File throws IoError // an unnamed temporary file (O_TMPFILE): it has no name and is deleted when closed
-    parks fn write(bytes: u8[]) throws IoError          // blocking disk I/O is offloaded to a blocking pool (the third call class), so it parks.
+    static fn openTemp(dir: String): File throws IoError // an unnamed temporary file (O_TMPFILE): it has no name and is deleted when closed
+    parks fn write(bytes: Array<u8>) throws IoError          // blocking disk I/O is offloaded to a blocking pool (the third call class), so it parks.
                                                          // server.c writes directly from the worker instead (documented in results/http.md)
     fn length(): u64
     fn map(): Mapping throws IoError                     // an explicit read-only mmap of the file
@@ -96,6 +96,6 @@ extern struct File {
 extern struct Mapping { }                                // cleanup() unmaps it
 
 extern struct Crc32 {                                    // incremental digest (the prototype uses it to check bodies byte for byte)
-    fn update(bytes: u8[])
+    fn update(bytes: Array<u8>)
     fn value(): u32
 }
