@@ -1499,7 +1499,13 @@
 <li><em>Moving while the service runs.</em> Readers exist only inside <code>sync</code>, so a move takes <code>mutate</code> on the cache lock for one chunk at a time (longest hold 48 us); no grace period or epoch tracking is needed. 54,000 bodies cost 48 ms of mover CPU and about 7% of the workers' throughput while it ran.</li>
 </ul>
 </li>
-<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: sharded cache locks, a hit that clones a <code>Ref</code> and reads the body after leaving the lock, mutable shared objects, and a service with real sockets.</li>
+<li><strong>Measured, sharded locks and clone-on-hit</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>, the same service with 16 cache locks and a hit that clones the <code>Ref</code> and reads the body after leaving the lock):<ul>
+<li><em>Time (loss).</em> Most of the four-worker loss above came from the single lock. With 16 locks the split costs +4 to +10% work per request over the combined layout (one worker: +7 to +10%) and 0 to -8% throughput; failed lock attempts per request fall from 6.3 to 0.15. The remaining cost is the second dependent cache miss per hit (about 35 ns).</li>
+<li><em>Clone-on-hit</em> is not measurably slower for the combined layout and 0 to 1.5% cheaper for the split (a shorter critical section). With half the requests on 1,000 hot users the atomic count updates cost about 5 ns per request.</li>
+<li><em>Moving with clones.</em> A move takes every shard lock and skips a chunk if any of its objects has <code>strong &gt; 1</code> or is held by a request alone. The flush scenario still ends at 49 MB resident against 63 MB (split without the mover) and 54 MB (combined); 1 of 330 chunks was skipped, because a request holds its clone only across a non-parking render. A Ref held across a park (D2) would pin chunks far more often: not measured.</li>
+</ul>
+</li>
+<li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: a Ref held across a park, mutable shared objects, a single very hot object, and a service with real sockets.</li>
 </ul>
 
 
