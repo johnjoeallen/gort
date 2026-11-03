@@ -1,6 +1,6 @@
 # Split control block: moving objects between chunks (D17, B15)
 
-> D17 benchmarks: **1. Allocation, dereference, retained memory** · [2. A whole service](service_split.md) · [3. Sharded locks and clone-on-hit](b12_ref.md)  
+> D17 benchmarks: **1. Allocation, dereference, retained memory** · [2. A whole service](service_split.md) · [3. Sharded locks and clone-on-hit](b12_ref.md) · [4. Refs held across a park](hold.md)  
 > (first) | [A whole service →](service_split.md)
 
 **Question.** [D17](../../docs/architecture/open-decisions.md#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion) proposes a never-moving control block (counts and a body pointer) in one arena, with the object body in a type arena where it can be moved. What does that cost in time, what does it save in memory, and when?

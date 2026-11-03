@@ -1,7 +1,7 @@
 # The mixed-request service on the D17 model: sharded locks and clone-on-hit (B12, third run)
 
-> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · [2. A whole service](service_split.md) · **3. Sharded locks and clone-on-hit**  
-> [← A whole service](service_split.md) | (last) →
+> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · [2. A whole service](service_split.md) · **3. Sharded locks and clone-on-hit** · [4. Refs held across a park](hold.md)  
+> [← A whole service](service_split.md) | [Refs held across a park →](hold.md)
 
 **Question.** The [whole-service run](service_split.md) used one global cache lock and copied the body inside the lock. Both choices favoured the combined layout. Does the split's cost survive when the cache lock is sharded, and when a hit clones the `Ref<User>` out of the cache and reads the body after leaving the lock (the way ordinary Strata code would hold it)?
 
@@ -69,7 +69,7 @@ What the numbers say:
 ## Caveats
 
 - One process, a simulated database, 64 B bodies, one allocation per miss, 16 shards chosen once (no sweep of 4, 64, ...).
-- A request holds its clone only across a non-parking render. Holding a Ref across a park, or storing one in another structure, is the case that matters for pinning and for count traffic, and is not modelled.
+- A request holds its clone only across a non-parking render. Holding a Ref across a park and storing one for good are measured in the [fourth run](hold.md).
 - Reference counts are atomic everywhere in this run (the cache entry is the only strong reference at rest). A thread-local or deferred counting scheme was not tried.
 - Skew was one setting (50% on 1,000 users); no single-object hot spot.
 - The first row's combined-previous configuration has a 14% run-to-run spread; the deltas that matter are 5% or more, so read the single-digit ones as ranges, not points.

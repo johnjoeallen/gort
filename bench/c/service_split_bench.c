@@ -13,9 +13,12 @@
 // dropping the last strong frees the object, so an evicted-while-held User dies in the request). With clone=1 a body is read outside any lock, so the mover
 // may not move a body whose object has strong>1 (a holder exists) or that is not in the cache (an orphan held by a request): it skips that chunk. A move takes
 // every shard lock (ascending) and then the arena lock; workers take one shard lock and then an arena lock, so there is no cycle.
+// hold=US: after a hit the request parks for US microseconds (a downstream call or a slow client write) before rendering. With clone=1 it holds the cloned Ref across
+// that park (the D2 case: a borrowed or held reference across a suspension), so the object is pinned for US microseconds; with clone=0 it holds a copy, the control.
+// stash=PERMILLE: with clone=1, this many per thousand hits never drop their clone (a Ref stored somewhere long-lived): those objects stay pinned for the rest of the run.
 // skew=P: P% of requests draw their key from the 1000 hottest users (so clone's atomic count updates contend on the same cache lines).
 //
-// usage: service_split_N hit% db_us concurrency workers requests_per_worker [users=1000000] [flush=0|1] [mover=0|1] [thresh=0.5] [shards=1] [clone=0|1] [skew=0]
+// usage: service_split_N hit% db_us concurrency workers requests_per_worker [users=1000000] [flush=0|1] [mover=0|1] [thresh=0.5] [shards=1] [clone=0|1] [skew=0] [hold=0] [stash=0]
 //   flush=1: when worker 0 reaches 40% of its requests, the main thread evicts 90% of the cache at random; from that point every worker's keys come from
 //            a hot set of 1/20 of the users (so the cache is not refilled and the heap stays sparse).
 #define _GNU_SOURCE
@@ -132,7 +135,7 @@ typedef struct { CEnt *ptr; u32 sets; } Cache;
 typedef struct { u8 lk; } __attribute__((aligned(64))) ShardLock;
 static Cache g_cache;
 static ShardLock g_lock[64];
-static u32 g_nsh = 1, g_clone, g_skew;
+static u32 g_nsh = 1, g_clone, g_skew, g_hold, g_stash;
 static Keys g_keys;
 static u32 g_db_us, g_conc, g_workers, g_hit, g_users, g_flush, g_mover;
 static u64 g_reqs_per_worker, g_shift_at;
@@ -286,15 +289,20 @@ static int req_run(Task *t) {
         make_request(r, r->key, r->rid, (u32)((h >> 40) % NTOK));
         u64 id = parse_request(r);
         if (id != r->key || !authenticate(r)) { fprintf(stderr, "request rejected\n"); exit(1); }
-        if (cache_get(r, r->key)) { cx->hits++; break; }
+        if (cache_get(r, r->key)) {
+            cx->hits++;
+            if (g_hold) { timer_add(w, t, mono_ns() + (u64)g_hold * 1000); r->st = 2; return park(t, W_TIMER); }
+            break;
+        }
         u64 lat = (u64)g_db_us * 1000 * (80 + rng(&cx->rng2) % 41) / 100;
         timer_add(w, t, mono_ns() + lat); r->st = 1; return park(t, W_TIMER);
     }
+    case 2: break;                                               // hit, hold over: render from the held clone (or the copy)
     case 1:
         db_decode(r->key, r->val); cache_put((u32)cx->idx, r->key, r->val, &cx->rng);
         break;
     }
-    if (r->ref) { cx->csum += render_and_send(r, r->key, (const u8 *)body_of(r->ref) + 8); obj_release(r->ref); r->ref = NULL; }   // clone mode: read the body outside the lock, then drop the Ref
+    if (r->ref) { cx->csum += render_and_send(r, r->key, (const u8 *)body_of(r->ref) + 8); if (!(g_stash && (mix64(r->rid) >> 30) % 1000 < g_stash)) obj_release(r->ref); r->ref = NULL; }   // clone mode: read the body outside the lock, then drop the Ref
     else cx->csum += render_and_send(r, r->key, r->val);
     cx->lat[cx->done++] = (u32)(mono_ns() - r->t0);
     r->st = 0; return yield_now(t);
@@ -330,7 +338,7 @@ static void *worker_main(void *arg) {
 
 // ---------------- the mover (split only): evacuates sparse body chunks inside mutate(cache) ----------------
 static volatile int g_stop;
-static u64 g_moved, g_cfreed, g_pinned_skips; static double g_mover_cpu_ms, g_maxhold_us; static u64 g_passes;
+static u64 g_moved, g_cfreed, g_pinned_skips, g_attempts; static double g_mover_cpu_ms, g_maxhold_us; static u64 g_passes;
 #if SPLIT
 static int chunk_movable(Chunk *c, Arena *a) {                  // caller holds every shard lock and a->lock: no new clone can appear, none can be dropped to zero and freed
     for (u32 i = 0; i < c->bump; i++) {
@@ -369,7 +377,7 @@ static void *mover_main(void *arg) {
                 if (x && x->live > 0 && (double)x->live / x->nslots < g_thresh) { c = x; cursor[w] = (i + 1) % n; break; }
                 cursor[w] = (i + 1) % n;
             }
-            if (c) evacuate_chunk(a, c);
+            if (c) { g_attempts++; evacuate_chunk(a, c); }
             AUNLOCK(a); for (u32 k = g_nsh; k-- > 0;) SUNLOCK(k);
             double hold = (double)(mono_ns() - t0) / 1000.0; if (c && hold > g_maxhold_us) g_maxhold_us = hold;
             g_passes++;
@@ -402,7 +410,7 @@ int main(int argc, char **argv) {
     g_hit = (u32)atoi(argv[1]); g_db_us = (u32)atoi(argv[2]); g_conc = (u32)atoi(argv[3]); g_workers = (u32)atoi(argv[4]); g_reqs_per_worker = strtoull(argv[5], 0, 10);
     g_users = (u32)atol(opt(argc, argv, "users", "1000000")); g_flush = (u32)atoi(opt(argc, argv, "flush", "0")); g_mover = (u32)atoi(opt(argc, argv, "mover", "0"));
     g_thresh = atof(opt(argc, argv, "thresh", "0.5"));
-    g_nsh = (u32)atoi(opt(argc, argv, "shards", "1")); g_clone = (u32)atoi(opt(argc, argv, "clone", "0")); g_skew = (u32)atoi(opt(argc, argv, "skew", "0"));
+    g_nsh = (u32)atoi(opt(argc, argv, "shards", "1")); g_clone = (u32)atoi(opt(argc, argv, "clone", "0")); g_skew = (u32)atoi(opt(argc, argv, "skew", "0")); g_hold = (u32)atoi(opt(argc, argv, "hold", "0")); g_stash = (u32)atoi(opt(argc, argv, "stash", "0"));
     if (g_nsh < 1 || g_nsh > 64) { fprintf(stderr, "shards 1..64\n"); return 2; }
     g_shift_at = g_flush ? g_reqs_per_worker * 4 / 10 : ~0ULL;
     objs_init(g_workers);
@@ -441,11 +449,11 @@ int main(int argc, char **argv) {
     u64 total = 0, csum = 0, hits = 0, spins = 0; double busy = 0; u32 *all = malloc(g_workers * g_reqs_per_worker * sizeof(u32)); size_t m = 0;
     for (u32 i = 0; i < g_workers; i++) { total += cx[i].done; csum += cx[i].csum; hits += cx[i].hits; spins += cx[i].spins; busy += cx[i].busy_ns; memcpy(all + m, cx[i].lat, cx[i].done * sizeof(u32)); m += cx[i].done; }
     qsort(all, m, sizeof(u32), cmpu);
-    printf("RUN layout=%s hit=%u db_us=%u conc=%u workers=%u reqs=%llu flush=%u mover=%u shards=%u clone=%u skew=%u spins_per_req=%.3f rps=%.0f busy_ns_per_req=%.1f p50_us=%.1f p99_us=%.1f p999_us=%.1f hit_actual=%.1f csum=%llu"
-           " rss_start_mb=%.0f rss_preflush_mb=%.0f rss_postflush_mb=%.0f rss_end_mb=%.0f mapped_start_mb=%.0f mapped_end_mb=%.0f moved=%llu chunks_freed=%llu mover_cpu_ms=%.0f max_hold_us=%.0f pinned_skips=%llu\n",
-           SPLIT ? "split" : "combined", g_hit, g_db_us, g_conc, g_workers, (unsigned long long)total, g_flush, g_mover, g_nsh, g_clone, g_skew, (double)spins / (double)total, total / wall, busy / (double)total,
+    printf("RUN layout=%s hit=%u db_us=%u conc=%u workers=%u reqs=%llu flush=%u mover=%u shards=%u clone=%u skew=%u hold=%u stash=%u spins_per_req=%.3f rps=%.0f busy_ns_per_req=%.1f p50_us=%.1f p99_us=%.1f p999_us=%.1f hit_actual=%.1f csum=%llu"
+           " rss_start_mb=%.0f rss_preflush_mb=%.0f rss_postflush_mb=%.0f rss_end_mb=%.0f mapped_start_mb=%.0f mapped_end_mb=%.0f moved=%llu chunks_freed=%llu mover_cpu_ms=%.0f max_hold_us=%.0f pinned_skips=%llu attempts=%llu\n",
+           SPLIT ? "split" : "combined", g_hit, g_db_us, g_conc, g_workers, (unsigned long long)total, g_flush, g_mover, g_nsh, g_clone, g_skew, g_hold, g_stash, (double)spins / (double)total, total / wall, busy / (double)total,
            all[m / 2] / 1000.0, all[m * 99 / 100] / 1000.0, all[m * 999 / 1000] / 1000.0, 100.0 * hits / total, (unsigned long long)csum,
            rss_start / 1024.0, rss_pre / 1024.0, rss_post / 1024.0, rss_end / 1024.0, mapped_start, mapped_end,
-           (unsigned long long)g_moved, (unsigned long long)g_cfreed, g_mover_cpu_ms, g_maxhold_us, (unsigned long long)g_pinned_skips);
+           (unsigned long long)g_moved, (unsigned long long)g_cfreed, g_mover_cpu_ms, g_maxhold_us, (unsigned long long)g_pinned_skips, (unsigned long long)g_attempts);
     return 0;
 }

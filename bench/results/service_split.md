@@ -1,6 +1,6 @@
 # Split control block in a whole service (D17, B15 second run)
 
-> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · **2. A whole service** · [3. Sharded locks and clone-on-hit](b12_ref.md)  
+> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · **2. A whole service** · [3. Sharded locks and clone-on-hit](b12_ref.md) · [4. Refs held across a park](hold.md)  
 > [← Allocation, dereference, retained memory](split.md) | [Sharded locks and clone-on-hit →](b12_ref.md)
 
 **Question.** The [first run](split.md) timed the split control block in isolation and found real costs and real memory savings. What does it do to a **whole request**: parse, authenticate, look up a shared cache, wait for a database, render, send? And what does it cost to move bodies while that service is running?
