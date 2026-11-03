@@ -1190,7 +1190,7 @@
 <h2 id="two-models-kept-apart">Two models, kept apart<a class="headerlink" href="#two-models-kept-apart" title="Permanent link">&para;</a></h2>
 <p><strong>Programming model (Decided).</strong> Virtual threads. A vthread runs ordinary sequential code; a call that may wait looks like any other call. The programmer sees stackful-like semantics: locals live across a wait, a <code>try</code> spans it, cleanup runs when scopes exit, and a cancelled task unwinds.</p>
 <p><strong>Implementation model (Direction).</strong> Compiler-generated resumable frames, which are stackless continuations. The compiler finds the calls that may park, gives each function that can suspend a frame holding exactly the state live across its suspension points, and generates a state machine. There is no per-vthread machine stack.</p>
-<p>Nothing in the language may depend on which implementation is used. A program that behaves correctly under stackful fibers must behave identically under resumable frames. That is the test for any proposed feature, and it is why the existing stackful runtime stays useful as a reference (see <a href="suspension/#where-stackful-execution-remains">suspension</a>).</p>
+<p>Nothing in the language may depend on which implementation is used. A program that behaves correctly under stackful fibers must behave identically under resumable frames. That is the test for any proposed feature, and it is why the existing stackful runtime stays useful as a reference (see <a href="suspension/#9-where-stackful-execution-remains">suspension</a>).</p>
 <p>"Park" and "suspend" mean the same thing. The specification and the C runtime say <em>park</em>, so this section does too, and calls the inferred property the <strong>may-park effect</strong>.</p>
 <h2 id="the-pipeline">The pipeline<a class="headerlink" href="#the-pipeline" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>Strata source (.stra)
@@ -1296,7 +1296,7 @@ Executable
 </tbody>
 </table>
 <p>Whether module compilation lowers fully, or lowering waits for the link, is <a href="open-decisions/#d1-where-continuation-lowering-happens">open</a>. The recommendation is both: lower at module compile so a build with no optimisation never needs the retained IR, and re-lower only what fusion changes.</p>
-<p>A minor source change must not mean a whole-program rebuild. The rules that guarantee this are in <a href="modules/#when-a-module-needs-recompiling">recompilation rules</a>.</p>
+<p>A minor source change must not mean a whole-program rebuild. The rules that guarantee this are in <a href="modules/#6-when-a-module-needs-recompiling">recompilation rules</a>.</p>
 
 
 

@@ -1224,7 +1224,7 @@ extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: string) // proposed: may bl
 <tr>
 <td><strong>2. Offload to a blocking pool</strong> (<strong>Direction</strong> for <code>extern blocking</code>)</td>
 <td>The call is a park point: the vthread parks, a pool thread runs the call, and a completion wakes the vthread.</td>
-<td>A thread hop per call (some microseconds); a bounded pool, so a full pool queues work (and that wait is itself a park). Arguments must outlive the park: arguments that are addresses of locals must be <strong>frame-resident</strong>, not on the native stack (same rule as <a href="../suspension/#borrows-and-locals-that-cannot-be-moved">here</a>). Thread-affine libraries need a pinned thread (strategy 3).</td>
+<td>A thread hop per call (some microseconds); a bounded pool, so a full pool queues work (and that wait is itself a park). Arguments must outlive the park: arguments that are addresses of locals must be <strong>frame-resident</strong>, not on the native stack (same rule as <a href="../suspension/#locals-whose-address-a-callee-holds">here</a>). Thread-affine libraries need a pinned thread (strategy 3).</td>
 </tr>
 <tr>
 <td><strong>3. Dedicated thread</strong></td>
