@@ -123,11 +123,11 @@ fn trim(store: Ref<Store>) {
 // redis/peek.stra
 package redis
 
-fn peekKeys(store: Ref<Store>): Map<Bytes, Entry>& {
+fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
     sync(store) {
-        return store.entries              // error: a pointer hoisted in a sync block cannot leave it
-    }
-}
+        return store.entries              // error: entries is stored by value in Store, so there is no Ref to hand out;
+    }                                     //   this would return a pointer hoisted in the sync block, and it cannot leave it
+}                                         //   fix: return a copy (declare the result Map<Bytes, Entry>) or copy the keys you need
 ```
 
 The messages name the chain and the fix. A missing block on a reference that turns out never to be shared is still reported: that is the over-approximation in R2, and the cost is one extra block that does nothing at run time.

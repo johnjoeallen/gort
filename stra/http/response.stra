@@ -42,7 +42,7 @@ fn makeResponse(code: u16, connHdr: String, body: String, keepAlive: bool): Resp
 }
 
 // Does this request ask to keep the connection open? Case-insensitive Connection: header; HTTP/1.1 defaults to yes, 1.0 to no.
-fn keepsAlive(head: Array<u8>&): bool {
+fn keepsAlive(head: Array<u8>): bool {
     let http11 = head.contains("HTTP/1.1\r\n")
     for (line in head.lines().skip(1)) {
         if (line.startsWithIgnoreCase("connection:")) {

@@ -48,16 +48,16 @@ struct Db {
     }
 
     // For cleanup(): never parks, never locks. The purge vthread unsubscribes it shortly after.
-    fn[nopark] release(channel: Array<u8>&, mb: Ref<Mailbox<Message>>) { reaper.tryPush(Reap { channel: Bytes.copyOf(channel), mailbox: mb }) }
+    fn[nopark] release(channel: Array<u8>, mb: Ref<Mailbox<Message>>) { reaper.tryPush(Reap { channel: Bytes.copyOf(channel), mailbox: mb }) }
 
-    fn get(key: Array<u8>&): Ref<Value>? {
+    fn get(key: Array<u8>): Ref<Value>? {
         sync(store) {
             let e = store.entries.get(key)
             return e == null ? null : e.value            // copying a Ref is an atomic increment; it outlives the lock
         }
     }
 
-    fn set(key: Array<u8>&, value: Array<u8>&, expire: Duration?) throws StoreFull {
+    fn set(key: Array<u8>, value: Array<u8>, expire: Duration?) throws StoreFull {
         if (value.length > lim.maxBulk) throw StoreFull("ERR value too large")
         let data = new Value { bytes: value.copy() }     // allocated and copied BEFORE the lock
         let name = Bytes.copyOf(key)
@@ -78,7 +78,7 @@ struct Db {
     }
 
     // Number of subscribers the message was offered to (the original returns the receiver count too, lagged or not).
-    fn publish(channel: Array<u8>&, message: Array<u8>&): usize {
+    fn publish(channel: Array<u8>, message: Array<u8>): usize {
         let data = new Value { bytes: message.copy() }
         sync(store) {
             let t = store.topics.get(channel)
@@ -89,7 +89,7 @@ struct Db {
         }
     }
 
-    fn subscribe(channel: Array<u8>&, mb: Ref<Mailbox<Message>>) throws StoreFull {
+    fn subscribe(channel: Array<u8>, mb: Ref<Mailbox<Message>>) throws StoreFull {
         mutate(store) {
             var t = store.topics.get(channel)
             if (t == null) {
@@ -101,7 +101,7 @@ struct Db {
         }
     }
 
-    fn unsubscribe(channel: Array<u8>&, mb: Ref<Mailbox<Message>>) {
+    fn unsubscribe(channel: Array<u8>, mb: Ref<Mailbox<Message>>) {
         mutate(store) {
             let t = store.topics.get(channel)
             if (t == null) return

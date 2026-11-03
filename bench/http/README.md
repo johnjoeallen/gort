@@ -53,7 +53,7 @@ Syntax used here (a proposal, not yet in the design doc):
     hidden behaviour: nothing buffers, batches, defers or reorders unless the code, or a documented library type it uses, says so.
   * Effects are inferred, not written. Whether a function may park, and how large its frame is, are results the compiler computes and tooling shows (hover, lints,
     error messages that name the call chain). The only places a program states it are declarations that have no body to analyse: an `extern` function says `parks` if it
-    may wait (`extern parks fn recv(...)`), and a function-typed parameter can require the opposite with `noparks` (`handler: fn(u8[]&): Resp noparks`).
+    may wait (`extern parks fn recv(...)`), and a function-typed parameter can require the opposite with `noparks` (`handler: fn(Array<u8>): Resp noparks`).
 
 
 ## Helpers the Strata files assume but do not define
