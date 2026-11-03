@@ -626,10 +626,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#example-2-what-db-needs-and-what-it-does-not" class="md-nav__link">
+  <a href="#example-2-which-accesses-need-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example 2: what Db needs and what it does not
+        Example 2: which accesses need a block
       
     </span>
   </a>
@@ -1106,10 +1106,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#example-2-what-db-needs-and-what-it-does-not" class="md-nav__link">
+  <a href="#example-2-which-accesses-need-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example 2: what Db needs and what it does not
+        Example 2: which accesses need a block
       
     </span>
   </a>
@@ -1237,7 +1237,7 @@
 <div class="highlight"><pre><span></span><code><span class="c1">// tools/load.stra</span>
 <span class="n">package</span><span class="w"> </span><span class="n">tools</span>
 
-<span class="n">fn</span><span class="w"> </span><span class="n">loadAndCount</span><span class="p">(</span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="n">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="w"> </span><span class="n">loadAndCount</span><span class="p">(</span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">let</span><span class="w"> </span><span class="n">store</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Store</span><span class="w"> </span><span class="p">{}</span><span class="w">              </span><span class="c1">// local</span>
 <span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">readLines</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="n">store</span><span class="p">.</span><span class="n">entries</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Bytes</span><span class="p">.</span><span class="n">copyOf</span><span class="p">(</span><span class="n">line</span><span class="p">.</span><span class="n">key</span><span class="p">),</span><span class="w"> </span><span class="n">Entry</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">value</span><span class="o">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Value</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">bytes</span><span class="o">:</span><span class="w"> </span><span class="n">line</span><span class="p">.</span><span class="n">value</span><span class="p">.</span><span class="n">copy</span><span class="p">()</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="n">expiresAt</span><span class="o">:</span><span class="w"> </span><span class="n">null</span><span class="w"> </span><span class="p">})</span>
@@ -1246,35 +1246,75 @@
 <span class="p">}</span>
 </code></pre></div>
 <p>Under the earlier <code>SharedRef</code> idea this would have needed a different type or a separate shared variant. Here it is the same <code>Store</code> and the same code as the server uses.</p>
-<h2 id="example-2-what-db-needs-and-what-it-does-not">Example 2: what <code>Db</code> needs and what it does not<a class="headerlink" href="#example-2-what-db-needs-and-what-it-does-not" title="Permanent link">&para;</a></h2>
-<p><div class="highlight"><pre><span></span><code><span class="c1">// redis/db.stra</span>
+<h2 id="example-2-which-accesses-need-a-block">Example 2: which accesses need a block<a class="headerlink" href="#example-2-which-accesses-need-a-block" title="Permanent link">&para;</a></h2>
+<p><code>Db</code> is shared by every connection, so its fields are <em>incoming</em> (R2). For each access the question is the one in R1: is the field mutable? A field that is set once in <code>make()</code> and never written again is write-once (R3), and reading it needs no block, however many workers share the <code>Db</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/db.stra</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
-<span class="k">struct</span><span class="w"> </span><span class="nc">Db</span><span class="w"> </span><span class="p">{</span><span class="w">                               </span><span class="c1">// every field is set in make() and never written again: write-once</span>
-<span class="w">    </span><span class="nl">store</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span>
-<span class="w">    </span><span class="nl">purgeWake</span><span class="p">:</span><span class="w"> </span><span class="n">Signal</span>
-<span class="w">    </span><span class="nl">closed</span><span class="p">:</span><span class="w"> </span><span class="n">Flag</span>
-<span class="w">    </span><span class="nl">reaper</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Mailbox</span><span class="o">&lt;</span><span class="n">Reap</span><span class="o">&gt;&gt;</span>
-<span class="w">    </span><span class="nl">lim</span><span class="p">:</span><span class="w"> </span><span class="n">Limits</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">Db</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Write-once: each of these is set in make() and never assigned again.</span>
+<span class="w">    </span><span class="nl">store</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="w">                 </span><span class="c1">// the reference never changes, but the Store it points to does (see below)</span>
+<span class="w">    </span><span class="nl">purgeWake</span><span class="p">:</span><span class="w"> </span><span class="n">Signal</span><span class="w">                 </span><span class="c1">// extern runtime type: synchronises itself (R8)</span>
+<span class="w">    </span><span class="nl">closed</span><span class="p">:</span><span class="w"> </span><span class="n">Flag</span><span class="w">                      </span><span class="c1">// extern runtime type (R8)</span>
+<span class="w">    </span><span class="nl">reaper</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Mailbox</span><span class="o">&lt;</span><span class="n">Reap</span><span class="o">&gt;&gt;</span><span class="w">        </span><span class="c1">// the reference is write-once; Mailbox is an extern runtime type (R8)</span>
+<span class="w">    </span><span class="nl">lim</span><span class="p">:</span><span class="w"> </span><span class="n">Limits</span><span class="w">                       </span><span class="c1">// plain data, never written after make()</span>
 <span class="w">    </span><span class="c1">// ...</span>
-<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Value</span><span class="o">&gt;?</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="n">sync</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">                     </span><span class="c1">// R1: store is incoming and Store.entries is mutable</span>
+
+<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">Array</span><span class="o">&lt;</span><span class="n">u8</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Value</span><span class="o">&gt;?</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Reading `store` (the field of Db) needs no block: it is write-once.</span>
+<span class="w">        </span><span class="c1">// Reading `store.entries` does: Store.entries is mutable (set and purgeExpired write it),</span>
+<span class="w">        </span><span class="c1">// and the Store is incoming, so R1 requires a block naming the reference. sync is enough for a read (R4).</span>
+<span class="w">        </span><span class="n">sync</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">            </span><span class="n">let</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">store</span><span class="p">.</span><span class="n">entries</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 <span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">null</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">null</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">value</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 
-<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">release</span><span class="p">(</span><span class="n">channel</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[],</span><span class="w"> </span><span class="n">mb</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Mailbox</span><span class="o">&lt;</span><span class="n">Message</span><span class="o">&gt;&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="n">reaper</span><span class="p">.</span><span class="n">tryPush</span><span class="p">(</span><span class="n">Reap</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">})</span><span class="w">      </span><span class="c1">// reaper is write-once and Mailbox is an extern handle (R8): no block; [nopark] lets cleanup() call it</span>
+<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">release</span><span class="p">(</span><span class="n">channel</span><span class="o">:</span><span class="w"> </span><span class="n">Array</span><span class="o">&lt;</span><span class="n">u8</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">mb</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Mailbox</span><span class="o">&lt;</span><span class="n">Message</span><span class="o">&gt;&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// No block. `reaper` is write-once, and Mailbox is an extern runtime type that</span>
+<span class="w">        </span><span class="c1">// synchronises itself (R8). tryPush never parks, so [nopark] is true and cleanup() may call release().</span>
+<span class="w">        </span><span class="n">reaper</span><span class="p">.</span><span class="n">tryPush</span><span class="p">(</span><span class="n">Reap</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">})</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
-<code>stra/redis/db.stra</code> is written this way, with these notes in its header.</p>
-<ul>
-<li><code>db.store</code> and <code>db.lim</code> are read with no block, because those fields never change after <code>make</code>. This is why the existing code already writes <code>sync(store)</code> and not <code>sync(db)</code>.</li>
-<li><code>store.entries</code> is mutated by <code>set</code>, <code>purgeExpired</code> and others, so reads and writes of it go through <code>sync</code>/<code>mutate</code>.</li>
-<li><code>Value</code> is "immutable once built". After <code>get</code> returns the <code>Ref&lt;Value&gt;</code> the caller reads <code>v.bytes</code> with no block, which is exactly what the comment in <code>db.stra</code> relies on when it writes the reply after the lock is released.</li>
-</ul>
+<p><code>stra/redis/db.stra</code> is written this way, with these notes in its header.</p>
+<table>
+<thead>
+<tr>
+<th>Access</th>
+<th>Block?</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db.store</code>, <code>db.lim</code> (reading the field)</td>
+<td>none</td>
+<td>write-once (R3): nothing ever changes them after <code>make</code></td>
+</tr>
+<tr>
+<td><code>store.entries</code> read</td>
+<td><code>sync(store)</code></td>
+<td><code>entries</code> is mutable and the <code>Store</code> is incoming (R1); a read needs only <code>sync</code> (R4)</td>
+</tr>
+<tr>
+<td><code>store.entries</code> written (<code>set</code>, <code>purgeExpired</code>)</td>
+<td><code>mutate(store)</code></td>
+<td>writing needs the exclusive mode (R4)</td>
+</tr>
+<tr>
+<td><code>db.purgeWake</code>, <code>db.closed</code>, <code>db.reaper.tryPush(...)</code></td>
+<td>none</td>
+<td><code>extern</code> runtime types synchronise themselves (R8)</td>
+</tr>
+<tr>
+<td><code>v.bytes</code> on the <code>Ref&lt;Value&gt;</code> that <code>get</code> returned</td>
+<td>none</td>
+<td><code>Value</code> is immutable once built (R3), so the caller reads it after the lock is released</td>
+</tr>
+</tbody>
+</table>
+<p>This is why the code writes <code>sync(store)</code> and not <code>sync(db)</code>: the lock belongs to the object with the mutable field, not to the <code>Db</code> that merely holds a reference to it.</p>
 <h2 id="example-3-errors-the-compiler-reports">Example 3: errors the compiler reports<a class="headerlink" href="#example-3-errors-the-compiler-reports" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="c1">// redis/stats.stra</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>

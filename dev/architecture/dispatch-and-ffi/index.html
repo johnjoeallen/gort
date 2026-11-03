@@ -1184,7 +1184,7 @@
 </ul>
 <p>This is the answer to "previously valid programs becoming unsafe when implementations change": the check that matters happens in the implementing module against a bound the caller already relied on.</p>
 <h2 id="function-values-and-callbacks">Function values and callbacks<a class="headerlink" href="#function-values-and-callbacks" title="Permanent link">&para;</a></h2>
-<p>A function-typed value (<code>fn(u8[]): Resp throws Exception</code>) carries a bound the same way. Unannotated, it is <code>May</code>. A value that can be shown <code>Never</code> at the point where it is created (a lambda with no parking calls) can be passed where a <code>May</code> bound is expected. The reverse needs the assertion.</p>
+<p>A function-typed value (<code>fn(Array&lt;u8&gt;): Resp throws Exception</code>) carries a bound the same way. Unannotated, it is <code>May</code>. A value that can be shown <code>Never</code> at the point where it is created (a lambda with no parking calls) can be passed where a <code>May</code> bound is expected. The reverse needs the assertion.</p>
 <p>Functions that take function-typed parameters have a conditional summary <code>Cond(P)</code>: <code>forEach(list, f)</code> parks iff <code>f</code> may. At a call site where <code>f</code> is statically known, the condition collapses and the call binds to the plain or the suspendable form. At one where it is not, the parameter's declared bound is used.</p>
 <p>Callbacks that the <strong>runtime</strong> invokes (a handler, a timer) are <code>May</code> by contract; the runtime calls the <code>f_call</code>/<code>f_resume</code> pair.</p>
 <h2 id="generic-functions">Generic functions<a class="headerlink" href="#generic-functions" title="Permanent link">&para;</a></h2>
@@ -1199,9 +1199,9 @@
 <div class="highlight"><pre><span></span><code>// bindings/crc.stra
 package bindings
 
-extern fn crc32(data: u8[]): u32                  // plain: Never. Assumed short and non-blocking.
+extern fn crc32(data: Array&lt;u8&gt;): u32                  // plain: Never. Assumed short and non-blocking.
 extern parks fn sleep(d: Duration)                   // existing: a runtime primitive that registers and parks
-extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: string) // proposed: may block the OS thread (see below)
+extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: String) // proposed: may block the OS thread (see below)
 </code></pre></div>
 <p>An <code>extern fn</code> without a modifier is a <strong>promise</strong> that it returns quickly and does not block. The compiler cannot verify the promise and nothing in the runtime enforces it. A violation stalls one worker for the length of the call (the same failure mode as a Java thread stuck while pinned); a watchdog may report it (see the table).</p>
 <p><code>extern blocking</code> is the one proposed new keyword in this update (<strong>Open</strong>; placeholder). It states that the call may block the thread, and is the only way a binding can say so. It carries <code>foreign = blocking</code> and <code>park = May</code> in the summary: the Strata caller sees an ordinary suspending call.</p>

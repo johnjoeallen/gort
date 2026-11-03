@@ -1251,7 +1251,7 @@
 <tr>
 <td>B17</td>
 <td>Local placement and arrays (D18)</td>
-<td>Short-lived <code>new</code> in the shared arena against a stack or task region; fixed <code>Array&lt;T&gt;</code> block (control block outside, elements in a chunk) against a general allocator; <code>GrowableArray&lt;T&gt;</code> growth by block reallocation; the cost of two allocations per array</td>
+<td>Short-lived <code>new</code> in the shared arena against a stack or task region; fixed <code>Array&lt;T&gt;</code> block (control block outside, elements in a chunk) against a general allocator; <code>Array&lt;T[]&gt;</code> growth by block reallocation; the cost of two allocations per array</td>
 <td>Decides whether stack placement and the array chunk model are worth building.</td>
 </tr>
 </tbody>
