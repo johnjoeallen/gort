@@ -863,10 +863,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#borrows-and-locals-that-cannot-be-moved" class="md-nav__link">
+  <a href="#locals-whose-address-a-callee-holds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Borrows and locals that cannot be moved
+        Locals whose address a callee holds
       
     </span>
   </a>
@@ -1408,10 +1408,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#borrows-and-locals-that-cannot-be-moved" class="md-nav__link">
+  <a href="#locals-whose-address-a-callee-holds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Borrows and locals that cannot be moved
+        Locals whose address a callee holds
       
     </span>
   </a>
@@ -1755,7 +1755,7 @@
 <span class="n">package</span><span class="w"> </span><span class="n">http</span>
 
 <span class="c1">// Opted in: the compiler inserts a slice check in this loop. May, yields only.</span>
-<span class="n">fn</span><span class="p">[</span><span class="n">yield</span><span class="p">]</span><span class="w"> </span><span class="n">parseHeaders</span><span class="p">(</span><span class="n">buf</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[]</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Headers</span><span class="w"> </span><span class="k">throws</span><span class="w"> </span><span class="n">BadRequest</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="p">[</span><span class="n">yield</span><span class="p">]</span><span class="w"> </span><span class="n">parseHeaders</span><span class="p">(</span><span class="n">buf</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="o">:</span><span class="w"> </span><span class="n">Headers</span><span class="w"> </span><span class="k">throws</span><span class="w"> </span><span class="n">BadRequest</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">var</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Headers</span><span class="p">();</span>
 <span class="w">    </span><span class="n">var</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
 <span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">buf</span><span class="p">.</span><span class="n">len</span><span class="w"> </span><span class="p">{</span><span class="w">              </span><span class="c1">// back-edge: slice check inserted here</span>
@@ -1767,29 +1767,29 @@
 <span class="p">}</span>
 
 <span class="c1">// No attribute: nothing inserted. No loop effect, so Never: usable under a lock.</span>
-<span class="n">fn</span><span class="w"> </span><span class="n">hash</span><span class="p">(</span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[]</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">u64</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="w"> </span><span class="n">hash</span><span class="p">(</span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="o">:</span><span class="w"> </span><span class="n">u64</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">var</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">u64</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">14695981039346656037</span><span class="p">;</span>
 <span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">key</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">^</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1099511628211</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="n">fn</span><span class="w"> </span><span class="n">lookup</span><span class="p">(</span><span class="n">cache</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Cache</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[]</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">i64</span><span class="o">?</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="w"> </span><span class="n">lookup</span><span class="p">(</span><span class="n">cache</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Cache</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="o">:</span><span class="w"> </span><span class="n">i64</span><span class="o">?</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">let</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hash</span><span class="p">(</span><span class="n">key</span><span class="p">);</span><span class="w">               </span><span class="c1">// Never: fine</span>
 <span class="w">    </span><span class="n">sync</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">                    </span><span class="c1">// the body may call only Never functions</span>
 <span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="n">entries</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">h</span><span class="p">);</span><span class="w"> </span><span class="c1">// get() is Never unless it is [yield] or parks</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 
-<span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">broken</span><span class="p">(</span><span class="n">k</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[]</span><span class="o">&amp;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">broken</span><span class="p">(</span><span class="n">k</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="n">ms</span><span class="p">);</span><span class="w">                      </span><span class="c1">// error: park source in a nopark function</span>
 <span class="w">                                     </span><span class="c1">//   broken -&gt; sleep (extern parks)</span>
 <span class="p">}</span>
 
-<span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">spin</span><span class="p">(</span><span class="n">flag</span><span class="o">:</span><span class="w"> </span><span class="n">Flag</span><span class="o">&amp;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">spin</span><span class="p">(</span><span class="n">flag</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Flag</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="o">!</span><span class="n">flag</span><span class="p">.</span><span class="n">isSet</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span><span class="w">          </span><span class="c1">// warning (loops): unbounded loop in a nopark function</span>
 <span class="p">}</span>
 
-<span class="n">fn</span><span class="w"> </span><span class="n">tight</span><span class="p">(</span><span class="n">cache</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Cache</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="o">:</span><span class="w"> </span><span class="n">Reader</span><span class="o">&amp;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="n">fn</span><span class="w"> </span><span class="n">tight</span><span class="p">(</span><span class="n">cache</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Cache</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Reader</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">mutate</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="n">scanForever</span><span class="p">(</span><span class="n">r</span><span class="p">);</span><span class="w">              </span><span class="c1">// warning (always on in a lock body): scanForever loops unbounded</span>
 <span class="w">    </span><span class="p">}</span><span class="w">                                </span><span class="c1">//   tight -&gt; scanForever</span>
@@ -1804,8 +1804,8 @@
 <span class="n">package</span><span class="p">[</span><span class="n">yield</span><span class="p">]</span><span class="w"> </span><span class="n">imaging</span><span class="w">                    </span><span class="c1">// package default: functions here get slice checks</span>
 
 <span class="k">struct</span><span class="w"> </span><span class="nc">Renderer</span><span class="w"> </span><span class="p">{</span><span class="w">                         </span><span class="c1">// no attribute: inherits [yield] from the package</span>
-<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="nf">render</span><span class="p">(</span><span class="n">page</span><span class="o">:</span><span class="w"> </span><span class="n">Page</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">string</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">page</span><span class="p">.</span><span class="n">blocks</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// gets checks</span>
-<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">noyield</span><span class="p">]</span><span class="w"> </span><span class="n">crc</span><span class="p">(</span><span class="n">data</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[]</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w">                          </span><span class="c1">// the function overrides: plain C</span>
+<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="nf">render</span><span class="p">(</span><span class="n">page</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Page</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">string</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">page</span><span class="p">.</span><span class="n">blocks</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// gets checks</span>
+<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">noyield</span><span class="p">]</span><span class="w"> </span><span class="n">crc</span><span class="p">(</span><span class="n">data</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">[])</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w">                          </span><span class="c1">// the function overrides: plain C</span>
 <span class="p">}</span>
 
 <span class="c1">// imaging/metrics.stra</span>
@@ -1813,7 +1813,7 @@
 
 <span class="k">struct</span><span class="w"> </span><span class="nc">Metrics</span><span class="p">[</span><span class="n">noyield</span><span class="p">]</span><span class="w"> </span><span class="p">{</span><span class="w">                 </span><span class="c1">// the type overrides the package default</span>
 <span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="nf">width</span><span class="p">(</span><span class="n">c</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">128</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">}</span><span class="w">                  </span><span class="c1">// no checks (the type says noyield)</span>
-<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">yield</span><span class="p">]</span><span class="w"> </span><span class="n">widest</span><span class="p">(</span><span class="n">text</span><span class="o">:</span><span class="w"> </span><span class="n">string</span><span class="o">&amp;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">    </span><span class="c1">// the function overrides the type</span>
+<span class="w">    </span><span class="n">fn</span><span class="p">[</span><span class="n">yield</span><span class="p">]</span><span class="w"> </span><span class="n">widest</span><span class="p">(</span><span class="n">text</span><span class="o">:</span><span class="w"> </span><span class="n">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">    </span><span class="c1">// the function overrides the type</span>
 <span class="p">}</span>
 
 <span class="n">fn</span><span class="p">[</span><span class="n">nopark</span><span class="p">]</span><span class="w"> </span><span class="n">isAscii</span><span class="p">(</span><span class="n">c</span><span class="o">:</span><span class="w"> </span><span class="n">u32</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">128</span><span class="w"> </span><span class="p">}</span><span class="w">                   </span><span class="c1">// asserts it never parks</span>
@@ -1833,7 +1833,7 @@ spin          Never   loops=unbounded (nopark, warns)
 <span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">--</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">worker</span><span class="o">-&gt;</span><span class="n">slice</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">              </span><span class="c1">// slice check</span>
 <span class="w">            </span><span class="c1">// a yield is a real park: spill live values into a frame</span>
 <span class="w">            </span><span class="n">parse_frame</span><span class="w"> </span><span class="o">*</span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">frame_new</span><span class="p">(</span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="n">parseHeaders_resume</span><span class="p">,</span><span class="w"> </span><span class="cm">/*state*/</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
-<span class="w">            </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">buf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">buf</span><span class="p">;</span><span class="w"> </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">h</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">h</span><span class="p">;</span><span class="w"> </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="p">;</span><span class="w">        </span><span class="c1">// buf is a borrowed parameter, see D2</span>
+<span class="w">            </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">buf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">buf</span><span class="p">;</span><span class="w"> </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">h</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">h</span><span class="p">;</span><span class="w"> </span><span class="n">f</span><span class="o">-&gt;</span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="p">;</span><span class="w">        </span><span class="c1">// buf is a Ref parameter: a counted handle to a slot that never moves, see D2</span>
 <span class="w">            </span><span class="n">run_queue_push_back</span><span class="p">(</span><span class="n">t</span><span class="p">);</span>
 <span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">PARKED</span><span class="p">;</span>
 <span class="w">        </span><span class="p">}</span>
@@ -1850,7 +1850,7 @@ spin          Never   loops=unbounded (nopark, warns)
 <ul>
 <li><code>hash</code> has no counter and no status, so the C compiler can inline it freely.</li>
 <li>On the common path a check costs a decrement and a branch per iteration. Strip-mining would test once per block. Neither cost nor strip-mining is measured yet (B13).</li>
-<li>If <code>buf</code> pointed at a native-stack local in the caller, the caller would need a frame-resident local, or the yield would leave a dangling borrow (<a href="../open-decisions/#d2-borrowed-locals-and-the-lazy-shape">D2</a>).</li>
+<li>If <code>buf</code> pointed at a native-stack local in the caller, the caller would need a frame-resident local, or the yield would leave a dangling pointer (<a href="../open-decisions/#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">D2</a>).</li>
 </ul>
 <h2 id="2-lowering-to-resumable-frames">2. Lowering to resumable frames<a class="headerlink" href="#2-lowering-to-resumable-frames" title="Permanent link">&para;</a></h2>
 <h3 id="the-three-shapes-of-a-function">The three shapes of a function<a class="headerlink" href="#the-three-shapes-of-a-function" title="Permanent link">&para;</a></h3>
@@ -1940,7 +1940,7 @@ status = DONE | THROWN | PARKED
 <h3 id="pseudocode">Pseudocode<a class="headerlink" href="#pseudocode" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code>// db/query.stra
 package db                                  // compiled separately         Park(query) = May   (calls Conn.recv)
-fn query(sql: string&amp;, id: i64): Row throws DbError {
+fn query(sql: string, id: i64): Row throws DbError {
     let c = pool.acquire();                 // May: waits for a free connection
     c.send(encode(sql, id));                // May
     return decode(c.recv());                // May
@@ -1949,7 +1949,7 @@ fn query(sql: string&amp;, id: i64): Row throws DbError {
 // app/handle.stra
 package app
 import db
-fn handle(req: Request&amp;): Response throws DbError {
+fn handle(req: Ref&lt;Request&gt;): Response throws DbError {
     let row = db.query("select ...", req.id);   // inferred May; nothing written
     return render(row);                         // Never
 }
@@ -1983,14 +1983,14 @@ fn handle(req: Request&amp;): Response throws DbError {
 <span class="p">}</span>
 </code></pre></div>
 <p>One real hazard shows in <code>t-&gt;innermost-&gt;out = ...</code>: the callee was given a pointer into the caller's native stack. Pointers to locals that are live across a park are the subject of the next subsection.</p>
-<h3 id="borrows-and-locals-that-cannot-be-moved">Borrows and locals that cannot be moved<a class="headerlink" href="#borrows-and-locals-that-cannot-be-moved" title="Permanent link">&para;</a></h3>
+<h3 id="locals-whose-address-a-callee-holds">Locals whose address a callee holds<a class="headerlink" href="#locals-whose-address-a-callee-holds" title="Permanent link">&para;</a></h3>
 <p>The lazy form copies locals into a frame only when a park occurs. A copy changes the address. Two things can hold the old address:</p>
 <ol>
-<li>A <strong>borrow</strong> (<code>T&amp;</code>) to a local, given to a callee that is part of the park chain, or kept in another local.</li>
+<li>A <strong>raw pointer to a stack local</strong> that the compiler hands to a callee in the park chain, or keeps in another local. A <code>Ref&lt;T&gt;</code> is not this case: it holds a count on a slot that never moves (D18 item 7). Only values that are not counted objects (stack values, fixed arrays inside a frame) can be reached by raw pointer.</li>
 <li>A <strong>result or out pointer</strong> (above), which the unwinding step can rebind because it is compiler-generated.</li>
 </ol>
-<p>Case 2 is mechanical. Case 1 is not: <code>let buf = readBuffer(); conn.recv(buf&amp;)</code> is exactly this shape, and extremely common.</p>
-<p><strong>Direction:</strong> a local that is borrowed <em>and</em> live across a call that may park is <strong>frame-resident</strong> from its declaration, in a frame created at function entry. A function with any frame-resident local uses the eager shape for that function. Other functions in the chain stay lazy. The borrow-origin analysis (spec section 5) already has what is needed to decide this; the new fact is only that the flag <em>borrowed across a may-park call</em> is recorded for each local. This is a real constraint on how often <code>lazy</code> applies, and not measured: the toy benchmark has no borrowed locals. See <a href="../open-decisions/#d2-borrowed-locals-and-the-lazy-shape">open decision D2</a>.</p>
+<p>Case 2 is mechanical. Case 1 is not: <code>let buf = readBuffer(); conn.recv(buf)</code> is exactly this shape, and extremely common.</p>
+<p><strong>Direction:</strong> a local whose address is passed <em>and</em> live across a call that may park is <strong>frame-resident</strong> from its declaration, in a frame created at function entry. A function with any frame-resident local uses the eager shape for that function. Other functions in the chain stay lazy. The escape analysis already has what is needed to decide this; the new fact is only that the flag <em>address held across a may-park call</em> is recorded for each local. This is a real constraint on how often <code>lazy</code> applies, and not measured: the toy benchmark has no such locals. See <a href="../open-decisions/#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">open decision D2</a>.</p>
 <h2 id="3-calls-that-never-suspend">3. Calls that never suspend<a class="headerlink" href="#3-calls-that-never-suspend" title="Permanent link">&para;</a></h2>
 <p><code>Never</code> functions compile to ordinary C and are inlined by the C compiler under its usual rules. Without <code>[yield]</code>, a loop adds no effect, so most helpers (parsing, rendering, hashing) are <code>Never</code>. A <code>Cond(P)</code> function called with a known non-parking argument binds to its plain entry.</p>
 <p>For a <code>May</code> function the non-suspending path should be straight-line C with one status test after each <code>May</code> call. The cost of that test is what the 0.7 to 1.5 ns above measures.</p>
@@ -2028,8 +2028,8 @@ fn handle(req: Request&amp;): Response throws DbError {
 <td>Held in a slot. Promotion is a separate step after the resume, as everywhere (spec 3.1). The compiler must not hoist a promotion across a park point: the object may have expired meanwhile.</td>
 </tr>
 <tr>
-<td>Borrow <code>T&amp;</code> live across a park</td>
-<td>Allowed if the referent outlives the parked task. The lifetime analysis (spec section 5) already tracks origins; the new check is that <strong>every referent a borrow can point to is either frame-resident, a <code>Ref</code> held by the frame, or static</strong>. A borrow of a native-stack local is the case handled above.</td>
+<td>Raw pointer to a local, live across a park</td>
+<td>Allowed if the referent outlives the parked task. A <code>Ref&lt;T&gt;</code> live across a park needs no check: it owns a count. For a raw pointer, the new check is that <strong>every referent it can point to is either frame-resident, a <code>Ref</code> held by the frame, or static</strong>. A borrow of a native-stack local is the case handled above.</td>
 </tr>
 <tr>
 <td>Task temporary arena</td>

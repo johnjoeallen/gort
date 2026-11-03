@@ -1242,6 +1242,18 @@
 <td>Combined slot against a never-moving control block with a movable body: allocation, dereference (sequential, random, pointer chase), memory kept after a burst, dead objects held by a <code>WeakRef</code></td>
 <td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Second run, a whole service (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>): +4 to +27% work per request, no difference when database-bound; moving costs about 7% of throughput while it runs. <strong>Third run</strong>, sharded locks and clone-on-hit (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>): with 16 cache locks the split costs +4 to +10% work per request (the single lock was most of the earlier four-worker loss); clone-on-hit is free; moving still returns memory. <strong>Fourth run</strong>, Refs held across a park (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/hold.md"><code>hold.md</code></a>): holds up to 10 ms cost nothing and leave the recovered memory unchanged; Refs held for good block it (9 of 14 MB recovered at 0.1% of hits, none at 1%).</td>
 </tr>
+<tr>
+<td>B16</td>
+<td>Count traffic and slot layout (D18)</td>
+<td>Non-atomic against atomic counts on an unshared object; atomic counts with 1 to N threads; readers dereferencing while another thread clones and drops <code>Ref</code>s to the same object, with the header's counts beside the body and on a separate cache line</td>
+<td>Decides whether the unshared fast path and a hot/cold header split are worth it.</td>
+</tr>
+<tr>
+<td>B17</td>
+<td>Local placement and arrays (D18)</td>
+<td>Short-lived <code>new</code> in the shared arena against a stack or task region; fixed <code>Array&lt;T&gt;</code> block (control block outside, elements in a chunk) against a general allocator; <code>GrowableArray&lt;T&gt;</code> growth by block reallocation; the cost of two allocations per array</td>
+<td>Decides whether stack placement and the array chunk model are worth building.</td>
+</tr>
 </tbody>
 </table>
 <p>Metrics for all: throughput, CPU utilisation (user, system), p50/p99/p99.9 latency, resident memory, allocations, context switches.</p>
@@ -1264,7 +1276,7 @@
 </ul>
 <h2 id="milestones">Milestones<a class="headerlink" href="#milestones" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Hand-written B2 and B7 with D from 1 to 32 in the shape the lowering of <a href="../suspension/">suspension</a> produces, including borrowed locals (the case the toy omitted).</li>
+<li>Hand-written B2 and B7 with D from 1 to 32 in the shape the lowering of <a href="../suspension/">suspension</a> produces, including locals whose address a callee holds (the case the toy omitted).</li>
 <li>First compiler emitting Level-0 C: rerun B1, B2, B3, B9 on generated code and compare with the hand-written versions. Any gap is a compiler quality finding.</li>
 <li>B5, B6, B8, B11 once the runtime has the needed libraries (database driver, TLS binding).</li>
 <li>B12 and the ceremony metrics.</li>

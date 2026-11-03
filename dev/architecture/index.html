@@ -1197,14 +1197,14 @@
     |
     v
 Parsing, name resolution, type checking
-Borrow/lifetime inference, effect inference (local)
+Escape and effect inference (local)
     |
     v
 Typed Strata IR (per module, ownership and effects explicit)
     |
     v
 Compiled Strata module (.smod) -------------------------------+
-    |  interface: types, signatures, borrow origins,           |
+    |  interface: types, signatures, ownership modes,           |
     |             effect summaries, dispatch contracts         |
     |  retained IR (generic bodies, inlinable bodies, the rest)|
     |  call-graph edges, park-point tables                     |
@@ -1240,7 +1240,7 @@ Executable
 </thead>
 <tbody>
 <tr>
-<td>Parse, type check, borrow and effect inference within the module</td>
+<td>Parse, type check, escape and effect inference within the module</td>
 <td>Yes</td>
 <td></td>
 <td>Needs only the module and the interfaces it imports</td>

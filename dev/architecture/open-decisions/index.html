@@ -836,10 +836,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#d2-borrowed-locals-and-the-lazy-shape" class="md-nav__link">
+  <a href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape" class="md-nav__link">
     <span class="md-ellipsis">
       
-        D2. Borrowed locals and the lazy shape
+        D2. Locals whose address a callee holds, and the lazy shape
       
     </span>
   </a>
@@ -1005,6 +1005,17 @@
     <span class="md-ellipsis">
       
         D17. Moving objects between chunks: split control blocks, and weak promotion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#d18-storage-classes-locals-scopes-and-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D18. Storage classes, locals, scopes and dispatch
       
     </span>
   </a>
@@ -1174,10 +1185,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#d2-borrowed-locals-and-the-lazy-shape" class="md-nav__link">
+  <a href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape" class="md-nav__link">
     <span class="md-ellipsis">
       
-        D2. Borrowed locals and the lazy shape
+        D2. Locals whose address a callee holds, and the lazy shape
       
     </span>
   </a>
@@ -1349,6 +1360,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#d18-storage-classes-locals-scopes-and-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D18. Storage classes, locals, scopes and dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1378,12 +1400,12 @@
 <li><strong>Both (recommended).</strong> Lower at module compile. In optimised mode, re-lower only chains whose inlining or fusion changes them, using retained Tier C IR.</li>
 </ul>
 <p>Recommendation: both, with module compile authoritative. Release a first compiler that does only module-level lowering.</p>
-<h2 id="d2-borrowed-locals-and-the-lazy-shape">D2. Borrowed locals and the lazy shape<a class="headerlink" href="#d2-borrowed-locals-and-the-lazy-shape" title="Permanent link">&para;</a></h2>
-<p>The <code>lazy</code> strategy copies locals into a frame only on a park, which moves them. A borrow of a moved local dangles. See <a href="../suspension/#borrows-and-locals-that-cannot-be-moved">suspension</a>.</p>
+<h2 id="d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">D2. Locals whose address a callee holds, and the lazy shape<a class="headerlink" href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape" title="Permanent link">&para;</a></h2>
+<p>The <code>lazy</code> strategy copies locals into a frame only on a park, which moves them. A pointer to a moved local dangles. With no borrow type (D18) the case is a raw pointer to a stack local; a <code>Ref&lt;T&gt;</code> is not affected, because it owns a count on a slot that never moves. See <a href="../suspension/#locals-whose-address-a-callee-holds">suspension</a>.</p>
 <ul>
-<li><strong>Frame-resident borrowed locals; the function uses eager frames</strong> (recommended). Correct; loses the lazy saving for functions with borrowed-across-park locals.</li>
+<li><strong>Frame-resident locals; the function uses eager frames</strong> (recommended). Correct; loses the lazy saving for functions with address-held-across-park locals.</li>
 <li><strong>Pin the local's storage in the task arena.</strong> The local is in the arena from the start, not the stack. Cheaper than a full frame; one more arena operation.</li>
-<li><strong>Forbid borrowing across a park.</strong> Simple; too restrictive (<code>recv(buf&amp;)</code>).</li>
+<li><strong>Forbid passing a local's address across a park.</strong> Simple; too restrictive (<code>conn.recv(buf)</code>).</li>
 </ul>
 <p>Recommendation: the first, then measure how many hot functions it affects. The toy benchmarks did not include this.</p>
 <h2 id="d3-the-minimum-ir-for-cross-module-optimisation">D3. The minimum IR for cross-module optimisation<a class="headerlink" href="#d3-the-minimum-ir-for-cross-module-optimisation" title="Permanent link">&para;</a></h2>
@@ -1422,7 +1444,7 @@
 <li><strong>Slice unit.</strong> An iteration counter (cheap, not time) against a timestamp or a flag set from another thread. Recommendation: counter, sized in iterations per check block; the watchdog flag later.</li>
 <li><strong>Lambdas</strong> inheriting the enclosing function's setting.</li>
 <li><strong>Default revisited.</strong> Whether checks should become the default later, once B13 and a real compiler show the cost and the ripple. The earlier design made them the default and was reversed before any implementation.</li>
-<li><strong>Interaction with the lazy shape.</strong> A check is a park point inside a loop, so the loop's live values must be spillable; a loop with borrowed locals falls under <a href="#d2-borrowed-locals-and-the-lazy-shape">D2</a> too.</li>
+<li><strong>Interaction with the lazy shape.</strong> A check is a park point inside a loop, so the loop's live values must be spillable; a loop with locals whose address a callee holds falls under <a href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">D2</a> too.</li>
 </ul>
 <h2 id="d14-packages-and-imports">D14. Packages and imports<a class="headerlink" href="#d14-packages-and-imports" title="Permanent link">&para;</a></h2>
 <p><em>Direction, following the Java folder convention; the details are open.</em> Every sample <code>.stra</code> file starts with <code>package name</code>.</p>
@@ -1446,13 +1468,13 @@
 </ul>
 </li>
 <li><strong>Only growable containers get a handle (superseded in part by <a href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion">D17</a>).</strong> Plain structs and objects were to be referenced directly, since indirection would cost locality and an allocation per object for no safety gain. D17 gives every <code>new T</code> object a never-moving control block anyway (it carries the counts), and proposes that the body behind it may move for memory reclamation, so the cost argument changes to one extra load.</li>
-<li><strong>Effect on D2.</strong> No raw array address is frame-resident across a park (a locked window cannot span one, and an unlocked window ends at the park), so borrows into growable arrays do not force an eager frame. Borrows of other locals are still <a href="#d2-borrowed-locals-and-the-lazy-shape">D2</a>.</li>
+<li><strong>Effect on D2.</strong> No raw array address is frame-resident across a park (a locked window cannot span one, and an unlocked window ends at the park), so pointers into growable arrays do not force an eager frame. Borrows of other locals are still <a href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">D2</a>.</li>
 <li><strong>Contract.</strong> The mutation summary in the <code>.smod</code> (modules.md, "Access and escape summaries") gains a <code>may-grow</code> bit per container parameter, so a caller can end its deref window exactly. Widening it is a breaking change.</li>
 </ul>
 <p>Costs and open points:</p>
 <ul>
 <li><strong>One dependent load</strong> of <code>ptr</code> per access outside a hoisted window. <em>Measured, micro-benchmark only</em> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle.md"><code>handle.md</code></a>, B14): reloading on every access is not visible at <code>-O2</code> and equals a raw pointer when hoisted. At <code>-O3</code> a window that ends every iteration costs vectorisation (about 0.14 to 0.23 ns/element in L1), and a may-grow call in the loop costs the call (0.7 to 0.9 ns), not the reload. A second run with realistic bodies and a lock around every variant (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle_real.md"><code>handle_real.md</code></a>) gives a typical loss of 1 to 3% (0.01 to 0.3 ns per element) over a raw pointer for bodies that do work, individual configurations up to about 10%, and up to +28% only for an almost-empty body with no lock (0.25 ns); the noise floor is up to 19% in a few cells because gcc compiled two identical loops differently. One machine, single thread, uncontended locks, synthetic windows, A third run, a mixed request on the C runtime with a lock-protected cache, a simulated database wait and growable-buffer rendering (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>, B12), found the handle build within noise of a raw pointer in work per request, throughput and latency (0.5 to 3% run-to-run spread; worst case +2.1% for the pessimistic reload-at-every-access build). So what remains open is how often real windows end, which needs a compiler.</li>
-<li><strong>FFI.</strong> C needs a stable address. An <code>extern</code> call takes a <em>pinned</em> borrow: the container is excluded from growing for the call. A library that retains the pointer needs a non-moving allocation (a fixed-capacity array or a dedicated virtual region), declared in the binding contract (spec 5.2).</li>
+<li><strong>FFI.</strong> C needs a stable address. An <code>extern</code> call takes a <em>pinned</em> pointer: the container is excluded from growing for the call. A library that retains the pointer needs a non-moving allocation (a fixed-capacity array or a dedicated virtual region), declared in the binding contract (spec 5.2).</li>
 <li><strong>Large arrays.</strong> A dedicated virtual-address reservation grows in place, so its <code>ptr</code> never changes and its handle test is free. Whether to use one is the older question in <a href="../../open-questions/">open questions</a>; it becomes an optimisation under this rule, not a correctness requirement.</li>
 <li><strong>Precision of the may-grow summary.</strong> A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.</li>
 <li><strong>Stable identity beyond arrays.</strong> For objects that other objects point to (graph nodes), use <code>Ref&lt;T&gt;</code>: it never moves.</li>
@@ -1472,18 +1494,19 @@
 </ul>
 <p>Open points: the name of the inline field (<code>dog.body</code>?); clashes when two incorporated structs promote the same name (compile error until the author disambiguates); whether <code>with</code> may name an interface-typed field; <code>cleanup()</code> order (fields in reverse order of declaration, incorporated structs in the same order); how interface access modes (sharing, <code>sync</code>/<code>mutate</code>) are stated; and whether <code>: Animal</code> can be declared outside the struct (as Go and Rust allow) or only in its header.</p>
 <h2 id="d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion">D17. Moving objects between chunks: split control blocks, and weak promotion<a class="headerlink" href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion" title="Permanent link">&para;</a></h2>
-<p><em>Direction, proposed by the author; unmeasured.</em> The finding that motivates it: long-lived objects scattered through shared chunks pin memory (Measured, <a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md"><code>group2.md</code></a>: 6 to 11x retained after a burst). Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks. Chunked arenas already let a type arena grow without moving anything; this decision is about shrinking.</p>
+<p><em>Status: the split control block and the moving of bodies between chunks are <strong>rejected for counted objects</strong> by <a href="#d18-storage-classes-locals-scopes-and-dispatch">D18</a>; the measurements below are the evidence. <code>weak.promote()</code> returning <code>Ref&lt;T&gt;?</code> stays.</em> <em>Direction, proposed by the author; unmeasured.</em> The finding that motivates it: long-lived objects scattered through shared chunks pin memory (Measured, <a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md"><code>group2.md</code></a>: 6 to 11x retained after a burst). Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks. Chunked arenas already let a type arena grow without moving anything; this decision is about shrinking.</p>
 <ul>
 <li><strong>Split.</strong> The control block (strong and weak counts, metadata, a pointer to the body as <code>{chunk, offset}</code>) lives in one fixed-size control-block arena shared by all types, and never moves. <code>Ref&lt;T&gt;</code> and <code>WeakRef&lt;T&gt;</code> point at it. The body (the fields) stays in the type's chunked arena and may be moved to another chunk by copying it and updating the one pointer in the control block. No <code>Ref</code> or <code>WeakRef</code> changes, and counting never touches the body.</li>
 <li><strong>Lifetimes.</strong> When the strong count reaches zero the body is destroyed (<code>cleanup()</code> runs) and its slot freed. The control block stays until the weak count is also zero. Today's layout (spec 3.3) keeps the whole slot until then, so a dead object with a lingering <code>WeakRef</code> pins its full size; after the split it pins only the control block (about 32 bytes). A <code>WeakRef</code> that is never dropped, for example in a long-lived cache, pins that block until its holder drops the entry; holders should drop an entry when promotion fails.</li>
 <li><strong>Weak promotion returns <code>Ref&lt;T&gt;?</code></strong> (null if the object is gone). Expiry is an expected result the caller must handle, as in Java's <code>WeakReference.get()</code>, Rust's <code>Weak::upgrade</code> and C++'s <code>weak_ptr::lock</code>. Both ways of keeping the data fail identically, because the object is already destroyed at strong zero, so holding the bytes would not avoid the failure. There is no implicit promotion and no <code>ExpiredReference</code> (spec 3.1).</li>
-<li><strong>When a move is safe.</strong> An unshared object: between turns of its owning worker (scheduling is cooperative, so no raw address is live there). A shared mutable object: under <code>mutate</code>, which excludes the <code>sync</code> readers. A shared immutable object: after a grace period, once every worker has passed a park or yield. An object with an FFI borrow is pinned (as in D15). A borrow held in a frame across a park (D2) holds a raw body address: either it blocks the move or it is stored as <code>(control block, offset)</code>.</li>
+<li><strong>When a move is safe.</strong> An unshared object: between turns of its owning worker (scheduling is cooperative, so no raw address is live there). A shared mutable object: under <code>mutate</code>, which excludes the <code>sync</code> readers. A shared immutable object: after a grace period, once every worker has passed a park or yield. An object passed to FFI is pinned (as in D15). A pointer held in a frame across a park (D2) holds a raw body address: either it blocks the move or it is stored as <code>(control block, offset)</code>.</li>
 <li><strong>A visible service, not magic (principle 10).</strong> Compaction is a runtime service with a stated policy (evacuate chunks below an occupancy threshold), a bounded step per pass, and statistics. Whether it is on is a per-type choice.</li>
 </ul>
 <p>Costs and open points:</p>
 <ul>
 <li><strong>One extra load</strong> (<code>control block</code> then <code>body</code>) per dereference outside a hoisted window; B14 measured about 0 to 3% for such a load in realistic bodies, but not on pointer-heavy object graphs.</li>
 <li><strong><code>new</code> becomes two allocations</strong> (control block and body), which could roughly double its 5 to 10 ns. Types that do not opt in could keep the combined slot of 3.3; two layouts cost compiler complexity.</li>
+<li><strong>Allocation epoch in the control block (Direction).</strong> The slot header has a 32-bit allocation epoch, packed into <code>meta</code> beside the worker index so the header does not grow and the layout is the same in every build. It is filled in only when age tracking is on (<code>--track-age</code>, implied by <code>--debug</code>), from a global epoch counter that a ticker advances (no clock read in <code>new</code>); otherwise it is 0, meaning unknown. Because release builds leave it empty, nothing in the runtime may depend on it: it is for age histograms and finding leaks. With D18 nothing moves, so there is no mover to use it.</li>
 <li><strong>Tiny objects</strong> (about 16 bytes or less) gain little: the control block is a large fraction of the body. They could live inline in the control block.</li>
 <li><strong>Generations may become unnecessary</strong> for object arenas: a <code>Ref</code> points at the control block, so validity comes from the counts, and the chunk-epoch fix for decommit (<code>group2.md</code>, section 7) would apply only to the control-block arena. Check before relying on it.</li>
 <li><strong>Measured, micro-benchmark only</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>, B15; single thread, hand-written C):<ul>
@@ -1513,6 +1536,44 @@
 </li>
 <li><strong>Consequence for the direction.</strong> Page-level release of free pages costs nothing at dereference and gets most of the gain at 1% survivors, so it comes first. The split is opt-in per type (the fixed combined slot stays the default), aimed at mixed-lifetime types and <code>WeakRef</code> targets. Not measured: moving only the unpinned bodies of a pinned chunk, concentrated (rather than random) long-lived Refs, mutable shared objects, a single very hot object, and a service with real sockets.</li>
 </ul>
+<h2 id="d18-storage-classes-locals-scopes-and-dispatch">D18. Storage classes, locals, scopes and dispatch<a class="headerlink" href="#d18-storage-classes-locals-scopes-and-dispatch" title="Permanent link">&para;</a></h2>
+<p><em>Direction, decided by the author in a design review of the memory-model concept (<code>Strata Memory Model: Concept</code>). Items marked <strong>Open</strong> are not decided. Costs are from the B15 and B12 runs unless stated; nothing here is implemented.</em></p>
+<p><strong>1. Two storage models.</strong> Plain objects and arrays need different arena and chunk models.</p>
+<ul>
+<li><strong>Plain objects (<code>new T</code>, <code>Ref&lt;T&gt;</code>).</strong> A slot in the type's arena with the control block (counts, metadata) inline, as spec 3.3 shows. The arena never moves and <strong>no object moves between chunks</strong>, so a <code>Ref</code> is a direct address and dereferencing costs no extra load. This rejects D17's split control block and its mover. What D17 measured is the reason: the split cost +4 to +10% work per request with sharded locks (+6 to +27% with one lock), made a steady-state service 14 to 17% larger, and a pointer chase through two cache lines 75 to 174% slower; it recovered memory only after a burst. Returning memory to the OS is left to page-level release of free pages. The cost accepted: a dead object that a <code>WeakRef</code> still names keeps its whole slot until the weak count reaches zero (INV-8).</li>
+<li><strong>Arrays (<code>Array&lt;T&gt;</code>, fixed length; <code>GrowableArray&lt;T&gt;</code>).</strong> A control block outside the object arenas, in a slab of control blocks that never moves, holding the counts, the absolute pointer to the elements, and the length (and capacity for the growable form). The elements are a contiguous block in a chunk of the element type's array arena; a new chunk is allocated if no block fits. Elements of native values and of objects are stored inline, with no per-element control block. An array of <code>Ref&lt;T&gt;</code> holds counted handles and releases them when the array is dropped or an element is removed. A fixed <code>Array&lt;T&gt;</code> never moves its block. A <code>GrowableArray&lt;T&gt;</code> is allocated at a block size and, when it outgrows it, is reallocated to a larger block (another chunk if needed), copied, and its control block's pointer updated; no <code>Ref</code> to the array changes. This is the only movement of payload between chunks, and the program caused it.</li>
+<li><em>Considered and not taken:</em> a control block before every element (16 bytes per element: 5x for <code>i32</code>, 17x for <code>u8</code>, no SIMD, against the flat-array goal), and a separate header-plus-general-allocator store (not rejected; the chunk model keeps one type per chunk).</li>
+<li><strong>Open:</strong> whether an array handle is counted and shared by reference or an owned value; whether <code>Array&lt;T&gt;</code> and <code>GrowableArray&lt;T&gt;</code> convert without copying (a growable array "frozen" into a fixed one); the block-size policy (size classes against first-fit runs); arrays larger than a chunk (a dedicated oversize chunk or spanning); whether array blocks are ever compacted.</li>
+</ul>
+<p><strong>2. Locals.</strong> Simple locals live on the data stack and are reclaimed at scope exit (spec 4.1); they are not counted objects. A local that holds <code>Ref&lt;T&gt;</code>, <code>Array&lt;T&gt;</code>, a <code>WeakRef</code> or anything else that owns counts <strong>releases them when it is cleaned up</strong>: every exit path (return, error, exception, cancellation) runs the type's drop in reverse order of declaration. A <code>new</code> object is placed on a stack or in task storage only if the compiler proves it cannot outlive that storage (spec 4.4); where it is unsure, it allocates in the shared arena. The concept's frame-exit promotion (copy a payload that something else still holds into a shared chunk) is <strong>rejected</strong>: it needs a payload move, so a wrong inference cannot be repaired afterwards and the analysis has to be sound.</p>
+<p><strong>3. Escape direction (new rules).</strong></p>
+<ul>
+<li>Passing a local down to a callee, including as an out parameter, does not make it escape: the callee is shorter-lived. If the argument is a <code>Ref&lt;T&gt;</code>, the pass still takes and releases a count (item 7).</li>
+<li>Storing a value into storage the caller supplied does escape: that storage is longer-lived.</li>
+<li>A callee that stores a new object into a container it was passed allocates the object shared, without knowing whether the container is local. Shared is always safe.</li>
+<li>A value that flows to a return, or into a parameter's contents, is allocated shared up front.</li>
+<li>A shared or longer-lived object never holds a reference to a local (the concept's INV-7): a store of a local into one is rejected, or the local is published first (sharing.md R5).</li>
+</ul>
+<p><strong>4. Counts.</strong> Counts on an unshared object may be non-atomic. They become atomic when the object is shared (the shared flag of sharing.md R5, set before the handoff). Spec Phase 1 starts with atomic counts; this is the later optimisation. The saving is unmeasured.</p>
+<p><strong>5. Scopes and hoisting.</strong></p>
+<ul>
+<li><strong>Shared objects:</strong> a dereference is allowed only inside a <code>sync</code> or <code>mutate</code> block, which cannot contain a parking call (sharing.md R1, R4). No exceptions.</li>
+<li><strong>Unshared objects:</strong> a read or mutate scope retains the resolved pointer for every access in the scope (one dereference per scope, not per access).</li>
+<li>A fixed-size object never moves, so its pointer stays valid across a park and across any call. The block of a fixed <code>Array&lt;T&gt;</code> also never moves. A <code>GrowableArray&lt;T&gt;</code> pointer is invalid after a call that may grow it (the D15 may-grow summary), and after leaving the scope or reassigning the variable; the compiler re-resolves there. An unshared container cannot change during a park, because no other virtual thread can reach it, so a park does not invalidate the pointer.</li>
+<li><strong>A hoisted pointer is taken only from a <code>Ref</code> the scope itself holds.</strong> The held <code>Ref</code> (a parameter, a local, or a count the scope takes) keeps the slot alive, so the pointer cannot dangle and the slot cannot be reused underneath it. Where the code dereferences through a container or a field (<code>a.b.c</code>, <code>list[i]</code>), the compiler <strong>injects a local <code>Ref&lt;T&gt;</code></strong>: the hoist copies the <code>Ref</code> out of the container or field into a compiler-made local, which takes a count (a non-atomic increment when unshared) and is released at scope exit, and the hoisted pointer comes from that local. The programmer writes nothing. A call that removes the object from its container and drops the container's count is therefore safe. The pointer is <strong>invalidated</strong> by: leaving the scope, reassigning the holding variable, and a may-grow call on a <code>GrowableArray&lt;T&gt;</code>. Without a held <code>Ref</code> there is no hoisting; the access reloads through the container each time.</li>
+<li><strong>Exception: a pointer into a stack local across a park.</strong> Under the lazy frame shape the park moves the local into a frame, so the pointer dangles. That is <a href="#d2-locals-whose-address-a-callee-holds-and-the-lazy-shape">D2</a>: the function uses an eager frame, or the local is pinned in the task arena.</li>
+<li><strong>Open:</strong> whether scopes are required on unshared data (an object access outside any scope is an error) or optional (the compiler also hoists unscoped code). The author's lean is optional, with a written scope as an assertion that it can hoist; not confirmed.</li>
+</ul>
+<p><strong>6. Dispatch.</strong> Strata has no virtual dispatch on struct functions, no inheritance and no open recursion (D16); a call is dynamic only at an interface call or a function value. A direct call has an exact escape and effect summary. An interface or function-value call takes the join of its possible targets' summaries, or a conservative summary (arguments escape, bound may-park) when the target set is not known (separate compilation, dynamic loading, D5, D9). <strong>Open:</strong> whether the compiler may join over every implementation it can see in one application link (closed world), or always uses the conservative summary.</p>
+<p><strong>7. References are <code>Ref&lt;T&gt;</code> only (no <code>T&amp;</code>), and every <code>Ref&lt;T&gt;</code> owns a count.</strong> The language has no separate borrow type. A parameter, local or field that refers to a counted object is a <code>Ref&lt;T&gt;</code>, and <strong>every</strong> <code>Ref&lt;T&gt;</code> manages the count: a copy or a pass increments it, a drop (scope exit, reassignment, container removal) decrements it. There is no count-less reference. Consequences:</p>
+<ul>
+<li>A <code>Ref&lt;T&gt;</code> always keeps its slot alive, so it cannot dangle, and a slot never moves, so it needs no frame-residency rule across a park. This removes the open question of whether a struct may hold a <code>T&amp;</code>, and the borrow-origin inference of spec 5.</li>
+<li>The cost is a count increment and decrement at each pass or copy (non-atomic when unshared, item 4). An optimiser may later remove a pair it proves redundant, but nothing in the semantics or the cost model relies on that; <strong>unmeasured</strong>.</li>
+<li><strong>Hoisting through a container or field injects a <code>Ref&lt;T&gt;</code>.</strong> When code dereferences through a container item or a field, the compiler copies the <code>Ref</code> into a compiler-made local, which owns a count until scope exit (item 5). The programmer writes nothing.</li>
+<li>A <code>Ref&lt;T&gt;</code> can only name a counted object in a slot. A stack local is passed down by value, by move, or as a raw pointer the compiler creates and keeps inside the function and its callees' frames (item 5, D2). Whether an object that is stack-placed under item 2 can be named by a <code>Ref</code> (its slot then needs a control block that must reach zero at scope exit) is <strong>Open</strong>.</li>
+<li>Text and <code>stra/</code> examples that wrote <code>T&amp;</code> were migrated mechanically (<code>T&amp;</code> to <code>Ref&lt;T&gt;</code>, including <code>u8[]&amp;</code> and <code>string&amp;</code>). <code>string</code> is a special built-in type and <code>u8[]</code> is a plain native array; neither is a <code>Ref&lt;T&gt;</code>, so parameters of those types are written <code>string</code> and <code>u8[]</code> (the mechanical migration wrapped them and that was reverted). How they are passed without a copy is <strong>Open</strong> (a string is immutable; a native array is passed by pointer and length).</li>
+</ul>
+<p><strong>8. To measure.</strong> Non-atomic against atomic counts on a shared-nothing path; readers dereferencing while another thread assigns <code>Ref</code>s (false sharing), with the slot header's counts on a separate cache line from the body as a switchable layout (the concept's hot and cold split; unmeasured); stack against arena placement for short-lived <code>new</code> objects; fixed <code>Array&lt;T&gt;</code> block allocation against a general allocator; the cost of two allocations per array. See B16 and B17 in <a href="../benchmarks/">benchmarks</a>.</p>
 
 
 

@@ -1412,7 +1412,7 @@
 <tr>
 <td><strong>A: Contract</strong></td>
 <td>Correctness</td>
-<td>Exported types and layouts, signatures, borrow origins, effect summaries, interface/dispatch contracts, generic constraints, ownership metadata, versions and hashes</td>
+<td>Exported types and layouts, signatures, ownership modes, effect summaries, interface/dispatch contracts, generic constraints, ownership metadata, versions and hashes</td>
 <td>The module cannot be used.</td>
 </tr>
 <tr>
@@ -1447,8 +1447,8 @@ imports
 exports                                            [Tier A]
   types: layout (or "opaque"), fields visible, cleanup method, copy/move rules,
          whether sync-able (has a lock word)
-  functions: signature, per-parameter ownership mode (borrow, consume, Ref),
-             borrow origins of the return value, effect summary, throws list
+  functions: signature, per-parameter ownership mode (consume, Ref),
+             escape summary of the return value, effect summary, throws list
   interfaces: method list, per-method effect bound, vtable layout, versioning rule
   generic definitions: constraints, effect conditions (Cond(P))
   constants and static data a caller may fold
@@ -1481,10 +1481,10 @@ invariants: cleanup methods are Never; foreign=blocking implies park=May
 </code></pre></div>
 <p><strong>The <code>loops</code> class is advisory.</strong> It records, for each exported function, the worst loop class among its own loops and those of its direct callees (nested loops compose; see <a href="../suspension/#13-loop-warnings">suspension 1.3</a>). It exists so a caller's lint can warn about <code>tight -&gt; parse -&gt; scanForever</code> when <code>scanForever</code> is in another module and its source is not available. It is stored in Tier A but kept out of the contract hash on purpose: loop structure changes often, and a change from <code>bounded</code> to <code>long</code> must not force every dependant to recompile. Consequences: a warning can lag until the caller's lint next reads the callee's current <code>.smod</code>, and <code>loops</code> is never used for code generation. Calls through interfaces, function values and foreign code are recorded as <code>unknown</code> contributions and not as a class.</p>
 <p><code>Cond(P)</code> is stored symbolically, so a downstream module can resolve it with its own arguments. A conditional effect through a type parameter (<code>T.compare</code> that might park) is stored as <code>Cond({T})</code> and resolved at instantiation.</p>
-<p>Summaries are <strong>inferred</strong>, then <strong>exported as part of the contract</strong>. The consequence, already noted for borrow origins in spec 5.1: changing an implementation can change the contract with no source signature change. The compiler reports it (<a href="#4-versioning-and-compatibility">versioning</a>).</p>
+<p>Summaries are <strong>inferred</strong>, then <strong>exported as part of the contract</strong>. The consequence, already noted for escape summaries in spec 5.1: changing an implementation can change the contract with no source signature change. The compiler reports it (<a href="#4-versioning-and-compatibility">versioning</a>).</p>
 <h3 id="access-and-escape-summaries">Access and escape summaries<a class="headerlink" href="#access-and-escape-summaries" title="Permanent link">&para;</a></h3>
 <p>Also part of each exported function's contract, and of each exported type (see <a href="../../sharing/">sharing</a>):</p>
-<div class="highlight"><pre><span></span><code>per borrowed or Ref parameter:  access = none | read | write      (through the receiver and by-value fields)
+<div class="highlight"><pre><span></span><code>per Ref parameter:  access = none | read | write      (through the receiver and by-value fields)
                                 escape = none | retained | published (stored beyond the call / given to spawn or a message)
                                 grow   = no | may                 (may move a growable container's storage; D15)
 result:                         fresh  = yes | no                 (a new allocation nothing else refers to)
@@ -1557,7 +1557,7 @@ per type field:                 mutability = write-once | mutable
 <h3 id="the-ir-boundary">The IR boundary<a class="headerlink" href="#the-ir-boundary" title="Permanent link">&para;</a></h3>
 <p>The IR is what a consumer uses to <em>regenerate</em> code, so it must carry what the generated C needs, and no more:</p>
 <ul>
-<li>Typed, structured control flow with ownership operations explicit: move, borrow, <code>Ref</code> copy and release, <code>new</code>, cleanup scopes, <code>sync</code>/<code>mutate</code> regions, throw edges.</li>
+<li>Typed, structured control flow with ownership operations explicit: move, <code>Ref</code> copy and release, <code>new</code>, cleanup scopes, <code>sync</code>/<code>mutate</code> regions, throw edges.</li>
 <li>Effects on every call site, and park points marked, so that frame lowering is a function of the IR alone.</li>
 <li><strong>Not</strong> raw source text, comments, formatting or macro structure.</li>
 <li>Stable under a format version number; the consumer refuses a newer major version.</li>
@@ -1570,7 +1570,7 @@ per type field:                 mutability = write-once | mutable
 <li><strong>Contract hash</strong>, per exported symbol: a hash of exactly its Tier A entry (and for generics and exposed bodies, the Tier B IR). It is the unit of compatibility.</li>
 <li><strong>Module interface hash</strong>: a hash of all contract hashes, for a fast check.</li>
 <li><strong>Advisory data</strong> (<code>loops</code>) is excluded from every hash above.</li>
-<li><strong>Compatibility rule (Direction):</strong> an implementation change that alters no contract hash is compatible. A change that narrows an effect (<code>May</code> to <code>Never</code>), reduces <code>throws</code>, or adds an export is <em>backward compatible</em>. A change that widens an effect (<code>Never</code> to <code>May</code>), adds to <code>throws</code>, changes layout or changes a borrow origin is <strong>breaking</strong>, whether or not the signature text changed.</li>
+<li><strong>Compatibility rule (Direction):</strong> an implementation change that alters no contract hash is compatible. A change that narrows an effect (<code>May</code> to <code>Never</code>), reduces <code>throws</code>, or adds an export is <em>backward compatible</em>. A change that widens an effect (<code>Never</code> to <code>May</code>), adds to <code>throws</code>, changes layout or changes an escape summary is <strong>breaking</strong>, whether or not the signature text changed.</li>
 <li><strong>Semantic version policy:</strong> breaking contract changes require a major version; the compiler can compare two versions of a module and print the contract diff (which symbols changed and which dimension). This answers spec 10.10 (API stability) at the tooling level; the policy itself is <a href="../open-decisions/#d4-representing-effects-in-public-interfaces">Open</a>.</li>
 </ul>
 <h3 id="the-native-cache-key">The native cache key<a class="headerlink" href="#the-native-cache-key" title="Permanent link">&para;</a></h3>
@@ -1586,7 +1586,7 @@ per type field:                 mutability = write-once | mutable
 <h2 id="5-application-compile-and-link">5. Application compile and link<a class="headerlink" href="#5-application-compile-and-link" title="Permanent link">&para;</a></h2>
 <h3 id="incremental-compilation-default-for-development">Incremental compilation (default for development)<a class="headerlink" href="#incremental-compilation-default-for-development" title="Permanent link">&para;</a></h3>
 <ol>
-<li>For each module, in dependency order: read the interfaces of imports (Tier A only), type-check, infer effects and borrows, produce IR, lower to Level 0, emit C, cache the object.</li>
+<li>For each module, in dependency order: read the interfaces of imports (Tier A only), type-check, infer effects and escapes, produce IR, lower to Level 0, emit C, cache the object.</li>
 <li>Link the objects and the runtime with the system linker. No IR from other modules is read.</li>
 <li><strong>Early cut-off:</strong> if a module's interface hash is unchanged after recompilation, its dependants are not touched, even though its objects changed (they relink, not recompile).</li>
 </ol>
@@ -1596,7 +1596,7 @@ per type field:                 mutability = write-once | mutable
 <li>Resolve all modules (names, versions, contract hashes). A mismatch between an importer's recorded hash and the provider's is an error naming the symbol.</li>
 <li>Build the closed-world call graph from Tier C edges and the build configuration (entry points, open interfaces).</li>
 <li>Check effects across modules with the summaries: a <code>Cond(P)</code> is resolved against real arguments; indirect calls are checked against implementations; a violated bound is an error.</li>
-<li>Re-run lifetime/borrow checks that cross modules (only the contracts are needed).</li>
+<li>Re-run lifetime checks that cross modules (only the contracts are needed).</li>
 <li>Decide optimisations: devirtualise calls with a single reachable implementation, inline small functions, fuse or embed frame chains, specialise generics.</li>
 <li>Re-lower and re-emit only the functions changed by step 5. Everything else keeps its cached Level-0 object.</li>
 <li>Run the C compiler and linker; ideally with LTO as an independent layer.</li>

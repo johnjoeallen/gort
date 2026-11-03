@@ -1048,11 +1048,15 @@
 </tr>
 <tr>
 <td>Growable containers sit behind a non-moving header; references into them are <code>(header, offset)</code>, a raw address exists only in a deref window (<code>sync</code>/<code>mutate</code>, or until the next may-grow call or park)</td>
-<td>Relocation cannot invalidate a reference, and no borrow error is needed. Direction (D15); micro-benchmark B14 shows no visible per-access cost, real window frequency unmeasured.</td>
+<td>Relocation cannot invalidate a reference, and no error is needed. Direction (D15); micro-benchmark B14 shows no visible per-access cost, real window frequency unmeasured.</td>
 </tr>
 <tr>
-<td>Direction (D17): <code>Ref</code>/<code>WeakRef</code> point at a never-moving control block that holds the counts and the body's location, so a body can move between chunks; <code>WeakRef</code> promotion returns <code>Ref&lt;T&gt;?</code></td>
-<td>Reclaims memory pinned by scattered long-lived objects, and a lingering <code>WeakRef</code> pins only the control block. Unmeasured.</td>
+<td>Direction (D17): <code>WeakRef</code> promotion returns <code>Ref&lt;T&gt;?</code>. The proposed split control block that let bodies move between chunks is rejected by D18</td>
+<td>The split cost +4 to +10% work per request and 14 to 17% more memory in a whole service (B15), and recovered memory only after a burst.</td>
+</tr>
+<tr>
+<td>Direction (D18): plain objects keep the control block in the arena slot and never move; arrays use an external control block and a block in a chunk of the element type, and only growing moves it. Locals stay on the data stack and release the counts they hold at scope exit; there is no promotion. Unshared scopes hoist the pointer; shared access only inside <code>sync</code>/<code>mutate</code>. Interface calls join the targets' summaries or are conservative</td>
+<td>Keeps a <code>Ref</code> a direct address and flat arrays flat. Open: counted or owned arrays, whether scopes are required on unshared data, closed-world dispatch summaries.</td>
 </tr>
 <tr>
 <td>C stays the backend</td>
