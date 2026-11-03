@@ -8,7 +8,14 @@
 // a window while a body moves; there is nothing else to wait for, and an emptied chunk is unmapped at once.
 // Arenas are per worker (64 KB chunks, as in split_bench.c) with a spinlock each; frees of another worker's object take the owner's lock.
 //
-// usage: service_split_N hit% db_us concurrency workers requests_per_worker [users=1000000] [flush=0|1] [mover=0|1] [thresh=0.5]
+// Third dimension set (B12 on the D17 model): shards=N splits the cache lock into N cache-line-padded locks (a set belongs to shard set%N);
+// clone=1 makes a hit clone the Ref (atomic strong++ inside sync), release the lock, and read the body afterwards (the Ref is dropped after render;
+// dropping the last strong frees the object, so an evicted-while-held User dies in the request). With clone=1 a body is read outside any lock, so the mover
+// may not move a body whose object has strong>1 (a holder exists) or that is not in the cache (an orphan held by a request): it skips that chunk. A move takes
+// every shard lock (ascending) and then the arena lock; workers take one shard lock and then an arena lock, so there is no cycle.
+// skew=P: P% of requests draw their key from the 1000 hottest users (so clone's atomic count updates contend on the same cache lines).
+//
+// usage: service_split_N hit% db_us concurrency workers requests_per_worker [users=1000000] [flush=0|1] [mover=0|1] [thresh=0.5] [shards=1] [clone=0|1] [skew=0]
 //   flush=1: when worker 0 reaches 40% of its requests, the main thread evicts 90% of the cache at random; from that point every worker's keys come from
 //            a hot set of 1/20 of the users (so the cache is not refilled and the heap stays sparse).
 #define _GNU_SOURCE
@@ -99,8 +106,8 @@ static void objs_init(u32 w) { for (u32 i = 0; i < w; i++) { arena_init(&A_cb[i]
 static Obj *obj_new(u32 w) {
     Arena *ac = &A_cb[w], *ab = &A_body[w];
     ALOCK(ac); Obj *o = a_alloc_u(ac); AUNLOCK(ac);
-    ALOCK(ab); char *s = a_alloc_u(ab); AUNLOCK(ab);
-    *(Obj **)s = o; o->body = s + 8; o->strong = 1; o->weak = 0; o->meta = w; return o;
+    ALOCK(ab); char *s = a_alloc_u(ab); *(Obj **)s = o; o->body = s + 8; AUNLOCK(ab);        // back pointer set before the arena lock drops: the mover reads it
+    o->strong = 1; o->weak = 0; o->meta = w; return o;
 }
 static inline char *body_of(Obj *o) { return o->body; }
 static void obj_free(Obj *o) {                                           // called inside mutate(cache)
@@ -117,18 +124,23 @@ static inline char *body_of(Obj *o) { return o->body; }
 static void obj_free(Obj *o) { Arena *a = chunk_of(o)->owner; ALOCK(a); a_free_u(a, o); AUNLOCK(a); }
 static u64 mapped_bytes(u32 w) { u64 n = 0; for (u32 i = 0; i < w; i++) n += A_obj[i].nmapped; return n * CHUNK; }
 #endif
+static inline void obj_release(Obj *o) { if (__atomic_sub_fetch(&o->strong, 1, __ATOMIC_ACQ_REL) == 0) obj_free(o); }
 
 // ---------------- the cache: Refs to User objects, 4-way set-associative, random replacement ----------------
 typedef struct { u64 key; Obj *ref; } CEnt;
-typedef struct { CEnt *ptr; u32 sets; u8 lk; } Cache;
+typedef struct { CEnt *ptr; u32 sets; } Cache;
+typedef struct { u8 lk; } __attribute__((aligned(64))) ShardLock;
 static Cache g_cache;
+static ShardLock g_lock[64];
+static u32 g_nsh = 1, g_clone, g_skew;
 static Keys g_keys;
 static u32 g_db_us, g_conc, g_workers, g_hit, g_users, g_flush, g_mover;
 static u64 g_reqs_per_worker, g_shift_at;
 static double g_thresh = 0.5;
 static __thread u64 tl_spins;                                   // failed lock attempts by this thread
-#define CLOCK_LOCK(c) while (__atomic_exchange_n(&(c)->lk, 1, __ATOMIC_ACQUIRE)) { tl_spins++; __builtin_ia32_pause(); }
-#define CLOCK_UNLOCK(c) __atomic_store_n(&(c)->lk, 0, __ATOMIC_RELEASE)
+#define SLOCK(i) while (__atomic_exchange_n(&g_lock[i].lk, 1, __ATOMIC_ACQUIRE)) { tl_spins++; __builtin_ia32_pause(); }
+#define SUNLOCK(i) __atomic_store_n(&g_lock[i].lk, 0, __ATOMIC_RELEASE)
+static inline u32 shard_of_set(u32 set) { return set % g_nsh; }
 
 // ---- growable buffer: append may move the store, so it always goes through the header (all modes) ----
 __attribute__((noinline)) static void buf_grow(Buf *b, u32 need) {
@@ -151,6 +163,7 @@ typedef struct Req {
     u32 hname_off[16], hname_len[16], hval_off[16], hval_len[16]; int nh;
     u32 path_off, path_len, tok_off, tok_len;
     u8 val[56];
+    Obj *ref;                                  // clone mode: the cloned Ref<User> held across render
 } Req;
 
 
@@ -216,23 +229,27 @@ static int authenticate(Req *r) {
 
 
 static inline u32 set_of(u64 key) { return (u32)(mix64(key) % g_cache.sets); }
-static int cache_get(Req *r, u64 key) {                              // sync(cache): the body is read inside the block
-    Cache *c = &g_cache; int hit = 0;
-    CLOCK_LOCK(c);
-    { u32 base = set_of(key) * 4;
-      for (int w = 0; w < 4; w++) { CEnt *e = &c->ptr[base + w]; if (e->key == key && e->ref) { memcpy(r->val, body_of(e->ref) + 8, 56); hit = 1; break; } } }
-    CLOCK_UNLOCK(c);
+static int cache_get(Req *r, u64 key) {                              // sync(shard)
+    Cache *c = &g_cache; int hit = 0; u32 set = set_of(key), sh = shard_of_set(set);
+    SLOCK(sh);
+    { u32 base = set * 4;
+      for (int w = 0; w < 4; w++) { CEnt *e = &c->ptr[base + w];
+          if (e->key == key && e->ref) {
+              if (g_clone) { __atomic_add_fetch(&e->ref->strong, 1, __ATOMIC_RELAXED); r->ref = e->ref; }       // clone the Ref; the body is read after the lock is released
+              else memcpy(r->val, body_of(e->ref) + 8, 56);                                                     // read the body inside the block
+              hit = 1; break; } } }
+    SUNLOCK(sh);
     return hit;
 }
-static void cache_put(u32 wk, u64 key, const u8 *val, u64 *s) {     // mutate(cache): a new User replaces one entry; the evicted User is freed here
+static void cache_put(u32 wk, u64 key, const u8 *val, u64 *s) {     // mutate(shard): a new User replaces one entry; the evicted User is released here
     Obj *n = obj_new(wk); memcpy(body_of(n), &key, 8); memcpy(body_of(n) + 8, val, 56);
-    Cache *c = &g_cache;
-    CLOCK_LOCK(c);
-    u32 base = set_of(key) * 4, w = (u32)(rng(s) & 3);
+    Cache *c = &g_cache; u32 set = set_of(key), sh = shard_of_set(set);
+    SLOCK(sh);
+    u32 base = set * 4, w = (u32)(rng(s) & 3);
     for (int i = 0; i < 4; i++) if (c->ptr[base + i].key == 0 || c->ptr[base + i].key == key) { w = (u32)i; break; }
     CEnt *e = &c->ptr[base + w]; Obj *old = e->ref; e->key = key; e->ref = n;
-    if (old) obj_free(old);
-    CLOCK_UNLOCK(c);
+    if (old) obj_release(old);
+    SUNLOCK(sh);
 }
 
 static void db_decode(u64 key, u8 *val) {                            // the "row": 56 bytes derived from the key (decoding cost stands in for a row parse)
@@ -241,13 +258,13 @@ static void db_decode(u64 key, u8 *val) {                            // the "row
     for (int i = 0; i < 56; i++) val[i] = (u8)('a' + val[i] % 26);
 }
 
-static u64 render_and_send(Req *r, u64 key) {
+static u64 render_and_send(Req *r, u64 key, const u8 *val) {
     Buf *o = &r->out, *h = &r->hdr; o->len = 0; h->len = 0;
     APPS(o, "{\"id\":"); appu(o, key);
-    APPS(o, ",\"name\":\""); app(o, r->val, 24);
-    APPS(o, "\",\"email\":\""); app(o, r->val + 24, 16); APPS(o, "@example.com");
+    APPS(o, ",\"name\":\""); app(o, val, 24);
+    APPS(o, "\",\"email\":\""); app(o, val + 24, 16); APPS(o, "@example.com");
     APPS(o, "\",\"tags\":[\"");
-    for (int i = 0; i < 4; i++) { if (i) APPS(o, "\",\""); app(o, r->val + 40 + i * 4, 4); }
+    for (int i = 0; i < 4; i++) { if (i) APPS(o, "\",\""); app(o, val + 40 + i * 4, 4); }
     APPS(o, "\"],\"score\":"); appu(o, mix64(key) % 100000); APPS(o, "}");
     APPS(h, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "); appu(h, o->len); APPS(h, "\r\n\r\n");
     u64 sum = 0;                                                      // the "send": read every output byte once (a checksum stands in for the copy to the socket)
@@ -264,7 +281,8 @@ static int req_run(Task *t) {
     case 0: {
         if (cx->started >= g_reqs_per_worker) { free(r->out.ptr); free(r->hdr.ptr); pool_free(&w->reqs, r); return DONE; }
         u64 pos = cx->started++; r->rid = (u64)cx->idx * g_reqs_per_worker + pos; r->t0 = mono_ns();
-        u64 h = mix64(r->rid); r->key = 1 + h % (pos >= g_shift_at ? g_users / 20 : g_users);   // key and token depend only on the request id: every build serves the same requests
+        u64 h = mix64(r->rid); r->key = 1 + h % (pos >= g_shift_at ? g_users / 20 : g_users);
+        if (g_skew && (h >> 50) % 100 < g_skew) r->key = 1 + (h >> 8) % 1000;   // key and token depend only on the request id: every build serves the same requests
         make_request(r, r->key, r->rid, (u32)((h >> 40) % NTOK));
         u64 id = parse_request(r);
         if (id != r->key || !authenticate(r)) { fprintf(stderr, "request rejected\n"); exit(1); }
@@ -276,7 +294,8 @@ static int req_run(Task *t) {
         db_decode(r->key, r->val); cache_put((u32)cx->idx, r->key, r->val, &cx->rng);
         break;
     }
-    cx->csum += render_and_send(r, r->key);
+    if (r->ref) { cx->csum += render_and_send(r, r->key, (const u8 *)body_of(r->ref) + 8); obj_release(r->ref); r->ref = NULL; }   // clone mode: read the body outside the lock, then drop the Ref
+    else cx->csum += render_and_send(r, r->key, r->val);
     cx->lat[cx->done++] = (u32)(mono_ns() - r->t0);
     r->st = 0; return yield_now(t);
 }
@@ -311,9 +330,21 @@ static void *worker_main(void *arg) {
 
 // ---------------- the mover (split only): evacuates sparse body chunks inside mutate(cache) ----------------
 static volatile int g_stop;
-static u64 g_moved, g_cfreed; static double g_mover_cpu_ms, g_maxhold_us; static u64 g_passes;
+static u64 g_moved, g_cfreed, g_pinned_skips; static double g_mover_cpu_ms, g_maxhold_us; static u64 g_passes;
 #if SPLIT
-static void evacuate_chunk(Arena *a, Chunk *c) {                // caller holds the cache lock and a->lock
+static int chunk_movable(Chunk *c, Arena *a) {                  // caller holds every shard lock and a->lock: no new clone can appear, none can be dropped to zero and freed
+    for (u32 i = 0; i < c->bump; i++) {
+        if (!slot_used(c, i)) continue;
+        char *p = c->slots + (size_t)i * a->slot; Obj *o = *(Obj **)p; u64 key; memcpy(&key, p + 8, 8);
+        if (__atomic_load_n(&o->strong, __ATOMIC_ACQUIRE) != 1) return 0;                          // a request holds a clone of it
+        u32 set = set_of(key); CEnt *e = &g_cache.ptr[set * 4]; int in = 0;
+        for (int w = 0; w < 4; w++) if (e[w].ref == o) in = 1;
+        if (!in) return 0;                                                                        // held by a request alone (evicted, or not yet inserted)
+    }
+    return 1;
+}
+static void evacuate_chunk(Arena *a, Chunk *c) {                // caller holds every shard lock and a->lock
+    if (!chunk_movable(c, a)) { g_pinned_skips++; return; }
     if (c->in_list) list_remove(a, c);
     for (u32 i = 0; i < c->bump; i++) {
         if (!slot_used(c, i)) continue;
@@ -328,8 +359,9 @@ static void *mover_main(void *arg) {
     while (!g_stop) {
         usleep(1000);
         for (u32 w = 0; w < g_workers && !g_stop; w++) {
-            Arena *a = &A_body[w]; Cache *cc = &g_cache;
-            CLOCK_LOCK(cc); ALOCK(a);
+            Arena *a = &A_body[w];
+            for (u32 k = 0; k < g_nsh; k++) SLOCK(k);
+            ALOCK(a);
             u64 t0 = mono_ns();                                            // the hold starts once both locks are ours
             Chunk *c = NULL; u32 n = a->nall;
             for (u32 k = 0, i = cursor[w]; k < 256 && k < n; k++, i = (i + 1) % n) {
@@ -338,7 +370,7 @@ static void *mover_main(void *arg) {
                 cursor[w] = (i + 1) % n;
             }
             if (c) evacuate_chunk(a, c);
-            AUNLOCK(a); CLOCK_UNLOCK(cc);
+            AUNLOCK(a); for (u32 k = g_nsh; k-- > 0;) SUNLOCK(k);
             double hold = (double)(mono_ns() - t0) / 1000.0; if (c && hold > g_maxhold_us) g_maxhold_us = hold;
             g_passes++;
         }
@@ -347,15 +379,15 @@ static void *mover_main(void *arg) {
     return NULL;
 }
 #endif
-static void do_flush(void) {                                      // evict 90% of the cache at random, a batch of sets per lock hold
+static void do_flush(void) {                                      // evict 90% of the cache at random, one set at a time under its shard lock
     Cache *c = &g_cache; u64 s = 99991;
-    for (u32 b = 0; b < c->sets; b += 64) {
-        CLOCK_LOCK(c);
-        for (u32 k = b; k < b + 64 && k < c->sets; k++) for (int w = 0; w < 4; w++) {
+    for (u32 k = 0; k < c->sets; k++) {
+        u32 sh = shard_of_set(k); SLOCK(sh);
+        for (int w = 0; w < 4; w++) {
             CEnt *e = &c->ptr[k * 4 + w];
-            if (e->ref && rng(&s) % 100 < 90) { Obj *o = e->ref; e->ref = NULL; e->key = 0; obj_free(o); }
+            if (e->ref && rng(&s) % 100 < 90) { Obj *o = e->ref; e->ref = NULL; e->key = 0; obj_release(o); }
         }
-        CLOCK_UNLOCK(c);
+        SUNLOCK(sh);
     }
 }
 static int cmpu(const void *a, const void *b) { u32 x = *(u32 *)a, y = *(u32 *)b; return x < y ? -1 : x > y; }
@@ -366,10 +398,12 @@ static const char *opt(int argc, char **argv, const char *k, const char *d) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 6) { fprintf(stderr, "usage: %s hit%% db_us concurrency workers requests_per_worker [users= flush= mover= thresh=]\n", argv[0]); return 2; }
+    if (argc < 6) { fprintf(stderr, "usage: %s hit%% db_us concurrency workers requests_per_worker [users= flush= mover= thresh= shards= clone= skew=]\n", argv[0]); return 2; }
     g_hit = (u32)atoi(argv[1]); g_db_us = (u32)atoi(argv[2]); g_conc = (u32)atoi(argv[3]); g_workers = (u32)atoi(argv[4]); g_reqs_per_worker = strtoull(argv[5], 0, 10);
     g_users = (u32)atol(opt(argc, argv, "users", "1000000")); g_flush = (u32)atoi(opt(argc, argv, "flush", "0")); g_mover = (u32)atoi(opt(argc, argv, "mover", "0"));
     g_thresh = atof(opt(argc, argv, "thresh", "0.5"));
+    g_nsh = (u32)atoi(opt(argc, argv, "shards", "1")); g_clone = (u32)atoi(opt(argc, argv, "clone", "0")); g_skew = (u32)atoi(opt(argc, argv, "skew", "0"));
+    if (g_nsh < 1 || g_nsh > 64) { fprintf(stderr, "shards 1..64\n"); return 2; }
     g_shift_at = g_flush ? g_reqs_per_worker * 4 / 10 : ~0ULL;
     objs_init(g_workers);
     u64 cap = (u64)g_users * g_hit / 100; g_cache.sets = (u32)(cap / 4 ? cap / 4 : 1);
@@ -407,11 +441,11 @@ int main(int argc, char **argv) {
     u64 total = 0, csum = 0, hits = 0, spins = 0; double busy = 0; u32 *all = malloc(g_workers * g_reqs_per_worker * sizeof(u32)); size_t m = 0;
     for (u32 i = 0; i < g_workers; i++) { total += cx[i].done; csum += cx[i].csum; hits += cx[i].hits; spins += cx[i].spins; busy += cx[i].busy_ns; memcpy(all + m, cx[i].lat, cx[i].done * sizeof(u32)); m += cx[i].done; }
     qsort(all, m, sizeof(u32), cmpu);
-    printf("RUN layout=%s hit=%u db_us=%u conc=%u workers=%u reqs=%llu flush=%u mover=%u spins_per_req=%.3f rps=%.0f busy_ns_per_req=%.1f p50_us=%.1f p99_us=%.1f p999_us=%.1f hit_actual=%.1f csum=%llu"
-           " rss_start_mb=%.0f rss_preflush_mb=%.0f rss_postflush_mb=%.0f rss_end_mb=%.0f mapped_start_mb=%.0f mapped_end_mb=%.0f moved=%llu chunks_freed=%llu mover_cpu_ms=%.0f max_hold_us=%.0f\n",
-           SPLIT ? "split" : "combined", g_hit, g_db_us, g_conc, g_workers, (unsigned long long)total, g_flush, g_mover, (double)spins / (double)total, total / wall, busy / (double)total,
+    printf("RUN layout=%s hit=%u db_us=%u conc=%u workers=%u reqs=%llu flush=%u mover=%u shards=%u clone=%u skew=%u spins_per_req=%.3f rps=%.0f busy_ns_per_req=%.1f p50_us=%.1f p99_us=%.1f p999_us=%.1f hit_actual=%.1f csum=%llu"
+           " rss_start_mb=%.0f rss_preflush_mb=%.0f rss_postflush_mb=%.0f rss_end_mb=%.0f mapped_start_mb=%.0f mapped_end_mb=%.0f moved=%llu chunks_freed=%llu mover_cpu_ms=%.0f max_hold_us=%.0f pinned_skips=%llu\n",
+           SPLIT ? "split" : "combined", g_hit, g_db_us, g_conc, g_workers, (unsigned long long)total, g_flush, g_mover, g_nsh, g_clone, g_skew, (double)spins / (double)total, total / wall, busy / (double)total,
            all[m / 2] / 1000.0, all[m * 99 / 100] / 1000.0, all[m * 999 / 1000] / 1000.0, 100.0 * hits / total, (unsigned long long)csum,
            rss_start / 1024.0, rss_pre / 1024.0, rss_post / 1024.0, rss_end / 1024.0, mapped_start, mapped_end,
-           (unsigned long long)g_moved, (unsigned long long)g_cfreed, g_mover_cpu_ms, g_maxhold_us);
+           (unsigned long long)g_moved, (unsigned long long)g_cfreed, g_mover_cpu_ms, g_maxhold_us, (unsigned long long)g_pinned_skips);
     return 0;
 }

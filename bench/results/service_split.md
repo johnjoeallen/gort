@@ -1,7 +1,7 @@
 # Split control block in a whole service (D17, B15 second run)
 
-> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · **2. A whole service**  
-> [← Allocation, dereference, retained memory](split.md) | (last) →
+> D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · **2. A whole service** · [3. Sharded locks and clone-on-hit](b12_ref.md)  
+> [← Allocation, dereference, retained memory](split.md) | [Sharded locks and clone-on-hit →](b12_ref.md)
 
 **Question.** The [first run](split.md) timed the split control block in isolation and found real costs and real memory savings. What does it do to a **whole request**: parse, authenticate, look up a shared cache, wait for a database, render, send? And what does it cost to move bodies while that service is running?
 
@@ -60,7 +60,7 @@ The flush itself frees no memory in either layout (resident is unchanged right a
 ## Caveats
 
 - One process, a simulated database, a single cache lock, 64 B bodies, one allocation per miss. The pessimistic single lock amplifies the four-worker result; the one-worker rows are the ones with no contention.
-- The cache holds the only reference to each User and a hit copies the body inside the lock, so there are no reference-count operations on the hit path. A design that clones a `Ref` out of the cache and reads the body afterwards would add atomic count traffic on the control block, and moving would then also have to wait for those holders; this was not modelled.
+- The cache holds the only reference to each User and a hit copies the body inside the lock, so there are no reference-count operations on the hit path. A design that clones a `Ref` out of the cache and reads the body afterwards, and a sharded cache lock, are measured in the [third run](b12_ref.md): the four-worker loss shrinks from 6 to 27% to 4 to 10% of work per request once the lock is sharded. That run also fixes a harness race (the back pointer was written after the arena lock dropped) that could affect this run's mover rows.
 - The flush scenario is one shape of fragmentation (random eviction, then a narrower working set). Other shapes may leave more or less to recover.
 - Page release of free pages (the cheaper option in the [first run](split.md)) was not run for the combined layout here.
 - Resident figures include about 15 MB of memory that is not in the arenas.
