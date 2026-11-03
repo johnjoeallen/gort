@@ -125,9 +125,14 @@ package redis
 
 fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
     sync(store) {
-        return store.entries              // error: entries is stored by value in Store, so there is no Ref to hand out;
-    }                                     //   this would return a pointer hoisted in the sync block, and it cannot leave it
-}                                         //   fix: return a copy (declare the result Map<Bytes, Entry>) or copy the keys you need
+        return store.entries              // allowed: entries is a Ref<Map>, so this copies the Ref out and takes a count (R7)
+    }
+}
+
+fn countKeys(store: Ref<Store>): usize {
+    let m = peekKeys(store)
+    return m.count                        // error: m is incoming and Map is mutable: needs sync(m)
+}                                         //   fix: sync(m) { return m.count }  (or do the count inside sync(store), before the Ref leaves)
 ```
 
 The messages name the chain and the fix. A missing block on a reference that turns out never to be shared is still reported: that is the over-approximation in R2, and the cost is one extra block that does nothing at run time.

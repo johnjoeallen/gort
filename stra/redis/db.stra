@@ -27,9 +27,9 @@ struct Topic { name: Ref<Value>, subs: Array<Ref<Mailbox<Message>>> }
 // Everything one lock protects. Every field is mutable (written after construction), so every access to a Store that is not provably local
 // goes through sync (read) or mutate (write).
 struct Store {
-    entries: Map<Bytes, Entry>
-    expirations: OrderedSet<Expiry>                      // (when, key), earliest first
-    topics: Map<Bytes, Topic>
+    entries: Ref<Map<Bytes, Entry>>
+    expirations: Ref<OrderedSet<Expiry>>                   // (when, key), earliest first
+    topics: Ref<Map<Bytes, Topic>>
 }
 struct Expiry { when: Instant, key: Bytes }
 struct Reap { channel: Bytes, mailbox: Ref<Mailbox<Message>> }   // a subscription whose connection has ended
