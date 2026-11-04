@@ -21,7 +21,7 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R6. Cost on an unshared object.** `sync`/`mutate` test the flag once at entry. If it is clear, they do nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
 
-**R7. Hoisted pointers.** (A pointer the program gets by calling `deref()` itself is unsafe and outside these rules; D18 item 5.) A raw pointer hoisted inside a block cannot leave it (return, store, capture); a `Ref<T>` copied out takes a count and can. When the dereference goes through a container item or a field (`a.b.c`, `list[i]`), the compiler **injects a local `Ref<T>`** copied out of that item or field before hoisting; it owns a count until scope exit, so a call that removes the object from its container cannot free it under the hoisted pointer. A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
+**R7. No hoisting.** Every access goes through the `Ref`, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling `deref()` itself is unsafe, allowed only inside an `unsafe` block, and never on a shared object outside `sync`/`mutate` (D18 item 8). A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
 
 **R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.
 
@@ -125,7 +125,7 @@ package redis
 
 fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
     sync(store) {
-        return store.entries              // allowed: entries is a Ref<Map>, so this copies the Ref out and takes a count (R7)
+        return store.entries              // allowed: entries is a Ref<Map>, so this copies the Ref out and takes a count
     }
 }
 
@@ -176,6 +176,110 @@ fn statsOnly(store: Ref<Store>): usize {
 ```
 
 The check uses `purgeBatch`'s summary, so it works when `purgeBatch` is in another module and its source is not available.
+
+## Example 6: methods on values, and which lock
+
+A method's `self` is a place (the body itself), so one method serves a `Ref<Point>`, an `Array<Point>` element and an `Array<Ref<Point>>` element, with the same call syntax (D18 item 1). The compiler dereferences and passes the body; the developer writes the block, naming the **owner**: the `Ref`, or the array. The compiler only checks that it is there and strong enough (R1, R4).
+
+```cpp
+struct Point {
+    x: i32
+    y: i32
+    fn move(dx: i32, dy: i32) { self.x += dx; self.y += dy }       // summary: writes self
+    fn len2(): i32 { return self.x * self.x + self.y * self.y }    // summary: reads self
+}
+
+struct World { player: Ref<Point> }       // the handle is write-once, the Point is mutable
+struct Field { pts: Array<Point> }        // elements stored inline
+struct Fleet { ships: Array<Ref<Point>> } // handles to separate objects
+
+fn local() {
+    Ref<Point> r = new Point { x: 0, y: 0 }
+    r.move(1, 2)                          // local: no block
+}
+
+fn step(w: Ref<World>) {
+    mutate(w.player) { w.player.move(1, 0) }     // the Ref is the owner
+    sync(w.player)   { log(w.player.len2()) }
+}
+
+fn drift(f: Ref<Field>, i: usize) {
+    mutate(f.pts) { f.pts[i].move(1, 1) }        // an element has no identity: the array is the owner
+}
+
+fn nudge(f: Ref<Fleet>, i: usize) {
+    Ref<Point> p
+    sync(f.ships) { p = f.ships[i] }             // copy the handle out (takes a count), release the array lock
+    mutate(p)     { p.move(1, 0) }               // then lock the Point itself
+}
+```
+
+Errors the compiler reports:
+
+```cpp
+sync(w.player) { w.player.move(1, 0) }   // error: Point.move writes its receiver; needs mutate(w.player), have sync
+w.player.move(1, 0)                      // error: Point is mutable and w.player is incoming; needs mutate(w.player)
+sync(f.ships) { f.ships[i].move(1, 0) }  // error: the array lock does not cover the Point behind the Ref
+```
+
+The last one assumes each object has its own lock (D18 item 11, Locking: open). Copy or in place is the developer's choice, and the compiler cannot tell which was meant:
+
+```cpp
+sync(f.pts)   { let q = f.pts[i]; q.move(1, 1) }   // q is a copy: f.pts[i] is untouched
+mutate(f.pts) { f.pts[i].move(1, 1) }              // in place
+```
+
+On a growable `Array<T[]>`, an element used as `self` is pinned for the call, so a callee that grows the same array is an error (a compile error when its summary shows it, otherwise a run-time "array pinned" exception):
+
+```cpp
+struct Spawner { fn spawnMore(all: Array<Spawner[]>) { all.push(Spawner {}) } }
+mutate(all) { all[0].spawnMore(all) }    // error: all[0] is pinned for the call and spawnMore grows `all`
+```
+
+| | Developer writes | Compiler does |
+|---|---|---|
+| Lock | `sync`/`mutate` naming the owner | reports a missing or too-weak block |
+| Mode | which one | takes it from the callee summary |
+| Local object | nothing | proves it local, skips the block |
+| Deref and receiver place | nothing | derefs, passes the body |
+| Pin on a growable element | nothing | adds it, drops it when provably unneeded |
+| Copy or in place | `let q = a[i]` or `a[i].move()` | cannot choose |
+| `Array<Ref<T>>` | copy the handle out, then lock the object | lock order is open |
+
+## Example 7: the same field, inline or `Ref`
+
+A field whose type is a struct is stored **inline** when written plainly, and is a **separate counted object** when written `Ref<...>` (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. `stra/` uses both.
+
+```cpp
+struct Limits { maxConns: usize; maxSubs: usize; maxFrame: usize }   // plain data
+struct Scanner { state: u8; need: usize }
+
+struct Db {
+    lim: Limits                 // INLINE: the Db owns its copy; no second object, no pointer chase, nothing else holds it
+    store: Ref<Store>           // REF: a separate object that other holders also reach
+}
+
+struct Reader {
+    lim: Ref<Limits>            // REF: one Limits shared with the server and every connection; a copy per Reader would drift
+    scanner: Scanner            // INLINE: one reader's private state
+}
+
+fn make(shared: Ref<Limits>): Ref<Db> {
+    return new Db { lim: shared, store: new Store {} }   // `lim: shared` copies the body out of the Ref into the Db
+}
+```
+
+| | Inline (`lim: Limits`) | `Ref` (`lim: Ref<Limits>`) |
+|---|---|---|
+| Storage | inside the container's body | its own counted object, with a control block |
+| Identity | none: `==` compares state | yes: `==` compares identity |
+| Assigning it | copies the body | copies the handle and takes a count |
+| Sharing | owned by the container alone | any number of holders |
+| Locking | the owner's block covers it | its own block (D18 item 11, Locking) |
+| Naming it | no `Ref` can name it | a `Ref` is the name |
+| Cost | larger container body | an allocation, a count and a pointer chase |
+
+Rule of thumb used in `stra/`: a part the container exclusively owns is inline (`Db.lim`, `Reader.scanner`, `Route.path`, `InFlight.ring`); anything shared, pooled, optional or returned from a handler is a `Ref` (`Reader.lim`, `Server.cfg`, `Server.table`, `Resp`, `Ref<OutBuf>?`). Library containers, `String` and `Array` are always handles.
 
 ## What the module file carries
 

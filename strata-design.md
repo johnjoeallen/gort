@@ -70,10 +70,10 @@ Strata is **a Go-like language with a sprinkle of Java**, for network servers an
 | Type / construct | Meaning | Lifetime / reclamation |
 |---|---|---|
 | `T` | Ordinary value | Compiler-managed scope, stack, or task storage |
-| `Ref<T>` passed down | Another owner of the same object | Every `Ref<T>` holds a count: a copy or a pass increments it and the drop decrements it (D18 item 7). There is no count-less reference |
+| `Ref<T>` passed down | Another owner of the same object | Every `Ref<T>` holds a count: a copy or a pass increments it and the drop decrements it (D18 item 1). There is no count-less reference that can be named or stored; a method's `self` is the one call-scoped place |
 | `Ref<T>` | Owning reference to a dynamic object | Strong count; destroy object at zero |
 | `WeakRef<T>` | Non-owning observation of a dynamic object | Weak count; control block survives until no weak owners remain |
-| `String` | Immutable string, like an immutable `Ref<Array<u8>>` | Reference counted. A literal lives in a permanent block that a zero count does not free; a substring copies out of its parent (D18 item 7). A `Array<u8>` is a plain byte array, not a `String` |
+| `String` | Immutable string, like an immutable `Ref<Array<u8>>` | Reference counted. A literal lives in a permanent block that a zero count does not free; a substring copies out of its parent (D18 item 4). An `Array<u8>` is a plain byte array, not a `String` |
 | `T[]` | Growable array | Compiler-managed or explicitly allocated backing storage; exact allocation policy TBD |
 
 ### 3.1 Dynamic objects
@@ -172,7 +172,7 @@ Direction (docs/architecture/open-decisions.md D15). A growable container is a s
 
 ## 5. Reference and lifetime analysis
 
-Lifetime parameters are **not** written as named generics. There is no borrow type (D18): a returned reference is a `Ref<T>` that owns a count, so it needs no origin.
+Lifetime parameters are **not** written as named generics. There is no borrow type that can be named or stored (D18; a method's `self` is a call-scoped place): a returned reference is a `Ref<T>` that owns a count, so it needs no origin.
 
 ```cpp
 // app/choose.stra
@@ -269,7 +269,7 @@ mutate(cache) {
 }
 ```
 
-The compiler rejects mutation inside `sync`, unsynchronized access to objects that may be concurrently mutated (precisely defined in 7.3: an object that is not provably local, through a mutable field), and hoisted pointers that escape a protected block. A pointer used *within* the block is hoisted from a `Ref` the scope holds; values crossing the boundary require an independent lifetime (e.g., copy/move or a safely acquired owning reference). Deep copies must be explicit in the semantic specification for compound values, even if the source syntax elides the operation.
+The compiler rejects mutation inside `sync`, unsynchronized access to objects that may be concurrently mutated (precisely defined in 7.3: an object that is not provably local, through a mutable field), and raw pointers that escape a protected block. A pointer used *within* the block is valid for the block only; values crossing the boundary require an independent lifetime (e.g., copy/move or a safely acquired owning reference). Deep copies must be explicit in the semantic specification for compound values, even if the source syntax elides the operation.
 
 Locks are automatically released on every exit path, including errors, exceptions and any supported non-local returns.
 
@@ -316,7 +316,7 @@ There is one reference kind, `Ref<T>`, and no declaration of sharedness. The com
 - `sync` is read-only. Calling a function whose summary writes the argument inside `sync` is a compile error naming the chain (`needs mutate(x), have sync(x)`), checked from the callee's contract, so it works across separately compiled modules.
 - Passing a local object to `spawn`, a message, a global, a non-local object or an escaping closure **publishes** it: the compiler treats it as non-local from that point, and at run time its shared flag is set before the handoff. The flag only goes from clear to set.
 - On an unshared object `sync`/`mutate` test the flag once and do nothing. Behaviour never depends on whether an object is shared, only cost does.
-- A pointer hoisted inside a block cannot leave it. When the dereference goes through a container item or a field (`a.b.c`, `list[i]`), the compiler **injects a local `Ref<T>`** copied out of that item or field before hoisting; it owns a count until scope exit, so a call that removes the object from its container cannot free it under the hoisted pointer.
+- There is no hoisting (D18 item 8): every access goes through the `Ref`, field or container, so a pointer cannot outlive the block that makes it valid.
 
 A module-level `var` is local to each vthread. A module-level `let` is one binding for the whole process, initialised before any vthread starts: the object it holds is published at that point, so a `let` holding a `Ref<T>` is how a process-wide table is declared (`stra/http/store.stra`). There is no `shared var` keyword.
 
@@ -385,7 +385,7 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
    escapes. A throw runs the cleanups of every scope it leaves; cleanup methods never park and never throw. `spawn f(...)`
    requires f to declare no `throws`, so a vthread's root function handles its own errors. Open: how a throw interacts with a
    scope that still has child vthreads (the prototype source assumes the scope waits for them first), and whether a handler
-   type such as `fn(Array<u8>): Resp throws Exception` is the right way to say "may throw anything".
+   type such as `fn(Array<u8>): Ref<Resp> throws Exception` is the right way to say "may throw anything".
    *Syntax direction (illustrative, used in `stra/http/server.stra`):* nullable `T?` with null-check narrowing instead of an
    Option type; methods declared inside the type, with `self` available but optional (needed only to disambiguate a member from
    a parameter and to refer to the value itself); tagged enums with an exhaustive `switch` whose arms are `Pattern -> { ... }` (no `case` keyword, no fallthrough, commas to list several

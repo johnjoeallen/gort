@@ -382,7 +382,7 @@ One real hazard shows in `t->innermost->out = ...`: the callee was given a point
 
 The lazy form copies locals into a frame only when a park occurs. A copy changes the address. Two things can hold the old address:
 
-1. A **raw pointer to a stack local** that the compiler hands to a callee in the park chain, or keeps in another local. A `Ref<T>` is not this case: it holds a count on a slot that never moves (D18 item 7). Only values that are not counted objects (stack values, fixed arrays inside a frame) can be reached by raw pointer.
+1. A **raw pointer to a stack local** that the compiler hands to a callee in the park chain, or keeps in another local. A `Ref<T>` is not this case: it holds a count on a slot that never moves (D18 item 1). Only values that are not counted objects (stack values) can be reached by raw pointer.
 2. A **result or out pointer** (above), which the unwinding step can rebind because it is compiler-generated.
 
 Case 2 is mechanical. Case 1 is not: `let buf = readBuffer(); conn.recv(buf)` is exactly this shape, and extremely common.

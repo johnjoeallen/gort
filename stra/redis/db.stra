@@ -40,9 +40,9 @@ struct Db {
     purgeWake: Signal                                    // set() tells the purge vthread that the earliest expiry may have moved
     closed: Flag                                         // the purge vthread ends when it is set
     reaper: Ref<Mailbox<Reap>>                           // sized maxConns * maxSubs, the most subscriptions that can exist, so a push cannot fail
-    lim: Limits
+    lim: Limits                                          // a copy owned by the Db and stored inline: plain data, write-once, no separate object
 
-    static fn make(lim: Limits): Ref<Db> {                // the result is fresh (a new allocation nothing else refers to), so a caller may treat it as local
+    static fn make(lim: Ref<Limits>): Ref<Db> {                // the result is fresh (a new allocation nothing else refers to), so a caller may treat it as local
         return new Db { store: new Store {}, purgeWake: Signal.make(), closed: Flag.make(),
                         reaper: Mailbox<Reap>.make(lim.maxConns * lim.maxSubs), lim: lim }
     }

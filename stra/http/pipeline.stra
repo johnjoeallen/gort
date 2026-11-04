@@ -6,13 +6,13 @@ import runtime
 // What gets sent: completed responses appended in request order into one pool buffer, ready for one write. Dropping a
 // Prefix returns its buffer to the pool.
 struct Prefix {
-    out: OutBuf? = null
+    out: Ref<OutBuf>? = null
     length: usize = 0
     closes: bool = false
 
     static fn empty(): Prefix { return Prefix {} }
     fn hasRoomFor(n: usize): bool { return length + n <= OUTSZ }
-    fn append(resp: Resp) {
+    fn append(resp: Ref<Resp>) {
         if (out == null) self.out = outPool.get()
         out.data[length .. length + resp.bytes.length].copyFrom(resp.bytes)
         self.length += resp.bytes.length
@@ -26,13 +26,13 @@ struct Prefix {
 // InFlight is the pipeline of ONE connection. It owns the ring and the rules that need to see the whole pipeline. A request
 // in flight is just a Task<Resp>: a child that may still be running, or `Task.completed(resp)` for an inline or error response.
 struct InFlight {
-    ring: Ring<Task<Resp>>                                   // the ring's capacity is the depth
+    ring: Ring<Task<Ref<Resp>>>                                        // owned by this pipeline alone: stored inline; its capacity is the depth
     unsafeBusy: bool = false                                // an unsafe request is in flight
 
     static fn of(depth: usize): InFlight { return InFlight { ring: Ring.withCapacity(depth) } }
     fn length(): usize { return ring.length() }
     fn isEmpty(): bool { return ring.isEmpty() }
-    fn push(t: Task<Resp>) { ring.push(t) }
+    fn push(t: Task<Ref<Resp>>) { ring.push(t) }
     fn markUnsafe() { self.unsafeBusy = true }              // cleared when the pipeline drains
 
     // The barrier rules. An unsafe request, or a route declared unbounded, is admitted only when nothing is in flight;

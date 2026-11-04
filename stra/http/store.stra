@@ -9,7 +9,7 @@ package http
 let users: Ref<UserTable> = UserTable.make()
 let importer: Ref<RowImporter> = RowImporter.make()
 
-struct UserState { rows: Map<i64, User>, nextId: i64 = 1 }          // mutable: every access is inside sync/mutate
+struct UserState { rows: Ref<Map<i64, User>>, nextId: i64 = 1 }          // mutable: every access is inside sync/mutate
 struct UserTable {
     state: Ref<UserState>                                            // write-once: set in make(), so reading `state` needs no block
     static fn make(): Ref<UserTable> { return new UserTable { state: new UserState {} } }

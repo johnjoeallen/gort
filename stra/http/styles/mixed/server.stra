@@ -18,35 +18,35 @@ let routes = [
     Route.upload("/import",   importRows,  Cost.Unbounded, 2.gb),  // a huge document: spooled, then mapped and streamed
 ]
 
-fn index(head: Array<u8>): Resp { return ok(HELLO) }
+fn index(head: Array<u8>): Ref<Resp> { return ok(HELLO) }
 
-fn echo(head: Array<u8>): Resp {
+fn echo(head: Array<u8>): Ref<Resp> {
     sleep(queryUs(head))   // stands in for a DB call
     return ok(pathParam(head) + "\n")
 }
 
-fn report(head: Array<u8>): Resp { return ok(expensiveSummary()) }   // long, but never parks: Never, not [yield], so it holds the worker for its ~1 ms (hence Cost.Unbounded)
+fn report(head: Array<u8>): Ref<Resp> { return ok(expensiveSummary()) }   // long, but never parks: Never, not [yield], so it holds the worker for its ~1 ms (hence Cost.Unbounded)
 
-fn save(head: Array<u8>): Resp { return ok(HELLO) }   // server.c: POST / has no body and changes no state;
+fn save(head: Array<u8>): Ref<Resp> { return ok(HELLO) }   // server.c: POST / has no body and changes no state;
                                                   //     it exists to be an UNSAFE request (a barrier)
 
 // Handlers that take a body. Which reader ran decided where it lives.
-fn receive(head: Array<u8>, body: Ref<Body>): Resp {   // server.c: POST /api
+fn receive(head: Array<u8>, body: Ref<Body>): Ref<Resp> {   // server.c: POST /api
     return ok("stored " + body.length() + " bytes in memory crc32=" + hex(body.digest()) + "\n")
 }
 
-fn createUser(head: Array<u8>, body: Ref<Body>): Resp throws Exception {
+fn createUser(head: Array<u8>, body: Ref<Body>): Ref<Resp> throws Exception {
     // The standard reader capped this body (maxBody, 1 MB by default) and holds all of it in memory. The parser has its own limits as
     // well: a small body can still be a deeply nested one.
     let user = json.parse<User>(body.bytes(), JsonLimits { maxDepth: 32, maxStringBytes: 4096 })
     return created(users.insert(user))
 }
 
-fn storeUpload(head: Array<u8>, upload: Ref<Upload>): Resp {   // server.c: POST /upload
+fn storeUpload(head: Array<u8>, upload: Ref<Upload>): Ref<Resp> {   // server.c: POST /upload
     return ok("stored " + upload.length() + " bytes in file crc32=" + hex(upload.digest()) + "\n")
 }
 
-fn[yield] importRows(head: Array<u8>, upload: Ref<Upload>): Resp throws Exception {   // (CPU-bound over a big input: declared Unbounded; [yield] lets the compiler yield in the row loop, so other connections and cancellation get a turn)
+fn[yield] importRows(head: Array<u8>, upload: Ref<Upload>): Ref<Resp> throws Exception {   // (CPU-bound over a big input: declared Unbounded; [yield] lets the compiler yield in the row loop, so other connections and cancellation get a turn)
     // The body is already a file; the handler never holds the document as a value. It maps the file and runs a streaming parser over it,
     // so memory stays constant however large the upload is.
     let rows = json.stream<Row>(upload.map())
@@ -58,8 +58,8 @@ fn[yield] importRows(head: Array<u8>, upload: Ref<Upload>): Resp throws Exceptio
 
 // ---------- the server type ----------
 struct Server {
-    table: ResponseTable
-    cfg: ServerConfig
+    table: Ref<ResponseTable>
+    cfg: Ref<ServerConfig>
 
     // The route lookup is pure, so no frame (server.c: route(), is_post(), is_slow()). null: no such route.
     fn lookup(head: Array<u8>): Route? { return routes.find(head) }
@@ -82,7 +82,7 @@ fn Server::handleSequential(conn: Conn): Ending throws IoError {
     var input = Reader.of(conn, self.cfg)
     var ending = Ending.ClientClosed
     while (true) {
-        var req: Request?
+        var req: Ref<Request>?
         try {
             req = input.nextRequest()   // parks while idle or mid-request
         } catch (e: TooLarge) {
@@ -235,7 +235,7 @@ fn Server::runConnection(conn: Conn) {
 }   // lingerClose consumes `conn`; otherwise it is closed here
 
 fn main(port: u16, workers: usize) {
-    let server = Server { table: ResponseTable.build(), cfg: ServerConfig() }                  // the defaults; the host can change any field
+    let server = Server { table: ResponseTable.build(), cfg: new ServerConfig() }                  // the defaults; the host can change any field
     for (core in 0..workers) {
         spawnWorker(core, fn() {                                                                   // the worker's root: throws nothing
             try {

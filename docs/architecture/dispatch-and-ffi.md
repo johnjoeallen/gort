@@ -16,7 +16,7 @@ This is the answer to "previously valid programs becoming unsafe when implementa
 
 ## Function values and callbacks
 
-A function-typed value (`fn(Array<u8>): Resp throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
+A function-typed value (`fn(Array<u8>): Ref<Resp> throws Exception`) carries a bound the same way. Unannotated, it is `May`. A value that can be shown `Never` at the point where it is created (a lambda with no parking calls) can be passed where a `May` bound is expected. The reverse needs the assertion.
 
 Functions that take function-typed parameters have a conditional summary `Cond(P)`: `forEach(list, f)` parks iff `f` may. At a call site where `f` is statically known, the condition collapses and the call binds to the plain or the suspendable form. At one where it is not, the parameter's declared bound is used.
 

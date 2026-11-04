@@ -7,7 +7,7 @@ import runtime
 
 struct Writer {
     conn: Ref<Conn>
-    out: OutBuf? = null
+    out: Ref<OutBuf>? = null
     used: usize = 0
 
     static fn of(conn: Ref<Conn>): Writer { return Writer { conn: conn } }

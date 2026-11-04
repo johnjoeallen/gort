@@ -16,7 +16,7 @@ struct Arg { kind: ArgKind, start: usize, end: usize, number: u64 }
 // A command frame's arguments. About 2 KB, so pool-allocated like OutBuf: never a local and never a field a connection keeps while idle.
 // The Reader takes one from the pool when a frame starts to arrive and gives it back in finish().
 struct Args {
-    items: Arg[MAX_ARGS]
+    items: Array<Arg[MAX_ARGS]>
     count: usize = 0
 }
 extern let argsPool: ArgsPool

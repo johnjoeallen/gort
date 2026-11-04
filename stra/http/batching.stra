@@ -17,7 +17,7 @@ import runtime
 // destructor that waited could stall task teardown); code that must know the data went out calls flush(), which may park.
 struct BatchedWriter {
     conn: Ref<Conn>
-    out: OutBuf? = null             // exists only while responses are held
+    out: Ref<OutBuf>? = null             // exists only while responses are held
     length: usize = 0
     held: usize = 0
     maxBatch: usize             // bound 1: at most this many responses are held
@@ -28,7 +28,7 @@ struct BatchedWriter {
     static fn of(conn: Ref<Conn>, maxBatch: usize, maxHold: Duration): BatchedWriter {
         return BatchedWriter { conn: conn, maxBatch: maxBatch, maxHold: maxHold }
     }
-    fn hold(resp: Resp) {   // copies into `out`
+    fn hold(resp: Ref<Resp>) {   // copies into `out`
         if (out == null) { self.out = outPool.get(); self.length = 0; self.oldest = Instant.now() }
         out.data[length .. length + resp.bytes.length].copyFrom(resp.bytes)
         self.length += resp.bytes.length
@@ -53,7 +53,7 @@ struct BatchedWriter {
 // one long handler; the route's `cost` declaration (section 2) does, by flushing before an unbounded route runs.
 // `[nopark]` is part of the handler's type: the function passed here must be one the compiler has shown can never park, so batching is allowed.
 // A handler that may park, including one marked [yield], is not accepted.
-fn handleBatched(conn: Conn, handler: fn[nopark](Array<u8>): Resp, maxBatch: usize, cfg: Ref<ServerConfig>): Ending throws IoError, TooLarge {
+fn handleBatched(conn: Conn, handler: fn[nopark](Array<u8>): Ref<Resp>, maxBatch: usize, cfg: Ref<ServerConfig>): Ending throws IoError, TooLarge {
     var input = Reader.of(conn, cfg)
     var out = BatchedWriter.of(conn, maxBatch, 50us)
     while (true) {

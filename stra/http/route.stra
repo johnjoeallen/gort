@@ -21,9 +21,9 @@ package http
 // a chunked body as soon as a chunk would take it over. Nothing here parses a body of any size into a value; large documents get a streaming
 // parser over the mapped file.
 enum Handler {
-    Plain(fn(Array<u8>): Resp throws Exception)
-    Api(fn(Array<u8>, Ref<Body>): Resp throws Exception)
-    Upload(u64, fn(Array<u8>, Ref<Upload>): Resp throws Exception)        // (limit, handler)
+    Plain(fn(Array<u8>): Ref<Resp> throws Exception)
+    Api(fn(Array<u8>, Ref<Body>): Ref<Resp> throws Exception)
+    Upload(u64, fn(Array<u8>, Ref<Upload>): Ref<Resp> throws Exception)        // (limit, handler)
 
     fn isPlain(): bool {
         switch (self) {
@@ -42,28 +42,28 @@ enum Payload {
 
 struct Route {
     method: Method
-    path: Pattern
+    path: Pattern                                        // owned by the route alone: stored inline
     handler: Handler
     safe: bool
     cost: Cost
 
-    static fn get(path: String, handler: fn(Array<u8>): Resp throws Exception, cost: Cost): Route {
+    static fn get(path: String, handler: fn(Array<u8>): Ref<Resp> throws Exception, cost: Cost): Route {
         return Route { method: Method.Get, path: Pattern(path), handler: Handler.Plain(handler), safe: true, cost: cost }
     }
-    static fn post(path: String, handler: fn(Array<u8>): Resp throws Exception, cost: Cost): Route {
+    static fn post(path: String, handler: fn(Array<u8>): Ref<Resp> throws Exception, cost: Cost): Route {
         return Route { method: Method.Post, path: Pattern(path), handler: Handler.Plain(handler), safe: false, cost: cost }
     }
     // A route with a body is unsafe by definition (a barrier both ways).
-    static fn postApi(path: String, handler: fn(Array<u8>, Ref<Body>): Resp throws Exception, cost: Cost): Route {
+    static fn postApi(path: String, handler: fn(Array<u8>, Ref<Body>): Ref<Resp> throws Exception, cost: Cost): Route {
         return Route { method: Method.Post, path: Pattern(path), handler: Handler.Api(handler), safe: false, cost: cost }
     }
-    static fn upload(path: String, handler: fn(Array<u8>, Ref<Upload>): Resp throws Exception, cost: Cost, limit: u64): Route {
+    static fn upload(path: String, handler: fn(Array<u8>, Ref<Upload>): Ref<Resp> throws Exception, cost: Cost, limit: u64): Route {
         return Route { method: Method.Post, path: Pattern(path), handler: Handler.Upload(limit, handler), safe: false, cost: cost }
     }
 }
 
 
-fn runHandler(route: Ref<Route>, head: Array<u8>, payload: Payload, table: Ref<ResponseTable>): Resp {
+fn runHandler(route: Ref<Route>, head: Array<u8>, payload: Payload, table: Ref<ResponseTable>): Ref<Resp> {
     try {
         switch (route.handler) {
             Plain(h)      -> { return h(head) }

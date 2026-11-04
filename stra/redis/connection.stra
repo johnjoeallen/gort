@@ -7,12 +7,12 @@ import runtime
 
 struct Reader {
     conn: Ref<Conn>
-    lim: Ref<Limits>
+    lim: Ref<Limits>                                    // shared with the server and every other connection, so a handle
     buf: Array<u8>? = null
     start: usize = 0
     end: usize = 0
-    scanner: Scanner = Scanner {}
-    args: Args? = null                                   // pooled; held only while a frame is arriving or being handled
+    scanner: Scanner = Scanner {}                        // owned by this reader alone, so it is stored inline
+    args: Ref<Args>? = null                                   // pooled; held only while a frame is arriving or being handled
     len: usize = 0                                      // length of the frame returned last; finish() consumes it
 
     static fn of(conn: Ref<Conn>, lim: Ref<Limits>): Reader { return Reader { conn: conn, lim: lim } }

@@ -79,11 +79,11 @@ extern impl Array<u8> {                                       // the runtime's g
     fn moveWithin(range, to)                             // memmove inside the array
 }
 
-struct OutBuf { data: u8[OUTSZ] }                        // pool-allocated; never a local, so never inside a frame. (Moved here from http/types.stra:
+struct OutBuf { data: Array<u8[OUTSZ]> }                        // pool-allocated; never a local, so never inside a frame. (Moved here from http/types.stra:
                                                          // it is the runtime's, and the HTTP and Redis libraries both use it.)
 extern let outPool: OutPool                              // fixed-size output buffers
 extern struct OutPool {
-    fn get(): OutBuf                                     // a buffer whose cleanup() returns it to the pool
+    fn get(): Ref<OutBuf>                                     // a buffer whose cleanup() returns it to the pool
 }
 
 extern struct File {
