@@ -692,6 +692,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#example-8-a-plain-new-and-when-it-is-counted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 8: a plain new, and when it is counted
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-module-file-carries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1194,6 +1205,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#example-8-a-plain-new-and-when-it-is-counted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 8: a plain new, and when it is counted
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-module-file-carries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1581,6 +1603,24 @@
 </tbody>
 </table>
 <p>Rule of thumb used in <code>gort/</code>: a part the container exclusively owns is inline (<code>Db.lim</code>, <code>Reader.scanner</code>, <code>Route.path</code>, <code>InFlight.ring</code>); anything shared, pooled, optional or returned from a handler is a <code>Ref</code> (<code>Reader.lim</code>, <code>Server.cfg</code>, <code>Server.table</code>, <code>Resp</code>, <code>Ref&lt;OutBuf&gt;?</code>). Library containers, <code>String</code> and <code>Array</code> are always handles.</p>
+<h2 id="example-8-a-plain-new-and-when-it-is-counted">Example 8: a plain <code>new</code>, and when it is counted<a class="headerlink" href="#example-8-a-plain-new-and-when-it-is-counted" title="Permanent link">&para;</a></h2>
+<p>The compiler decides at each <code>new</code> whether the value is ever converted to a <code>Ref</code> on any path (assignment, a <code>Ref</code> parameter, a return, a store, a capture, <code>spawn</code>). If so, the object is counted from allocation and the scope holds it in an injected <code>Ref</code>. If not, it is scope-owned: a bare body with no control block, freed at exit (D18 item 5).</p>
+<div class="highlight"><pre><span></span><code><span class="n">fn</span><span class="w"> </span><span class="nf">demo</span><span class="p">(</span><span class="n">flag</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Point</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="o">:</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="c1">// COUNTED: p is converted to a Ref below (show, return), so p is the injected Ref</span>
+<span class="w">    </span><span class="n">p</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w">                         </span><span class="c1">// a method call: self is a place, no conversion</span>
+<span class="w">    </span><span class="n">let</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="w">                            </span><span class="c1">// a copy of the body (a value), no conversion</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">flag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">show</span><span class="p">(</span><span class="n">p</span><span class="p">)</span><span class="w">                          </span><span class="c1">// show takes Ref&lt;Point&gt;: a conversion on one path is enough</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">p</span><span class="w">                             </span><span class="c1">// moves the injected Ref out: the Point outlives demo</span>
+<span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="n">fn</span><span class="w"> </span><span class="nf">temp</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">let</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Builder</span><span class="w"> </span><span class="p">{}</span><span class="w">               </span><span class="c1">// never converted to a Ref on any path: scope-owned</span>
+<span class="w">    </span><span class="n">b</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="p">}</span><span class="w">                                        </span><span class="c1">// freed here; may live in a frame, with no control block and no counts</span>
+</code></pre></div>
+<p>The decision is conservative: a conversion on a path that is rarely taken still makes the site counted for every execution. The compiler reports it ("counted because of line N") so the cost is visible, and writing <code>Ref&lt;Point&gt; p = new Point {...}</code> makes the choice explicit.</p>
 <h2 id="what-the-module-file-carries">What the module file carries<a class="headerlink" href="#what-the-module-file-carries" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>Db.get      self.store: read via sync, result: not fresh, throws: none, park: May
 Db.make     result: fresh, retains lim
@@ -1603,7 +1643,7 @@ purgeBatch  param 0: write
 <h2 id="open">Open<a class="headerlink" href="#open" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Publishing a graph.</strong> Setting the flag on everything reachable costs a walk at the publish. Alternatives: refuse to publish an object whose graph has local-only parts that are not themselves being published; or make <code>spawn</code> and message sends take only values whose reachable graph is already shared or immutable.</li>
-<li><strong>Where the lock word lives.</strong> In every control block (costs bytes on every <code>new</code>), or allocated at the first publish (costs an indirection).</li>
+<li><strong>Where the lock word lives.</strong> In every control block (costs bytes on every promoted object), or allocated at the first publish (costs an indirection).</li>
 <li><strong>Counts per instance.</strong> A flag test in each count operation, or atomic always for non-local references. Needs <code>refcount_bench</code> on realistic access patterns.</li>
 <li><strong>Write-once across modules.</strong> A field is write-once if no code in its defining module writes it. Public fields that other modules may write need either a mutability declaration or a rule that they are mutable by default.</li>
 <li><strong>Immutable types.</strong> Inferred from R3 as above; whether to also let the programmer assert it (for a compile error if a later change breaks it) is undecided.</li>

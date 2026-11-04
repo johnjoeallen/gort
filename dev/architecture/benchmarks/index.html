@@ -1254,6 +1254,12 @@
 <td>Short-lived <code>new</code> in the shared arena against a stack or task region; fixed <code>Array&lt;T&gt;</code> block (control block outside, elements in a chunk) against a general allocator; <code>Array&lt;T[]&gt;</code> growth by block reallocation; the cost of two allocations per array</td>
 <td>Decides whether stack placement and the array chunk model are worth building.</td>
 </tr>
+<tr>
+<td>B18</td>
+<td>External control block, no mover (D18)</td>
+<td>Every counted object has its control block in a never-moving slab with an absolute pointer to a bare body in a type chunk, against a combined unit and against a per-chunk side table of counts: allocation, dereference (sequential, random, pointer chase), count traffic, memory kept with a lingering <code>WeakRef</code>, and the allocation cost of a body plus a control block</td>
+<td>Decides whether B (external control block) stands, or C or A replace it. Not run.</td>
+</tr>
 </tbody>
 </table>
 <p>Metrics for all: throughput, CPU utilisation (user, system), p50/p99/p99.9 latency, resident memory, allocations, context switches.</p>
