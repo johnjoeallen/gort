@@ -12,7 +12,7 @@ a compiler audit or an independent reproduction of the benchmarks.
 
 ## Positioning (added after this assessment)
 
-This review compares Gort with Rust and Go. The project has since been positioned as a Go-like language with a sprinkle of Java, for servers and services, and not as a systems language (spec 1.1, `docs/decisions.md`). Read the Rust comparisons below as a performance reference ceiling; the comparisons with Go and Java are the ones that set the bar.
+This review compares Gort with Rust and Go. The project has since been positioned as a small compiled language for servers and services, with C++-style value types, Go-style embedding and built-in reference counting, and not as a systems language (spec 1.1, `docs/decisions.md`). Read the Rust comparisons below as a performance reference ceiling; the comparisons with Go and Java are the ones that set the bar.
 
 ## Overall judgment
 

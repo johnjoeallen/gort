@@ -2,7 +2,7 @@
 
 **Status:** exploratory design draft (not an implementation or language standard)  
 **Origin:** independent language design informed by Goose’s compiler-managed stacks and virtual-memory techniques, Rust’s ownership guarantees, and virtual-thread runtimes  
-**Primary goal:** memory-safe, high-performance concurrent server programming with Go-like simplicity (plus a sprinkle of Java), without a tracing garbage collector. See 1.1 for the positioning.
+**Primary goal:** memory-safe, high-performance concurrent server programming with C++-style value types and Go-style embedding, and without a tracing garbage collector. See 1.1 for the positioning.
 
 > Gort is an independent language proposal, not a Goose fork or a Rust dialect. All Gort examples are illustrative and not yet implemented. Its compiler and runtime may reuse ideas or components from other projects where technically and legally appropriate.
 
@@ -22,7 +22,7 @@ Gort explores retaining those ideas where useful while supporting:
 
 ### 1.1 Positioning
 
-Gort is **a Go-like language with a sprinkle of Java**, for network servers and services. It is not a systems language and does not compete with Rust or C/C++ for that work: it has a runtime (a scheduler and a heap), it exposes no lifetime annotations, custom allocators or raw pointers outside the foreign-call boundary, and it trades that control for a simpler model. Its comparison set is Go and Java; Rust is a performance reference, not a rival.
+Gort is **a small compiled language for network servers and services: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector.** A struct is a value, stored inline and copied by value; reuse is by composition (`with` embeds structs and promotes their fields and functions, `:` lists interfaces, D16), with no class inheritance; `Ref<T>`, `Array<T>` and `String` are language elements with built-in counts (D18). It is not a systems language and does not compete with Rust or C/C++ for that work: it has a runtime (a scheduler and a heap), it exposes no lifetime annotations, custom allocators or raw pointers outside the foreign-call boundary, and it trades that control for a simpler model. Its comparison set is Go and Java; Rust is a performance reference, not a rival.
 
 - **From Go (goals, none built yet):** a small language; plain sequential code with cheap concurrent tasks and blocking-style I/O (virtual threads, no `async`/`await`, so no function colouring; Rust and C++20 coroutines have it); little ceremony; fast builds (C++ and Rust are slow here); deployment as one native program (Rust and C++ do this too; Java needs a JVM or GraalVM native image); packages that follow the folder layout (Java does too).
 - **From Java (goals):** structs that carry their functions ("C with classes": every function of a type is listed in its struct body, written there in full or implemented out of line, never as a free-floating receiver function), interfaces, exceptions with `throws` (checked exceptions; Go uses error values, Rust `Result`, and C++ has no static `throws` since C++17), structured concurrency (`scope`; a preview API in Java as of JDK 25, a library pattern such as `errgroup` in Go), generics (Java erases them, Gort monomorphises as C++ and Rust do), and the virtual-thread model (Java 21, Go's goroutines). Gort's virtual threads are cooperative and never time-sliced, as in Java; Go has preempted long-running goroutines since 1.14.

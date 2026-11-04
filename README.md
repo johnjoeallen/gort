@@ -1,16 +1,37 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img alt="Gort" src="docs/assets/logo-light.svg" height="110">
+    <img alt="Gort" src="docs/assets/logo-light.svg" height="200">
   </picture>
 </p>
 
 # Gort
 
-A Go-like language with a sprinkle of Java, for network servers and services: plain sequential code, virtual threads, classes and exceptions, no tracing garbage collector (compiler-managed lifetimes and deterministic cleanup), compile-time-checked shared state, native output through C. It is not a systems language and does not compete with Rust or C/C++. The design is in `gort-design.md`.
-Nothing here compiles Gort yet; the `.gort` files are the source as it would be written, and `c/generated/` holds the C a compiler would emit for them (written by hand and kept in step by the tests).
+**A small compiled language for network servers: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector.**
+
+Gort is a design for a small, statically typed language for network servers and services. Types are plain values, as in C++: a struct is stored inline and copied by value. Reuse is by composition, as in Go: a struct embeds other structs with `with` (their fields and functions are promoted) and satisfies interfaces with `:`, with no class inheritance. Sharing is explicit and counted: `Ref<T>`, `Array<T>` and `String` are language elements with built-in reference counts, so there is no tracing garbage collector and cleanup is deterministic. Concurrency is plain blocking-style code on virtual threads, and the compiler checks that shared mutable state is only touched under `sync` or `mutate`. It compiles to C. Nothing is implemented yet.
 
 *Gort is also a small town in County Galway, in the west of Ireland. The name comes from the Irish word for a field.*
+
+> [!NOTE]
+> **Status.** Exploratory. There is no compiler yet. The `.gort` files in the repository are Gort as it would be written, and the C beside them is what a compiler would emit, written by hand and kept honest by tests and benchmarks.
+
+## What this is
+
+A record of how the design got where it is: what was measured, what was decided and why, and what turned out to be wrong. Each step started as a question and ended as a number or a rule.
+
+[Start the journey](docs/journey/index.md) · [Decisions so far](docs/decisions.md) · [The full design](gort-design.md) · [The docs site](https://johnjoeallen.github.io/gort/)
+
+## The design in six lines
+
+1. Plain values carry no reference-count header; a `Ref<T>` is a counted handle to an object made by `new`, and `WeakRef<T>` breaks cycles.
+2. Lifetimes are inferred, not written.
+3. Shared state is accessed through `sync` (read) and `mutate` (write) blocks; entering one may park the virtual thread.
+4. Nothing is hidden except virtual threads and parking: no implicit buffering, batching or retry.
+5. Every unbounded input has a declared limit, enforced before the data is held.
+6. Errors are exceptions declared with `throws`; cleanup never parks and never throws.
+
+## The repository
 
 ```
 gort-design.md     the design specification

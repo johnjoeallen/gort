@@ -10,7 +10,7 @@ Gort keeps those ideas and adds what a server needs:
 - deterministic cleanup of files, sockets and locks
 - reference safety without writing lifetime names like `'a`
 
-It is not a Goose fork or a Rust dialect, and it does not try for feature parity with Rust. Understandable semantics win over zero overhead at all costs. Where it sits: a Go-like language with a sprinkle of Java for servers and services, not a systems language (spec 1.1). Rust appears in the story below as a performance reference, because the first benchmarks needed a native, no-GC baseline.
+It is not a Goose fork or a Rust dialect, and it does not try for feature parity with Rust. Understandable semantics win over zero overhead at all costs. Where it sits: a small compiled language for servers and services, with C++-style value types, Go-style embedding and built-in reference counting, not a systems language (spec 1.1). Rust appears in the story below as a performance reference, because the first benchmarks needed a native, no-GC baseline.
 
 ## The first rules
 

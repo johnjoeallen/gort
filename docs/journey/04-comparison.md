@@ -1,6 +1,6 @@
 # 4. Measured Against Go, Java and Rust
 
-Gort is positioned as a Go-like language with a sprinkle of Java (see [Why](01-why.md)), so Go and Java are the comparison that sets the bar and Rust (Tokio) is a reference ceiling. This chapter has what was measured: the same design written in Rust and Go (a pipelined server, and plain `net/http`), driven by the same tests and load generator, and a Java virtual-thread microbenchmark. The Gort column is hand-written C that follows the design, not output of a Gort compiler, which does not exist yet.
+Gort is positioned as a small compiled language for servers (see [Why](01-why.md)), so Go and Java are the comparison that sets the bar and Rust (Tokio) is a reference ceiling. This chapter has what was measured: the same design written in Rust and Go (a pipelined server, and plain `net/http`), driven by the same tests and load generator, and a Java virtual-thread microbenchmark. The Gort column is hand-written C that follows the design, not output of a Gort compiler, which does not exist yet.
 
 | Pipelined, 1 worker | requests/s |
 |---|---|
