@@ -1,11 +1,13 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img alt="Gort" src="docs/assets/logo-light.svg" height="90">
+    <img alt="Gort" src="docs/assets/logo-light.svg" height="110">
   </picture>
 </p>
 
 # Gort
+
+*Gort is also a small town in County Galway, in the west of Ireland. The name comes from the Irish word for a field.*
 
 A Go-like language with a sprinkle of Java, for network servers and services: plain sequential code, virtual threads, classes and exceptions, no tracing garbage collector (compiler-managed lifetimes and deterministic cleanup), compile-time-checked shared state, native output through C. It is not a systems language and does not compete with Rust or C/C++. The design is in `gort-design.md`.
 Nothing here compiles Gort yet; the `.gort` files are the source as it would be written, and `c/generated/` holds the C a compiler would emit for them (written by hand and kept in step by the tests).

@@ -1,9 +1,11 @@
 <p align="center">
-  <img alt="Gort" src="assets/logo-light.svg#only-light" height="90">
-  <img alt="Gort" src="assets/logo-dark.svg#only-dark" height="90">
+  <img alt="Gort" src="assets/logo-light.svg#only-light" height="110">
+  <img alt="Gort" src="assets/logo-dark.svg#only-dark" height="110">
 </p>
 
 # Gort
+
+*Gort is also a small town in County Galway, in the west of Ireland. The name comes from the Irish word for a field.*
 
 Gort is a design for a Go-like language with a sprinkle of Java, aimed at network servers and services. From Go: a small language, plain sequential code, cheap concurrent tasks with blocking-style I/O, little ceremony. From Java: classes, interfaces, exceptions, structured concurrency, packages that follow folders. Beyond both: no tracing garbage collector (compiler-managed lifetimes, deterministic cleanup) and compile-time-checked shared state, which neither Go nor Java has. It is not a systems language: it has a runtime, and it does not compete with Rust or C/C++. There are no lifetime annotations.
 
