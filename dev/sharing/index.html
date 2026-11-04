@@ -670,6 +670,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#example-6-methods-on-values-and-which-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 6: methods on values, and which lock
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-7-the-same-field-inline-or-ref" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 7: the same field, inline or Ref
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-module-file-carries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1150,6 +1172,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#example-6-methods-on-values-and-which-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 6: methods on values, and which lock
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-7-the-same-field-inline-or-ref" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example 7: the same field, inline or Ref
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-module-file-carries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1227,7 +1271,7 @@
 <p><strong>R4. Modes.</strong> <code>sync</code> is read-only; <code>mutate</code> is exclusive. Writing needs <code>mutate</code>. A call made inside <code>sync</code> to a function whose summary writes the argument is an error: <code>needs mutate(store), have sync(store)</code>. This is checked even for an object that turns out never to be shared, so behaviour does not depend on sharing.</p>
 <p><strong>R5. Publishing.</strong> A reference to a local object crosses a vthread boundary when it is passed to <code>spawn</code>, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is <em>shared</em>: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).</p>
 <p><strong>R6. Cost on an unshared object.</strong> <code>sync</code>/<code>mutate</code> test the flag once at entry. If it is clear, they do nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.</p>
-<p><strong>R7. Hoisted pointers.</strong> (A pointer the program gets by calling <code>deref()</code> itself is unsafe and outside these rules; D18 item 5.) A raw pointer hoisted inside a block cannot leave it (return, store, capture); a <code>Ref&lt;T&gt;</code> copied out takes a count and can. When the dereference goes through a container item or a field (<code>a.b.c</code>, <code>list[i]</code>), the compiler <strong>injects a local <code>Ref&lt;T&gt;</code></strong> copied out of that item or field before hoisting; it owns a count until scope exit, so a call that removes the object from its container cannot free it under the hoisted pointer. A <code>Ref&lt;T&gt;</code> parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).</p>
+<p><strong>R7. No hoisting.</strong> Every access goes through the <code>Ref</code>, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling <code>deref()</code> itself is unsafe, allowed only inside an <code>unsafe</code> block, and never on a shared object outside <code>sync</code>/<code>mutate</code> (D18 item 8). A <code>Ref&lt;T&gt;</code> parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).</p>
 <p><strong>R8. Runtime types.</strong> A type declared <code>extern</code> (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the <code>extern</code> declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.</p>
 <p><strong>Globals and <code>spawn</code>.</strong> A module-level <code>let</code> is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level <code>var</code> is local to each vthread. <code>stra/http/store.stra</code> shows a <code>let users: Ref&lt;UserTable&gt;</code>. A <code>Ref&lt;T&gt;</code> to a local passed to <code>spawn</code> inside a <code>scope</code> is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.</p>
 <p><strong>Fresh results.</strong> A function whose result is a new allocation that nothing else refers to is marked <code>fresh</code> in its summary, so <code>let db = Db.make(lim)</code> is local in the caller until it escapes. Without <code>fresh</code> the caller must treat the result as incoming.</p>
@@ -1337,7 +1381,7 @@
 
 <span class="n">fn</span><span class="w"> </span><span class="n">peekKeys</span><span class="p">(</span><span class="n">store</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">Bytes</span><span class="p">,</span><span class="w"> </span><span class="n">Entry</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">sync</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">store</span><span class="p">.</span><span class="n">entries</span><span class="w">              </span><span class="c1">// allowed: entries is a Ref&lt;Map&gt;, so this copies the Ref out and takes a count (R7)</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">store</span><span class="p">.</span><span class="n">entries</span><span class="w">              </span><span class="c1">// allowed: entries is a Ref&lt;Map&gt;, so this copies the Ref out and takes a count</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 
@@ -1379,6 +1423,164 @@
 <span class="p">}</span>
 </code></pre></div>
 <p>The check uses <code>purgeBatch</code>'s summary, so it works when <code>purgeBatch</code> is in another module and its source is not available.</p>
+<h2 id="example-6-methods-on-values-and-which-lock">Example 6: methods on values, and which lock<a class="headerlink" href="#example-6-methods-on-values-and-which-lock" title="Permanent link">&para;</a></h2>
+<p>A method's <code>self</code> is a place (the body itself), so one method serves a <code>Ref&lt;Point&gt;</code>, an <code>Array&lt;Point&gt;</code> element and an <code>Array&lt;Ref&lt;Point&gt;&gt;</code> element, with the same call syntax (D18 item 1). The compiler dereferences and passes the body; the developer writes the block, naming the <strong>owner</strong>: the <code>Ref</code>, or the array. The compiler only checks that it is there and strong enough (R1, R4).</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Point</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nl">x</span><span class="p">:</span><span class="w"> </span><span class="n">i32</span>
+<span class="w">    </span><span class="nl">y</span><span class="p">:</span><span class="w"> </span><span class="n">i32</span>
+<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="n">move</span><span class="p">(</span><span class="n">dx</span><span class="o">:</span><span class="w"> </span><span class="n">i32</span><span class="p">,</span><span class="w"> </span><span class="n">dy</span><span class="o">:</span><span class="w"> </span><span class="n">i32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">dx</span><span class="p">;</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">dy</span><span class="w"> </span><span class="p">}</span><span class="w">       </span><span class="c1">// summary: writes self</span>
+<span class="w">    </span><span class="n">fn</span><span class="w"> </span><span class="n">len2</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="n">i32</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="p">}</span><span class="w">    </span><span class="c1">// summary: reads self</span>
+<span class="p">}</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">World</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">player</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;</span><span class="w"> </span><span class="p">}</span><span class="w">       </span><span class="c1">// the handle is write-once, the Point is mutable</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">Field</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">pts</span><span class="o">:</span><span class="w"> </span><span class="n">Array</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;</span><span class="w"> </span><span class="p">}</span><span class="w">        </span><span class="c1">// elements stored inline</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">Fleet</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ships</span><span class="o">:</span><span class="w"> </span><span class="n">Array</span><span class="o">&lt;</span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="c1">// handles to separate objects</span>
+
+<span class="n">fn</span><span class="w"> </span><span class="n">local</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Point</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="o">:</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="n">r</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w">                          </span><span class="c1">// local: no block</span>
+<span class="p">}</span>
+
+<span class="n">fn</span><span class="w"> </span><span class="n">step</span><span class="p">(</span><span class="n">w</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">World</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutate</span><span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="c1">// the Ref is the owner</span>
+<span class="w">    </span><span class="n">sync</span><span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">)</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="n">log</span><span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">.</span><span class="n">len2</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">fn</span><span class="w"> </span><span class="n">drift</span><span class="p">(</span><span class="n">f</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Field</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">mutate</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">        </span><span class="c1">// an element has no identity: the array is the owner</span>
+<span class="p">}</span>
+
+<span class="n">fn</span><span class="w"> </span><span class="n">nudge</span><span class="p">(</span><span class="n">f</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Fleet</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Point</span><span class="o">&gt;</span><span class="w"> </span><span class="n">p</span>
+<span class="w">    </span><span class="n">sync</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">ships</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">ships</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w">             </span><span class="c1">// copy the handle out (takes a count), release the array lock</span>
+<span class="w">    </span><span class="n">mutate</span><span class="p">(</span><span class="n">p</span><span class="p">)</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">               </span><span class="c1">// then lock the Point itself</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Errors the compiler reports:</p>
+<div class="highlight"><pre><span></span><code><span class="n">sync</span><span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// error: Point.move writes its receiver; needs mutate(w.player), have sync</span>
+<span class="n">w</span><span class="p">.</span><span class="n">player</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w">                      </span><span class="c1">// error: Point is mutable and w.player is incoming; needs mutate(w.player)</span>
+<span class="n">sync</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">ships</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">ships</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">  </span><span class="c1">// error: the array lock does not cover the Point behind the Ref</span>
+</code></pre></div>
+<p>The last one assumes each object has its own lock (D18 item 11, Locking: open). Copy or in place is the developer's choice, and the compiler cannot tell which was meant:</p>
+<div class="highlight"><pre><span></span><code><span class="n">sync</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">)</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="n">let</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">[</span><span class="n">i</span><span class="p">];</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// q is a copy: f.pts[i] is untouched</span>
+<span class="n">mutate</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">pts</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">move</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">              </span><span class="c1">// in place</span>
+</code></pre></div>
+<p>On a growable <code>Array&lt;T[]&gt;</code>, an element used as <code>self</code> is pinned for the call, so a callee that grows the same array is an error (a compile error when its summary shows it, otherwise a run-time "array pinned" exception):</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Spawner</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">fn</span><span class="w"> </span><span class="nf">spawnMore</span><span class="p">(</span><span class="n">all</span><span class="o">:</span><span class="w"> </span><span class="n">Array</span><span class="o">&lt;</span><span class="n">Spawner</span><span class="p">[]</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">all</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">Spawner</span><span class="w"> </span><span class="p">{})</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="n">mutate</span><span class="p">(</span><span class="n">all</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">all</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">spawnMore</span><span class="p">(</span><span class="n">all</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">    </span><span class="c1">// error: all[0] is pinned for the call and spawnMore grows `all`</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Developer writes</th>
+<th>Compiler does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lock</td>
+<td><code>sync</code>/<code>mutate</code> naming the owner</td>
+<td>reports a missing or too-weak block</td>
+</tr>
+<tr>
+<td>Mode</td>
+<td>which one</td>
+<td>takes it from the callee summary</td>
+</tr>
+<tr>
+<td>Local object</td>
+<td>nothing</td>
+<td>proves it local, skips the block</td>
+</tr>
+<tr>
+<td>Deref and receiver place</td>
+<td>nothing</td>
+<td>derefs, passes the body</td>
+</tr>
+<tr>
+<td>Pin on a growable element</td>
+<td>nothing</td>
+<td>adds it, drops it when provably unneeded</td>
+</tr>
+<tr>
+<td>Copy or in place</td>
+<td><code>let q = a[i]</code> or <code>a[i].move()</code></td>
+<td>cannot choose</td>
+</tr>
+<tr>
+<td><code>Array&lt;Ref&lt;T&gt;&gt;</code></td>
+<td>copy the handle out, then lock the object</td>
+<td>lock order is open</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-7-the-same-field-inline-or-ref">Example 7: the same field, inline or <code>Ref</code><a class="headerlink" href="#example-7-the-same-field-inline-or-ref" title="Permanent link">&para;</a></h2>
+<p>A field whose type is a struct is stored <strong>inline</strong> when written plainly, and is a <strong>separate counted object</strong> when written <code>Ref&lt;...&gt;</code> (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. <code>stra/</code> uses both.</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Limits</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">maxConns</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">;</span><span class="w"> </span><span class="n">maxSubs</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">;</span><span class="w"> </span><span class="n">maxFrame</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// plain data</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">Scanner</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">state</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">;</span><span class="w"> </span><span class="n">need</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">}</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">Db</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nl">lim</span><span class="p">:</span><span class="w"> </span><span class="n">Limits</span><span class="w">                 </span><span class="c1">// INLINE: the Db owns its copy; no second object, no pointer chase, nothing else holds it</span>
+<span class="w">    </span><span class="nl">store</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="w">           </span><span class="c1">// REF: a separate object that other holders also reach</span>
+<span class="p">}</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">Reader</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nl">lim</span><span class="p">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Limits</span><span class="o">&gt;</span><span class="w">            </span><span class="c1">// REF: one Limits shared with the server and every connection; a copy per Reader would drift</span>
+<span class="w">    </span><span class="nl">scanner</span><span class="p">:</span><span class="w"> </span><span class="n">Scanner</span><span class="w">            </span><span class="c1">// INLINE: one reader's private state</span>
+<span class="p">}</span>
+
+<span class="n">fn</span><span class="w"> </span><span class="n">make</span><span class="p">(</span><span class="n">shared</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Limits</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Db</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Db</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">lim</span><span class="o">:</span><span class="w"> </span><span class="n">shared</span><span class="p">,</span><span class="w"> </span><span class="n">store</span><span class="o">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Store</span><span class="w"> </span><span class="p">{}</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// `lim: shared` copies the body out of the Ref into the Db</span>
+<span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Inline (<code>lim: Limits</code>)</th>
+<th><code>Ref</code> (<code>lim: Ref&lt;Limits&gt;</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Storage</td>
+<td>inside the container's body</td>
+<td>its own counted object, with a control block</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>none: <code>==</code> compares state</td>
+<td>yes: <code>==</code> compares identity</td>
+</tr>
+<tr>
+<td>Assigning it</td>
+<td>copies the body</td>
+<td>copies the handle and takes a count</td>
+</tr>
+<tr>
+<td>Sharing</td>
+<td>owned by the container alone</td>
+<td>any number of holders</td>
+</tr>
+<tr>
+<td>Locking</td>
+<td>the owner's block covers it</td>
+<td>its own block (D18 item 11, Locking)</td>
+</tr>
+<tr>
+<td>Naming it</td>
+<td>no <code>Ref</code> can name it</td>
+<td>a <code>Ref</code> is the name</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>larger container body</td>
+<td>an allocation, a count and a pointer chase</td>
+</tr>
+</tbody>
+</table>
+<p>Rule of thumb used in <code>stra/</code>: a part the container exclusively owns is inline (<code>Db.lim</code>, <code>Reader.scanner</code>, <code>Route.path</code>, <code>InFlight.ring</code>); anything shared, pooled, optional or returned from a handler is a <code>Ref</code> (<code>Reader.lim</code>, <code>Server.cfg</code>, <code>Server.table</code>, <code>Resp</code>, <code>Ref&lt;OutBuf&gt;?</code>). Library containers, <code>String</code> and <code>Array</code> are always handles.</p>
 <h2 id="what-the-module-file-carries">What the module file carries<a class="headerlink" href="#what-the-module-file-carries" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>Db.get      self.store: read via sync, result: not fresh, throws: none, park: May
 Db.make     result: fresh, retains lim

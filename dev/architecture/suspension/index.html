@@ -1986,7 +1986,7 @@ fn handle(req: Ref&lt;Request&gt;): Response throws DbError {
 <h3 id="locals-whose-address-a-callee-holds">Locals whose address a callee holds<a class="headerlink" href="#locals-whose-address-a-callee-holds" title="Permanent link">&para;</a></h3>
 <p>The lazy form copies locals into a frame only when a park occurs. A copy changes the address. Two things can hold the old address:</p>
 <ol>
-<li>A <strong>raw pointer to a stack local</strong> that the compiler hands to a callee in the park chain, or keeps in another local. A <code>Ref&lt;T&gt;</code> is not this case: it holds a count on a slot that never moves (D18 item 7). Only values that are not counted objects (stack values, fixed arrays inside a frame) can be reached by raw pointer.</li>
+<li>A <strong>raw pointer to a stack local</strong> that the compiler hands to a callee in the park chain, or keeps in another local. A <code>Ref&lt;T&gt;</code> is not this case: it holds a count on a slot that never moves (D18 item 1). Only values that are not counted objects (stack values) can be reached by raw pointer.</li>
 <li>A <strong>result or out pointer</strong> (above), which the unwinding step can rebind because it is compiler-generated.</li>
 </ol>
 <p>Case 2 is mechanical. Case 1 is not: <code>let buf = readBuffer(); conn.recv(buf)</code> is exactly this shape, and extremely common.</p>
