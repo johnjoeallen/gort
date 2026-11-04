@@ -17,7 +17,7 @@ Gort is positioned as a Go-like language with a sprinkle of Java (see [Why](01-w
 
 ## Java virtual threads
 
-There is no Java HTTP server in this comparison yet. What exists is a microbenchmark of idle units and yields on one scheduler thread (OpenJDK 25, [group 1](https://github.com/johnjoeallen/strata/blob/main/bench/results/group1.md)):
+There is no Java HTTP server in this comparison yet. What exists is a microbenchmark of idle units and yields on one scheduler thread (OpenJDK 25, [group 1](https://github.com/johnjoeallen/gort/blob/main/bench/results/group1.md)):
 
 | Measure | Java virtual thread | Tokio and C fibers, same benchmark (no Go figure) |
 |---|---|---|

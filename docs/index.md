@@ -28,4 +28,4 @@ A record of how the design got where it is: what was measured, what was decided 
 5. Every unbounded input has a declared limit, enforced before the data is held.
 6. Errors are exceptions declared with `throws`; cleanup never parks and never throws.
 
-The full text is [`gort-design.md`](https://github.com/johnjoeallen/strata/blob/main/gort-design.md).
+The full text is [`gort-design.md`](https://github.com/johnjoeallen/gort/blob/main/gort-design.md).

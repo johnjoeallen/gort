@@ -1,6 +1,6 @@
 # Architecture: compilation, suspension and modules
 
-This section extends [`gort-design.md`](https://github.com/johnjoeallen/strata/blob/main/gort-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in `c/` is hand-written to look like compiler output.
+This section extends [`gort-design.md`](https://github.com/johnjoeallen/gort/blob/main/gort-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in `c/` is hand-written to look like compiler output.
 
 | Page | Covers |
 |---|---|

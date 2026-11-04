@@ -1,6 +1,6 @@
 # 2. Measuring the foundations
 
-Before writing any Gort, the expensive questions got small C benchmarks, compared with Rust (Tokio, `slab`) and Java virtual threads where one existed. Full tables: [`group1.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group1.md), [`group2.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md), [`group56.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group56.md), [`lazy.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/lazy.md).
+Before writing any Gort, the expensive questions got small C benchmarks, compared with Rust (Tokio, `slab`) and Java virtual threads where one existed. Full tables: [`group1.md`](https://github.com/johnjoeallen/gort/blob/main/bench/results/group1.md), [`group2.md`](https://github.com/johnjoeallen/gort/blob/main/bench/results/group2.md), [`group56.md`](https://github.com/johnjoeallen/gort/blob/main/bench/results/group56.md), [`lazy.md`](https://github.com/johnjoeallen/gort/blob/main/bench/results/lazy.md).
 
 ## Fibers and stacks
 

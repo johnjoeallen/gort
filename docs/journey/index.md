@@ -9,4 +9,4 @@
 | [5. mini-redis](05-mini-redis.md) | What does a second, different server break? | Cross-worker wakeups, pub/sub backpressure, a shared database. |
 | [6. Locks that park](06-locks.md) | How should `sync` and `mutate` wait? | Park in FIFO order, spin briefly first, acquire several locks all-or-nothing. |
 
-All numbers were measured on one machine (Ryzen 9 9950X3D, Linux 6.12, gcc 14.2, rustc 1.93, Go 1.24, OpenJDK 25), usually from single runs. Raw data lives in [`bench/results/`](https://github.com/johnjoeallen/strata/tree/main/bench/results).
+All numbers were measured on one machine (Ryzen 9 9950X3D, Linux 6.12, gcc 14.2, rustc 1.93, Go 1.24, OpenJDK 25), usually from single runs. Raw data lives in [`bench/results/`](https://github.com/johnjoeallen/gort/tree/main/bench/results).
