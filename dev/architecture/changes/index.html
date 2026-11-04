@@ -27,7 +27,7 @@
     
     
       
-        <title>Changes and contradictions - Strata</title>
+        <title>Changes and contradictions - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -376,7 +376,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1101,7 +1101,7 @@
 </tr>
 <tr>
 <td>Parking</td>
-<td>Spec principle 10, leaves.stra: inferred may-park effect, informally</td>
+<td>Spec principle 10, leaves.gort: inferred may-park effect, informally</td>
 <td>Defined as a lattice (<code>Never</code>, <code>Cond(P)</code>, <code>May</code>) with propagation rules, exported in contracts</td>
 </tr>
 <tr>
@@ -1136,7 +1136,7 @@
 </tr>
 </tbody>
 </table>
-<p>The syntax of existing Strata is unchanged. Proposed additions, each marked placeholder and Open: the <code>package</code> declaration (placeholder), the attributes <code>[yield]</code>, <code>[noyield]</code> and <code>[nopark]</code> (control of compiler-inserted slice checks and an assertion of no parking), and <code>extern blocking</code>.</p>
+<p>The syntax of existing Gort is unchanged. Proposed additions, each marked placeholder and Open: the <code>package</code> declaration (placeholder), the attributes <code>[yield]</code>, <code>[noyield]</code> and <code>[nopark]</code> (control of compiler-inserted slice checks and an assertion of no parking), and <code>extern blocking</code>.</p>
 <h2 id="contradictions-found-and-how-each-is-resolved">Contradictions found, and how each is resolved<a class="headerlink" href="#contradictions-found-and-how-each-is-resolved" title="Permanent link">&para;</a></h2>
 <ol>
 <li><strong>Stackful fibers vs resumable frames.</strong> Spec 6.1 said stackful; the C runtime (<code>c/runtime/rt.h</code>) and <code>frames_bench</code> use sized frames; <code>ASSESSMENT.md</code> flagged this. <strong>Resolved:</strong> frames are the implementation direction; 6.1 is rewritten; the stackful runtime is demoted to reference and baseline. The frame/idle-memory numbers are labelled hand-written and are not evidence about generated code.</li>

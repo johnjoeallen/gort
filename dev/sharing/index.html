@@ -27,7 +27,7 @@
     
     
       
-        <title>Sharing and access checking - Strata</title>
+        <title>Sharing and access checking - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -376,7 +376,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1258,8 +1258,8 @@
 
 
 <h1 id="sharing-and-access-checking">Sharing and access checking<a class="headerlink" href="#sharing-and-access-checking" title="Permanent link">&para;</a></h1>
-<p>One reference kind, <code>Ref&lt;T&gt;</code>. Whether an object is shared is not written anywhere. The compiler works out where a <code>sync</code> or <code>mutate</code> block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from <code>stra/redis/db.stra</code>.</p>
-<p>Status: <strong>Direction</strong>. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Nothing here is implemented; the C beside the <code>.stra</code> is hand-written.</p>
+<p>One reference kind, <code>Ref&lt;T&gt;</code>. Whether an object is shared is not written anywhere. The compiler works out where a <code>sync</code> or <code>mutate</code> block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from <code>gort/redis/db.gort</code>.</p>
+<p>Status: <strong>Direction</strong>. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Nothing here is implemented; the C beside the <code>.gort</code> is hand-written.</p>
 <h2 id="the-rules">The rules<a class="headerlink" href="#the-rules" title="Permanent link">&para;</a></h2>
 <p><strong>R1. When is a block required?</strong> Reading or writing through a <code>Ref&lt;T&gt;</code> needs a block naming that reference when <strong>both</strong> hold:</p>
 <ol>
@@ -1272,13 +1272,13 @@
 <p><strong>R5. Publishing.</strong> A reference to a local object crosses a vthread boundary when it is passed to <code>spawn</code>, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is <em>shared</em>: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).</p>
 <p><strong>R6. Cost on an unshared object.</strong> <code>sync</code>/<code>mutate</code> test the flag once at entry. If it is clear, they do nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.</p>
 <p><strong>R7. No hoisting.</strong> Every access goes through the <code>Ref</code>, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling <code>deref()</code> itself is unsafe, allowed only inside an <code>unsafe</code> block, and never on a shared object outside <code>sync</code>/<code>mutate</code> (D18 item 8). A <code>Ref&lt;T&gt;</code> parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).</p>
-<p><strong>R8. Runtime types.</strong> A type declared <code>extern</code> (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the <code>extern</code> declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.</p>
-<p><strong>Globals and <code>spawn</code>.</strong> A module-level <code>let</code> is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level <code>var</code> is local to each vthread. <code>stra/http/store.stra</code> shows a <code>let users: Ref&lt;UserTable&gt;</code>. A <code>Ref&lt;T&gt;</code> to a local passed to <code>spawn</code> inside a <code>scope</code> is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.</p>
+<p><strong>R8. Runtime types.</strong> A type declared <code>extern</code> (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the <code>extern</code> declaration is a promise, as it is for parking. Only Gort-defined types follow R1 to R7.</p>
+<p><strong>Globals and <code>spawn</code>.</strong> A module-level <code>let</code> is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level <code>var</code> is local to each vthread. <code>gort/http/store.gort</code> shows a <code>let users: Ref&lt;UserTable&gt;</code>. A <code>Ref&lt;T&gt;</code> to a local passed to <code>spawn</code> inside a <code>scope</code> is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.</p>
 <p><strong>Fresh results.</strong> A function whose result is a new allocation that nothing else refers to is marked <code>fresh</code> in its summary, so <code>let db = Db.make(lim)</code> is local in the caller until it escapes. Without <code>fresh</code> the caller must treat the result as incoming.</p>
 <p>Mutability, escape (retains/publishes), access mode per parameter, and <code>fresh</code> are Tier A contract data (<a href="../architecture/modules/#access-and-escape-summaries">modules</a>). Changing a field from write-once to mutable is a breaking change.</p>
 <h2 id="example-1-local-use-no-blocks">Example 1: local use, no blocks<a class="headerlink" href="#example-1-local-use-no-blocks" title="Permanent link">&para;</a></h2>
 <p>A test or a command-line tool builds a store and reads it back in one vthread. Nothing escapes, so there is nothing to lock.</p>
-<div class="highlight"><pre><span></span><code><span class="c1">// tools/load.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// tools/load.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">tools</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">loadAndCount</span><span class="p">(</span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">{</span>
@@ -1292,7 +1292,7 @@
 <p>Under the earlier <code>SharedRef</code> idea this would have needed a different type or a separate shared variant. Here it is the same <code>Store</code> and the same code as the server uses.</p>
 <h2 id="example-2-which-accesses-need-a-block">Example 2: which accesses need a block<a class="headerlink" href="#example-2-which-accesses-need-a-block" title="Permanent link">&para;</a></h2>
 <p><code>Db</code> is shared by every connection, so its fields are <em>incoming</em> (R2). For each access the question is the one in R1: is the field mutable? A field that is set once in <code>make()</code> and never written again is write-once (R3), and reading it needs no block, however many workers share the <code>Db</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/db.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/db.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="k">struct</span><span class="w"> </span><span class="nc">Db</span><span class="w"> </span><span class="p">{</span>
@@ -1321,7 +1321,7 @@
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
-<p><code>stra/redis/db.stra</code> is written this way, with these notes in its header.</p>
+<p><code>gort/redis/db.gort</code> is written this way, with these notes in its header.</p>
 <table>
 <thead>
 <tr>
@@ -1360,14 +1360,14 @@
 </table>
 <p>This is why the code writes <code>sync(store)</code> and not <code>sync(db)</code>: the lock belongs to the object with the mutable field, not to the <code>Db</code> that merely holds a reference to it.</p>
 <h2 id="example-3-errors-the-compiler-reports">Example 3: errors the compiler reports<a class="headerlink" href="#example-3-errors-the-compiler-reports" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/stats.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/stats.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">size</span><span class="p">(</span><span class="n">db</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Db</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">db</span><span class="p">.</span><span class="n">store</span><span class="p">.</span><span class="n">entries</span><span class="p">.</span><span class="n">count</span><span class="w">         </span><span class="c1">// error: store.entries is mutable and db is incoming</span>
 <span class="p">}</span><span class="w">                                         </span><span class="c1">//   fix: sync(db.store) { return db.store.entries.count }</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/trim.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/trim.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">trim</span><span class="p">(</span><span class="n">store</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
@@ -1376,7 +1376,7 @@
 <span class="w">    </span><span class="p">}</span><span class="w">                                         </span><span class="c1">//   needs mutate(store), have sync(store)</span>
 <span class="p">}</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/peek.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/peek.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">peekKeys</span><span class="p">(</span><span class="n">store</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">Bytes</span><span class="p">,</span><span class="w"> </span><span class="n">Entry</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span>
@@ -1392,7 +1392,7 @@
 </code></pre></div>
 <p>The messages name the chain and the fix. A missing block on a reference that turns out never to be shared is still reported: that is the over-approximation in R2, and the cost is one extra block that does nothing at run time.</p>
 <h2 id="example-4-publishing-and-what-changes-after-it">Example 4: publishing, and what changes after it<a class="headerlink" href="#example-4-publishing-and-what-changes-after-it" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/main.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/main.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">main</span><span class="p">(</span><span class="n">args</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
@@ -1405,7 +1405,7 @@
 </code></pre></div>
 <p>Before the <code>spawn</code>, <code>db</code> is local and could be inspected directly. After it, every access to mutable state follows R1. Moving the line above the <code>spawn</code> makes it legal, and correct, since no other vthread yet exists.</p>
 <h2 id="example-5-modes-across-a-call">Example 5: modes across a call<a class="headerlink" href="#example-5-modes-across-a-call" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="c1">// redis/expire.stra</span>
+<div class="highlight"><pre><span></span><code><span class="c1">// redis/expire.gort</span>
 <span class="n">package</span><span class="w"> </span><span class="n">redis</span>
 
 <span class="n">fn</span><span class="w"> </span><span class="n">expireAndCount</span><span class="p">(</span><span class="n">store</span><span class="o">:</span><span class="w"> </span><span class="n">Ref</span><span class="o">&lt;</span><span class="n">Store</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">{</span>
@@ -1516,7 +1516,7 @@
 </tbody>
 </table>
 <h2 id="example-7-the-same-field-inline-or-ref">Example 7: the same field, inline or <code>Ref</code><a class="headerlink" href="#example-7-the-same-field-inline-or-ref" title="Permanent link">&para;</a></h2>
-<p>A field whose type is a struct is stored <strong>inline</strong> when written plainly, and is a <strong>separate counted object</strong> when written <code>Ref&lt;...&gt;</code> (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. <code>stra/</code> uses both.</p>
+<p>A field whose type is a struct is stored <strong>inline</strong> when written plainly, and is a <strong>separate counted object</strong> when written <code>Ref&lt;...&gt;</code> (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. <code>gort/</code> uses both.</p>
 <div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Limits</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">maxConns</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">;</span><span class="w"> </span><span class="n">maxSubs</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="p">;</span><span class="w"> </span><span class="n">maxFrame</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// plain data</span>
 <span class="k">struct</span><span class="w"> </span><span class="nc">Scanner</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">state</span><span class="o">:</span><span class="w"> </span><span class="n">u8</span><span class="p">;</span><span class="w"> </span><span class="n">need</span><span class="o">:</span><span class="w"> </span><span class="n">usize</span><span class="w"> </span><span class="p">}</span>
 
@@ -1580,7 +1580,7 @@
 </tr>
 </tbody>
 </table>
-<p>Rule of thumb used in <code>stra/</code>: a part the container exclusively owns is inline (<code>Db.lim</code>, <code>Reader.scanner</code>, <code>Route.path</code>, <code>InFlight.ring</code>); anything shared, pooled, optional or returned from a handler is a <code>Ref</code> (<code>Reader.lim</code>, <code>Server.cfg</code>, <code>Server.table</code>, <code>Resp</code>, <code>Ref&lt;OutBuf&gt;?</code>). Library containers, <code>String</code> and <code>Array</code> are always handles.</p>
+<p>Rule of thumb used in <code>gort/</code>: a part the container exclusively owns is inline (<code>Db.lim</code>, <code>Reader.scanner</code>, <code>Route.path</code>, <code>InFlight.ring</code>); anything shared, pooled, optional or returned from a handler is a <code>Ref</code> (<code>Reader.lim</code>, <code>Server.cfg</code>, <code>Server.table</code>, <code>Resp</code>, <code>Ref&lt;OutBuf&gt;?</code>). Library containers, <code>String</code> and <code>Array</code> are always handles.</p>
 <h2 id="what-the-module-file-carries">What the module file carries<a class="headerlink" href="#what-the-module-file-carries" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>Db.get      self.store: read via sync, result: not fresh, throws: none, park: May
 Db.make     result: fresh, retains lim

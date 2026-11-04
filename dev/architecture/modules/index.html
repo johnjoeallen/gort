@@ -27,7 +27,7 @@
     
     
       
-        <title>Compiled modules and linking - Strata</title>
+        <title>Compiled modules and linking - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -376,7 +376,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1396,7 +1396,7 @@
 
 
 <h1 id="compiled-modules-and-application-linking">Compiled modules and application linking<a class="headerlink" href="#compiled-modules-and-application-linking" title="Permanent link">&para;</a></h1>
-<p>A <strong>compiled Strata module</strong> (working extension <code>.smod</code>; a bundle of them is an archive, <code>.sar</code>) is the compiled form of one source <em>package</em> (a folder of files that all start with the same <code>package name</code> line, see <a href="../open-decisions/#d14-packages-and-imports">D14</a>); the module takes the package's name. It is what a library ships and what an application consumes. It carries enough to type-check, lifetime-check, effect-check and optimise a program against it <strong>without the original source</strong>. Names and extensions are placeholders.</p>
+<p>A <strong>compiled Gort module</strong> (working extension <code>.smod</code>; a bundle of them is an archive, <code>.sar</code>) is the compiled form of one source <em>package</em> (a folder of files that all start with the same <code>package name</code> line, see <a href="../open-decisions/#d14-packages-and-imports">D14</a>); the module takes the package's name. It is what a library ships and what an application consumes. It carries enough to type-check, lifetime-check, effect-check and optimise a program against it <strong>without the original source</strong>. Names and extensions are placeholders.</p>
 <h2 id="1-three-tiers-of-information">1. Three tiers of information<a class="headerlink" href="#1-three-tiers-of-information" title="Permanent link">&para;</a></h2>
 <p>The module separates what is needed for correctness from what only enables optimisation. A consumer can drop a higher tier and still get a correct program.</p>
 <table>
@@ -1644,7 +1644,7 @@ per type field:                 mutability = write-once | mutable
 </tr>
 </tbody>
 </table>
-<p>These costs are estimated from experience of comparable systems, not measured for Strata. Evaluating the build-time cost is part of the <a href="../benchmarks/#build-and-tooling-measurements">plan</a>.</p>
+<p>These costs are estimated from experience of comparable systems, not measured for Gort. Evaluating the build-time cost is part of the <a href="../benchmarks/#build-and-tooling-measurements">plan</a>.</p>
 <h2 id="6-when-a-module-needs-recompiling">6. When a module needs recompiling<a class="headerlink" href="#6-when-a-module-needs-recompiling" title="Permanent link">&para;</a></h2>
 <p>Recompile module M when any of these changes:</p>
 <ol>

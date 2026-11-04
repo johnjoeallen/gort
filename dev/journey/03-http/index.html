@@ -27,7 +27,7 @@
     
     
       
-        <title>3. An HTTP server - Strata</title>
+        <title>3. An HTTP server - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -378,7 +378,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1062,7 +1062,7 @@
 
 
 <h1 id="3-an-http-server">3. An HTTP server<a class="headerlink" href="#3-an-http-server" title="Permanent link">&para;</a></h1>
-<p>The first proving ground. The server is written as <code>.stra</code> source, with a hand-written C counterpart standing in for compiler output. Tests pin the two together.</p>
+<p>The first proving ground. The server is written as <code>.gort</code> source, with a hand-written C counterpart standing in for compiler output. Tests pin the two together.</p>
 <h2 id="what-it-showed">What it showed<a class="headerlink" href="#what-it-showed" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1074,7 +1074,7 @@
 </thead>
 <tbody>
 <tr>
-<td>Strata-style C, 100k connections</td>
+<td>Gort-style C, 100k connections</td>
 <td>89 B</td>
 <td>1.29M</td>
 </tr>
@@ -1102,7 +1102,7 @@
 <li><strong>Pipelined requests</strong> run as one child task each, answered in request order, with a barrier for unsafe methods.</li>
 <li><strong>Opt-in response batching,</strong> off by default, with a bound on held responses and a max hold time. It exists to honour principle 10.</li>
 <li><strong>Lingering close,</strong> so an error response is not destroyed by a reset when the client is still sending.</li>
-<li><strong>Layering:</strong> generic support moved into runtime and library files; <code>server.stra</code> holds only the server.</li>
+<li><strong>Layering:</strong> generic support moved into runtime and library files; <code>server.gort</code> holds only the server.</li>
 </ul>
 <h2 id="negative-controls">Negative controls<a class="headerlink" href="#negative-controls" title="Permanent link">&para;</a></h2>
 <p>Each important property has a build that breaks it on purpose (responses in completion order, no body limits, no yield, and so on), and the matching test must fail. 38 tests pass and every control fails as intended.</p>

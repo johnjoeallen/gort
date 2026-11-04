@@ -27,7 +27,7 @@
     
     
       
-        <title>Architecture: compilation, suspension and modules - Strata</title>
+        <title>Architecture: compilation, suspension and modules - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -376,7 +376,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1118,7 +1118,7 @@
 
 
 <h1 id="architecture-compilation-suspension-and-modules">Architecture: compilation, suspension and modules<a class="headerlink" href="#architecture-compilation-suspension-and-modules" title="Permanent link">&para;</a></h1>
-<p>This section extends <a href="https://github.com/johnjoeallen/strata/blob/main/strata-design.md"><code>strata-design.md</code></a> (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in <code>c/</code> is hand-written to look like compiler output.</p>
+<p>This section extends <a href="https://github.com/johnjoeallen/strata/blob/main/gort-design.md"><code>gort-design.md</code></a> (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in <code>c/</code> is hand-written to look like compiler output.</p>
 <table>
 <thead>
 <tr>
@@ -1145,7 +1145,7 @@
 </tr>
 <tr>
 <td><a href="benchmarks/">Evaluation plan</a></td>
-<td>How Strata is compared with Go and Java virtual threads, and with Rust async as a reference ceiling</td>
+<td>How Gort is compared with Go and Java virtual threads, and with Rust async as a reference ceiling</td>
 </tr>
 <tr>
 <td><a href="open-decisions/">Open decisions</a></td>
@@ -1158,7 +1158,7 @@
 </tbody>
 </table>
 <h2 id="objective">Objective<a class="headerlink" href="#objective" title="Permanent link">&para;</a></h2>
-<p>The target is <strong>excellent performance with a simpler programming model</strong>, not performance superiority. A Strata server should be written as plain sequential code (no <code>async</code>/<code>await</code>, no lifetime names, no pinning, no executor choice) and should land in the same performance class as hand-tuned Rust async or Java virtual-thread code. When the two disagree, the simpler source wins, provided the cost is measured and stated. The evaluation plan therefore measures source ceremony as well as speed.</p>
+<p>The target is <strong>excellent performance with a simpler programming model</strong>, not performance superiority. A Gort server should be written as plain sequential code (no <code>async</code>/<code>await</code>, no lifetime names, no pinning, no executor choice) and should land in the same performance class as hand-tuned Rust async or Java virtual-thread code. When the two disagree, the simpler source wins, provided the cost is measured and stated. The evaluation plan therefore measures source ceremony as well as speed.</p>
 <h2 id="status-labels">Status labels<a class="headerlink" href="#status-labels" title="Permanent link">&para;</a></h2>
 <p>Every claim on these pages carries one of four statuses, so that speculation is not read as decision.</p>
 <table>
@@ -1193,17 +1193,17 @@
 <p>Nothing in the language may depend on which implementation is used. A program that behaves correctly under stackful fibers must behave identically under resumable frames. That is the test for any proposed feature, and it is why the existing stackful runtime stays useful as a reference (see <a href="suspension/#9-where-stackful-execution-remains">suspension</a>).</p>
 <p>"Park" and "suspend" mean the same thing. The specification and the C runtime say <em>park</em>, so this section does too, and calls the inferred property the <strong>may-park effect</strong>.</p>
 <h2 id="the-pipeline">The pipeline<a class="headerlink" href="#the-pipeline" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code>Strata source (.stra)
+<div class="highlight"><pre><span></span><code>Gort source (.gort)
     |
     v
 Parsing, name resolution, type checking
 Escape and effect inference (local)
     |
     v
-Typed Strata IR (per module, ownership and effects explicit)
+Typed Gort IR (per module, ownership and effects explicit)
     |
     v
-Compiled Strata module (.smod) -------------------------------+
+Compiled Gort module (.smod) -------------------------------+
     |  interface: types, signatures, ownership modes,           |
     |             effect summaries, dispatch contracts         |
     |  retained IR (generic bodies, inlinable bodies, the rest)|

@@ -27,7 +27,7 @@
     
     
       
-        <title>Dispatch and external code - Strata</title>
+        <title>Dispatch and external code - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -376,7 +376,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1195,8 +1195,8 @@
 <p>Libraries are compiled modules. Their interfaces are Tier A. The rules in <a href="../modules/">modules</a> cover: contract hash checks at link; widening an effect or layout is breaking; implementations behind interfaces change freely within the bound.</p>
 <p>A library that is only available as a native object and header (no <code>.smod</code>) is a <strong>foreign</strong> library and takes the rules below.</p>
 <h2 id="native-c-interoperability">Native C interoperability<a class="headerlink" href="#native-c-interoperability" title="Permanent link">&para;</a></h2>
-<p>C declarations carry no ownership or effect information (spec 5.2). A Strata binding must state it:</p>
-<div class="highlight"><pre><span></span><code>// bindings/crc.stra
+<p>C declarations carry no ownership or effect information (spec 5.2). A Gort binding must state it:</p>
+<div class="highlight"><pre><span></span><code>// bindings/crc.gort
 package bindings
 
 extern fn crc32(data: Array&lt;u8&gt;): u32                  // plain: Never. Assumed short and non-blocking.
@@ -1204,7 +1204,7 @@ extern parks fn sleep(d: Duration)                   // existing: a runtime prim
 extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: String) // proposed: may block the OS thread (see below)
 </code></pre></div>
 <p>An <code>extern fn</code> without a modifier is a <strong>promise</strong> that it returns quickly and does not block. The compiler cannot verify the promise and nothing in the runtime enforces it. A violation stalls one worker for the length of the call (the same failure mode as a Java thread stuck while pinned); a watchdog may report it (see the table).</p>
-<p><code>extern blocking</code> is the one proposed new keyword in this update (<strong>Open</strong>; placeholder). It states that the call may block the thread, and is the only way a binding can say so. It carries <code>foreign = blocking</code> and <code>park = May</code> in the summary: the Strata caller sees an ordinary suspending call.</p>
+<p><code>extern blocking</code> is the one proposed new keyword in this update (<strong>Open</strong>; placeholder). It states that the call may block the thread, and is the only way a binding can say so. It carries <code>foreign = blocking</code> and <code>park = May</code> in the summary: the Gort caller sees an ordinary suspending call.</p>
 <h2 id="blocking-foreign-calls">Blocking foreign calls<a class="headerlink" href="#blocking-foreign-calls" title="Permanent link">&para;</a></h2>
 <p>A foreign C function is native stack that cannot be captured, so it cannot be suspended in the middle. Strategies, in order of preference:</p>
 <table>
@@ -1218,7 +1218,7 @@ extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: String) // proposed: may bl
 <tbody>
 <tr>
 <td><strong>1. Nonblocking binding</strong> (best)</td>
-<td>Use a readiness/async API of the library (nonblocking sockets, <code>epoll</code>, <code>io_uring</code>); the Strata wrapper calls it and parks on the descriptor.</td>
+<td>Use a readiness/async API of the library (nonblocking sockets, <code>epoll</code>, <code>io_uring</code>); the Gort wrapper calls it and parks on the descriptor.</td>
 <td>Library must offer it. No extra thread.</td>
 </tr>
 <tr>
@@ -1228,7 +1228,7 @@ extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: String) // proposed: may bl
 </tr>
 <tr>
 <td><strong>3. Dedicated thread</strong></td>
-<td>A thread owns a library (a connection, a context) and Strata sends it work and awaits replies as messages.</td>
+<td>A thread owns a library (a connection, a context) and Gort sends it work and awaits replies as messages.</td>
 <td>Serialises that library's calls; good for thread-affine code.</td>
 </tr>
 <tr>
@@ -1245,10 +1245,10 @@ extern blocking fn pqExec(c: Ref&lt;PgConn&gt;, sql: String) // proposed: may bl
 </table>
 <p>Recommendation: 1 where available, 2 as the default for anything declared <code>extern blocking</code>, 3 for thread-affine libraries, and a watchdog (diagnostic only, 5's detection without its remedy) for promises broken under 4. All are <strong>Open</strong> until measured: cost of the thread hop is exactly the kind of figure the <a href="../benchmarks/">evaluation plan</a> must record.</p>
 <h2 id="foreign-callbacks">Foreign callbacks<a class="headerlink" href="#foreign-callbacks" title="Permanent link">&para;</a></h2>
-<p>C code calls a Strata function (a <code>qsort</code> comparator, a library event callback). The callback runs on whatever native stack C is using.</p>
+<p>C code calls a Gort function (a <code>qsort</code> comparator, a library event callback). The callback runs on whatever native stack C is using.</p>
 <ul>
 <li><strong>Default (Direction):</strong> a callback is compiled as <code>Never</code> (it may call only <code>Never</code> functions, and no slice check is inserted). Calling a <code>May</code> function from it is a compile error. Because a callback is invoked from C, it is <code>f_call</code>-only: nothing underneath it can be captured.</li>
-<li><strong>Exception: callbacks that must park.</strong> Declared as parking callbacks, they run on a <strong>blocking-pool thread only</strong>, under a <strong>synchronous driver</strong>: the wrapper calls <code>f_call</code>; on <code>PARKED</code> it blocks the OS thread on a wake-up object, and on the wake calls <code>f_resume</code> until <code>DONE</code>. Parking then blocks that thread, not a scheduler worker. This is the <code>block_on</code> of Strata. It is forbidden on scheduler workers (compile error if the call is made from a worker context that is not a pool thread; at minimum, a runtime check).</li>
+<li><strong>Exception: callbacks that must park.</strong> Declared as parking callbacks, they run on a <strong>blocking-pool thread only</strong>, under a <strong>synchronous driver</strong>: the wrapper calls <code>f_call</code>; on <code>PARKED</code> it blocks the OS thread on a wake-up object, and on the wake calls <code>f_resume</code> until <code>DONE</code>. Parking then blocks that thread, not a scheduler worker. This is the <code>block_on</code> of Gort. It is forbidden on scheduler workers (compile error if the call is made from a worker context that is not a pool thread; at minimum, a runtime check).</li>
 <li>Exceptions cannot cross a C frame. The wrapper catches <code>THROWN</code> and converts it to the library's error convention or aborts. The binding says which.</li>
 </ul>
 <h2 id="dynamically-loaded-modules">Dynamically loaded modules<a class="headerlink" href="#dynamically-loaded-modules" title="Permanent link">&para;</a></h2>

@@ -27,7 +27,7 @@
     
     
       
-        <title>4. Measured Against Go, Java and Rust - Strata</title>
+        <title>4. Measured Against Go, Java and Rust - Gort</title>
       
     
     
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
@@ -111,7 +111,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -233,12 +233,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href="../.." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -378,7 +378,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -1040,7 +1040,7 @@
 
 
 <h1 id="4-measured-against-go-java-and-rust">4. Measured Against Go, Java and Rust<a class="headerlink" href="#4-measured-against-go-java-and-rust" title="Permanent link">&para;</a></h1>
-<p>Strata is positioned as a Go-like language with a sprinkle of Java (see <a href="../01-why/">Why</a>), so Go and Java are the comparison that sets the bar and Rust (Tokio) is a reference ceiling. This chapter has what was measured: the same design written in Rust and Go (a pipelined server, and plain <code>net/http</code>), driven by the same tests and load generator, and a Java virtual-thread microbenchmark. The Strata column is hand-written C that follows the design, not output of a Strata compiler, which does not exist yet.</p>
+<p>Gort is positioned as a Go-like language with a sprinkle of Java (see <a href="../01-why/">Why</a>), so Go and Java are the comparison that sets the bar and Rust (Tokio) is a reference ceiling. This chapter has what was measured: the same design written in Rust and Go (a pipelined server, and plain <code>net/http</code>), driven by the same tests and load generator, and a Java virtual-thread microbenchmark. The Gort column is hand-written C that follows the design, not output of a Gort compiler, which does not exist yet.</p>
 <table>
 <thead>
 <tr>
@@ -1050,7 +1050,7 @@
 </thead>
 <tbody>
 <tr>
-<td>Strata-style C</td>
+<td>Gort-style C</td>
 <td>4.05M</td>
 </tr>
 <tr>
@@ -1072,7 +1072,7 @@
 </thead>
 <tbody>
 <tr>
-<td>Strata-style C</td>
+<td>Gort-style C</td>
 <td>89 to 192</td>
 </tr>
 <tr>
@@ -1117,11 +1117,11 @@
 </tr>
 </tbody>
 </table>
-<p>Java is the closest model to Strata's (blocking-style code on cheap threads), so it is the comparison that matters most, and it is the one with the least evidence. The microbenchmark is not a request benchmark: the Java yield figure includes a carrier hand-off and the numbers say nothing about throughput or latency under load. A Java and a Go server written for the <a href="../../architecture/benchmarks/">evaluation plan</a>, with tuned settings, are still to do.</p>
+<p>Java is the closest model to Gort's (blocking-style code on cheap threads), so it is the comparison that matters most, and it is the one with the least evidence. The microbenchmark is not a request benchmark: the Java yield figure includes a carrier hand-off and the numbers say nothing about throughput or latency under load. A Java and a Go server written for the <a href="../../architecture/benchmarks/">evaluation plan</a>, with tuned settings, are still to do.</p>
 <h2 id="how-to-read-it">How to read it<a class="headerlink" href="#how-to-read-it" title="Permanent link">&para;</a></h2>
 <div class="admonition warning">
 <p class="admonition-title">Caveats</p>
-<p>Real handlers do real work, which shrinks the throughput gap a lot. Go's runtime is the model Strata is closest to in ceremony, and it is the comparison to watch. What survives is memory per connection, in-connection concurrency, the timer floor and Go's garbage-collection tail. All runs are single runs on loopback.</p>
+<p>Real handlers do real work, which shrinks the throughput gap a lot. Go's runtime is the model Gort is closest to in ceremony, and it is the comparison to watch. What survives is memory per connection, in-connection concurrency, the timer floor and Go's garbage-collection tail. All runs are single runs on loopback.</p>
 </div>
 <p>Browsers do not pipeline HTTP/1.1 (they multiplex over HTTP/2), so the pipelined number says more about the runtime's cost per request than about web traffic.</p>
 

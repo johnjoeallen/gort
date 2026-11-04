@@ -25,7 +25,7 @@
     
     
       
-        <title>Repository map - Strata</title>
+        <title>Repository map - Gort</title>
       
     
     
@@ -96,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Strata" class="md-header__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-header__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
@@ -109,7 +109,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Strata
+            Gort
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
@@ -231,12 +231,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Strata" class="md-nav__button md-logo" aria-label="Strata" data-md-component="logo">
+    <a href=".." title="Gort" class="md-nav__button md-logo" aria-label="Gort" data-md-component="logo">
       
   <img src="../assets/logo-mark-dark.svg" alt="logo">
 
     </a>
-    Strata
+    Gort
   </label>
   
     <div class="md-nav__source">
@@ -374,7 +374,7 @@
   <span class="md-ellipsis">
     
   
-    1. Why Strata
+    1. Why Gort
   
 
     
@@ -947,11 +947,11 @@
 
 
 <h1 id="repository-map">Repository map<a class="headerlink" href="#repository-map" title="Permanent link">&para;</a></h1>
-<div class="highlight"><pre><span></span><code>strata-design.md     the design specification
-stra/                Strata source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
-  runtime/             runtime interface and the parts writable in Strata
-  http/                HTTP library (store.stra holds the process-wide state the handlers use) and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
-  redis/               mini-redis library and server.stra
+<div class="highlight"><pre><span></span><code>gort-design.md     the design specification
+gort/                Gort source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
+  runtime/             runtime interface and the parts writable in Gort
+  http/                HTTP library (store.gort holds the process-wide state the handlers use) and server.gort; styles/{cpp,java,mixed}/server.gort are the same server in three syntax styles
+  redis/               mini-redis library and server.gort
   experiments/         handler classification study
 c/
   runtime/             hand-written runtime (rt*.h)
@@ -960,7 +960,7 @@ bench/
   http/  redis/        build scripts, tests, load generators
   c/ rust/ go/ java/   micro-benchmarks and comparators
   results/             recorded measurements
-tools/               strata2html.py, camel.py
+tools/               gort2html.py, camel.py
 docs/                this site; docs/architecture/ holds compilation, suspension and module design
 </code></pre></div>
 <p>Run a server's tests with <code>cd bench/http &amp;&amp; ./build.sh &amp;&amp; ./run_tests.sh</code>, and the same in <code>bench/redis</code>.</p>
