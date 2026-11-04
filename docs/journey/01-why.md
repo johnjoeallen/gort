@@ -1,8 +1,8 @@
-# 1. Why Strata
+# 1. Why Gort
 
 Goose offers compiler-managed lifetimes, native C output and large virtual-memory reservations that let selected arrays grow in place. Its strict thread isolation and limited dynamic allocation make typical server programs awkward.
 
-Strata keeps those ideas and adds what a server needs:
+Gort keeps those ideas and adds what a server needs:
 
 - dynamically created objects and graphs with independent lifetimes
 - thousands of virtual threads running ordinary sequential code

@@ -1,4 +1,4 @@
-// The Go equivalent of bench/c/http/server.stra, written the way a Go programmer would (goroutines and channels, the standard library only):
+// The Go equivalent of bench/c/http/server.gort, written the way a Go programmer would (goroutines and channels, the standard library only):
 // same protocol, routes and behaviour as server.c and the Rust server.
 //
 //	pipe port=18080 workers=1 conc=1 depth=16 inline=1 batch=1 work=0 sleep_us=0 slow=1250000

@@ -1,4 +1,4 @@
-site_name: Strata
+site_name: Gort
 site_description: Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time
 site_url: https://johnjoeallen.github.io/strata/
 repo_url: https://github.com/johnjoeallen/strata
@@ -35,7 +35,7 @@ nav:
   - Home: index.md
   - The journey:
       - journey/index.md
-      - 1. Why Strata: journey/01-why.md
+      - 1. Why Gort: journey/01-why.md
       - 2. Measuring the foundations: journey/02-foundations.md
       - 3. An HTTP server: journey/03-http.md
       - 4. Measured Against Go, Java and Rust: journey/04-comparison.md

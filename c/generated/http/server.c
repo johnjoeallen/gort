@@ -1,9 +1,9 @@
 // server.c - the HTTP server itself: the route table and simulated handlers, the two connection loops (sequential and pipelined), the
-// listener hooks and main(). C counterpart of server.stra; everything generic lives in the libraries it includes:
+// listener hooks and main(). C counterpart of server.gort; everything generic lives in the libraries it includes:
 //   runtime/  rt.h (tasks, pools, scheduler, timers)  rt_buf.h (size-class buffers)  rt_io.h (write_all, lingering close)  rt_net.h (workers, accept loop)
 //   http/     http_msg.h (responses)  http_reader.h (request heads)  http_body.h (request bodies)
 //
-// How the Strata constructs are emitted here (by hand, in step with the source):
+// How the Gort constructs are emitted here (by hand, in step with the source):
 //   - exceptions with `throws` lists: error-return codes. Every fallible step reports through an `err` field in its frame (ReadReq, WriteAll) and
 //     the caller tests it after the call; `try`/`catch` becomes a branch. A handler that throws is modelled by GET /boom: the handler frame sets
 //     `err` and the caller answers 500 (runHandler's catch) and keeps the connection.
@@ -225,12 +225,12 @@ static int parse_echo(const char *b, u32 n, u32 *num, u32 *sleep_us) {   // GET 
     }
     return 1;
 }
-// The handler's own frame. Like echo() in server.stra it reads the request AFTER it has waited, which is why a spawned child
+// The handler's own frame. Like echo() in server.gort it reads the request AFTER it has waited, which is why a spawned child
 // needs its own copy of the head: the connection's buffer is consumed, compacted and reused while the child sleeps.
 typedef struct {
     u32 st, spin, sleep_ns, hlen, echo_n;
     const char *head;                        // the request head: a view (inline) or the child's own copy (spawned)
-    u8 slow, boom, err, echo;                // err: the handler "threw" (server.stra: runHandler turns it into a 500)
+    u8 slow, boom, err, echo;                // err: the handler "threw" (server.gort: runHandler turns it into a 500)
 } HFrame;
 static int hstep(Task *t, HFrame *h) {
     switch (h->st) {
@@ -247,7 +247,7 @@ static int hstep(Task *t, HFrame *h) {
 }
 
 
-// The upload handler's response: what was stored and where (server.stra: the handler reads Body.length(), isInMemory(), digest()).
+// The upload handler's response: what was stored and where (server.gort: the handler reads Body.length(), isInMemory(), digest()).
 static u32 upload_resp(char *dst, const Body *b, int keep) {
     char body[96];
     int bl = snprintf(body, sizeof body, "stored %llu bytes in %s crc32=%08x\n", (unsigned long long)b->total, b->upload ? "file" : "memory", b->crc);
@@ -473,7 +473,7 @@ loop:
             rq->t.resume = req_resume; rq->t.w = w; rq->t.fd = -1;
             rq->parent = f; rq->resp = resp; rq->hf = hf; rq->keep = (u8)keep;
 #ifndef BREAK_COPY                            /* negative control only: the child reads the connection's buffer instead of its own copy */
-            rq->hc_cls = hn > HEADCOPY ? (u8)cls_for(hn) : 0xFF;       // the child owns a copy of the head (head.copy() in server.stra)
+            rq->hc_cls = hn > HEADCOPY ? (u8)cls_for(hn) : 0xFF;       // the child owns a copy of the head (head.copy() in server.gort)
             rq->hc = rq->hc_cls != 0xFF ? cbuf_get(w, rq->hc_cls) : (char *)pool_alloc(&w->heads);
             memcpy(rq->hc, hd, hn);
             rq->hf.head = rq->hc;

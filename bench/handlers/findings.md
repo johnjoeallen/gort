@@ -1,6 +1,6 @@
 # "May park" classification of realistic handlers
 
-Source: `handlers.stra` (hand-written pseudo-Strata, every call tagged by hand), tally: `python3 tally.py handlers.stra`.
+Source: `handlers.gort` (hand-written pseudo-Gort, every call tagged by hand), tally: `python3 tally.py handlers.gort`.
 Caveat: eight handlers I wrote myself, tagged by me, trivial accessor calls mostly untagged. It shows the shape of the
 problem, not a measured distribution over real code.
 

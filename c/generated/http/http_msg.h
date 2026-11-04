@@ -1,6 +1,6 @@
 #ifndef HTTP_MSG_H
 #define HTTP_MSG_H
-// http/http_msg.h - HTTP message pieces (C counterpart of http/types.stra, http/response.stra): the response type and the canned responses, the
+// http/http_msg.h - HTTP message pieces (C counterpart of http/types.gort, http/response.gort): the response type and the canned responses, the
 // reason-phrase switch, the Connection: header scan, and the method check that makes POST the 'unsafe' method.
 #include "rt.h"
 
@@ -8,7 +8,7 @@ typedef struct { char *p; u32 n; } Resp;
 
 // ---------------------------------------------------------------- stdlib leaves (never park)
 static Resp r200, r200_ka, r200_close, r404, r400, r413, r431, r500, r501;
-// reasonPhrase(code) in server.stra: a switch on a plain value
+// reasonPhrase(code) in server.gort: a switch on a plain value
 static const char *reason_phrase(u32 code) {
     switch (code) {
     case 200: return "OK";

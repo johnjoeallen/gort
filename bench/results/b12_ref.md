@@ -3,12 +3,12 @@
 > D17 benchmarks: [1. Allocation, dereference, retained memory](split.md) · [2. A whole service](service_split.md) · **3. Sharded locks and clone-on-hit** · [4. Refs held across a park](hold.md)  
 > [← A whole service](service_split.md) | [Refs held across a park →](hold.md)
 
-**Question.** The [whole-service run](service_split.md) used one global cache lock and copied the body inside the lock. Both choices favoured the combined layout. Does the split's cost survive when the cache lock is sharded, and when a hit clones the `Ref<User>` out of the cache and reads the body after leaving the lock (the way ordinary Strata code would hold it)?
+**Question.** The [whole-service run](service_split.md) used one global cache lock and copied the body inside the lock. Both choices favoured the combined layout. Does the split's cost survive when the cache lock is sharded, and when a hit clones the `Ref<User>` out of the cache and reads the body after leaving the lock (the way ordinary Gort code would hold it)?
 
 **Answer for this test: most of the four-worker loss in the last run came from the single lock. With 16 locks the split costs 4 to 10% more work per request than the combined layout (it was 6 to 27%), and 0 to 8% of throughput (it was 16 to 21%). Cloning the Ref on a hit costs nothing measurable, and it makes the split slightly cheaper. Moving bodies still works and still saves memory, but it now has to take every shard lock and skip chunks that a request is holding.**
 
 Source `bench/c/service_split_bench.c` (extended; it is `mixed_bench.c` plus `Ref<User>` cache objects), driver `bench/run_b12_ref.sh`, summary `bench/parse_b12_ref.py`; raw output `b12_ref.txt`, tables `b12_ref.tables.md`.
-Same machine, compiler and harness as the other two D17 runs (gcc 14.2 `-O2`, Ryzen 9 9950X3D, workers on cores 2 to 5, mover on core 6, 1,000,000 users, 64 B bodies, per-worker arenas). Hand-written C, no Strata compiler. Steady rows: median of 5, the six configurations rotating in order, 300,000 requests per worker. Flush rows: median of 3. Responses are byte-identical (one checksum) in every configuration of every scenario.
+Same machine, compiler and harness as the other two D17 runs (gcc 14.2 `-O2`, Ryzen 9 9950X3D, workers on cores 2 to 5, mover on core 6, 1,000,000 users, 64 B bodies, per-worker arenas). Hand-written C, no Gort compiler. Steady rows: median of 5, the six configurations rotating in order, 300,000 requests per worker. Flush rows: median of 3. Responses are byte-identical (one checksum) in every configuration of every scenario.
 
 ## What changed from the last run
 

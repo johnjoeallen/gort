@@ -1,11 +1,11 @@
 # Repository map
 
 ```
-strata-design.md     the design specification
-stra/                Strata source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
-  runtime/             runtime interface and the parts writable in Strata
-  http/                HTTP library (store.stra holds the process-wide state the handlers use) and server.stra; styles/{cpp,java,mixed}/server.stra are the same server in three syntax styles
-  redis/               mini-redis library and server.stra
+gort-design.md     the design specification
+gort/                Gort source only; every file starts with `package folder.path` (runtime, http, http.styles.cpp, redis, experiments)
+  runtime/             runtime interface and the parts writable in Gort
+  http/                HTTP library (store.gort holds the process-wide state the handlers use) and server.gort; styles/{cpp,java,mixed}/server.gort are the same server in three syntax styles
+  redis/               mini-redis library and server.gort
   experiments/         handler classification study
 c/
   runtime/             hand-written runtime (rt*.h)
@@ -14,7 +14,7 @@ bench/
   http/  redis/        build scripts, tests, load generators
   c/ rust/ go/ java/   micro-benchmarks and comparators
   results/             recorded measurements
-tools/               strata2html.py, camel.py
+tools/               gort2html.py, camel.py
 docs/                this site; docs/architecture/ holds compilation, suspension and module design
 ```
 

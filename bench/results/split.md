@@ -12,7 +12,7 @@
 - **Memory (cost).** A live object costs more: 96 B against 80 B for a 64 B body, so a full heap is 22% larger (192 MB against 157 MB for 2M objects). The control blocks of scattered survivors stay pinned: 44 MB is almost all control blocks (2M x 24 B).
 
 Source `bench/c/split_bench.c`, driver `bench/run_split.sh`, summary script `bench/parse_split.py`; raw output `split.txt`, tables `split.tables.md`.
-gcc 14.2 `-O2`, one thread pinned to core 2, Ryzen 9 9950X3D (large L3), Linux 6.12, THP=always (chunks are marked `MADV_NOHUGEPAGE`). Hand-written C, no Strata compiler.
+gcc 14.2 `-O2`, one thread pinned to core 2, Ryzen 9 9950X3D (large L3), Linux 6.12, THP=always (chunks are marked `MADV_NOHUGEPAGE`). Hand-written C, no Gort compiler.
 The two layouts are the same source built with `-DSPLIT=0` and `-DSPLIT=1`, with the same arena code (64 KB chunks, free-index stack and used bitmap in the chunk header, empty chunk unmapped). Timing rows are the median and range of 5 runs with the layouts alternating in order; memory rows are the median of 3.
 
 ## Loss first: time

@@ -2,7 +2,7 @@
 
 | Step | Question | Answer in one line |
 |---|---|---|
-| [1. Why Strata](01-why.md) | What does Goose leave out for servers? | Dynamic objects, shared state and many lightweight threads. |
+| [1. Why Gort](01-why.md) | What does Goose leave out for servers? | Dynamic objects, shared state and many lightweight threads. |
 | [2. Foundations](02-foundations.md) | What do fibers, arenas, refcounts and frames cost? | A 4 KB fiber floor, free arena layout choices, no biased counts, about 1 ns per parking call. |
 | [3. An HTTP server](03-http.md) | Can the model carry a real server? | Yes: 88 to 94 B per idle connection, throughput syscall-bound. |
 | [4. Measured Against Go, Java and Rust](04-comparison.md) | Is it any better than what exists? | Memory per connection, yes; pipelined throughput, about 2x; real handlers shrink the gap. |

@@ -10,8 +10,8 @@ then renders. Does reaching container data through a non-moving header (D15) sho
 the pessimistic build that reloads the pointer at every access is within +2.1%. Requests per second and latency (p50, p99) are the same.**
 
 Source `bench/c/mixed_bench.c`, driver `bench/run_mixed.sh`, summary script `bench/parse_mixed.py`; raw output `mixed.txt`, per-scenario tables `mixed.tables.md`.
-Runs on the Strata C runtime (`c/runtime/rt.h`: workers, run queue, timer heap, park and wake). gcc 14.2 `-O2`, workers pinned to cores 2 to 5.
-Hand-written C, no Strata compiler.
+Runs on the Gort C runtime (`c/runtime/rt.h`: workers, run queue, timer heap, park and wake). gcc 14.2 `-O2`, workers pinned to cores 2 to 5.
+Hand-written C, no Gort compiler.
 
 ## What a request does
 
@@ -31,7 +31,7 @@ They differ only in how the read loops (parse, header compare, hash, key probe, 
 | Build | Reads |
 |---|---|
 | raw pointer | base pointer copied to a local once per window, after the lock |
-| handle | every read is `h->ptr[i]`; the C compiler decides when to reload (what a Strata-to-C emitter would write) |
+| handle | every read is `h->ptr[i]`; the C compiler decides when to reload (what a Gort-to-C emitter would write) |
 | handle, reload every access | compiler barrier before every read: the pointer is reloaded each time (the pessimistic bound) |
 
 The appends into the growable output buffers are identical in all three: a buffer that can move must be reached through its header in any design.
@@ -68,14 +68,14 @@ loss could apply to; the result says the total did not move.
 - **In-process requests.** No sockets and no syscalls: a real request adds a few microseconds of kernel time (the HTTP benchmark is about 3 us a request), which makes the handle's share even smaller. The database wait is a timer, not a real connection.
 - **The cache does not grow.** It is a fixed set-associative table, so a growing hash table's rehash is not exercised. The growth that is exercised is the output buffers (identical in all builds) and the cache target of "100%" reaches only 80% hits because of set conflicts; the table reports the actual rate.
 - **No contention beyond four workers**, and the lock is an uncontended spin lock for most requests. Contended locks, many more cores and larger tables are not tested.
-- **The reload frequencies are not a compiler's.** "Handle" is what gcc generates from C that reads through the header, which is plausible for generated code but not the output of a Strata compiler, and the may-grow analysis that decides window length does not exist yet.
+- **The reload frequencies are not a compiler's.** "Handle" is what gcc generates from C that reads through the header, which is plausible for generated code but not the output of a Gort compiler, and the may-grow analysis that decides window length does not exist yet.
 - One machine, one compiler, one request shape.
 
 ## Conclusion
 
 Measured: with a realistic request (parse, authenticate, lock-protected lookup, database wait, growable-buffer rendering), reaching container data through a non-moving header is indistinguishable from a raw pointer
 in work per request, throughput and latency (within 3% noise, worst case +2.1% for the pessimistic reload-every-access build). Direction, not measured: this supports the D15 recommendation for I/O-shaped servers; the open
-risk remains how often a compiler would end deref windows in real Strata code.
+risk remains how often a compiler would end deref windows in real Gort code.
 
 ---
 > D15 handle benchmarks: [1. Handle indirection: simple loop](handle.md) · [2. Realistic loop bodies](handle_real.md) · **3. Mixed request**  

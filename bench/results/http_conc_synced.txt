@@ -1,4 +1,4 @@
-## AFTER syncing server.c with server.stra (head copy per spawned child, 431, 500 path, status-code responses)
+## AFTER syncing server.c with server.gort (head copy per spawned child, 431, 500 path, status-code responses)
 ## instant handlers, 1 worker, 16 conns, K=16 pipelined
 sequential (flush each)        conns=16 K=16 | rps=444306 | first_resp_us mean=545 max=4221 | batch_done p50=550 | err connect=0 io=0 partial=0
 concurrent, inline fast path   conns=16 K=16 | rps=3943124 | first_resp_us mean=64 max=4147 | batch_done p50=62 | err connect=0 io=0 partial=0

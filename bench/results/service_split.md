@@ -14,7 +14,7 @@
 - **Moving while the service runs.** The mover takes the cache lock (`mutate`) for each chunk it evacuates, so no reader can be inside a window while a body moves. The longest hold was 48 us. Moving 54,000 bodies cost the mover thread 48 ms of CPU, and the workers' work per request rose 6.8% (664 to 709 ns) and p99 latency 3.5% while it ran.
 
 Source `bench/c/service_split_bench.c`, driver `bench/run_service_split.sh`, summary `bench/parse_service_split.py`; raw output `service_split.txt`, tables `service_split.tables.md`.
-Built on the Strata C runtime (`c/runtime/rt.h`: workers, run queue, timer heap, park and wake) like the [mixed-request run](mixed.md). gcc 14.2 `-O2`, Ryzen 9 9950X3D, workers pinned to cores 2 to 5, the mover on core 6. Hand-written C, no Strata compiler.
+Built on the Gort C runtime (`c/runtime/rt.h`: workers, run queue, timer heap, park and wake) like the [mixed-request run](mixed.md). gcc 14.2 `-O2`, Ryzen 9 9950X3D, workers pinned to cores 2 to 5, the mover on core 6. Hand-written C, no Gort compiler.
 One million users; the cache holds `Ref<User>` objects (a 64 B body each) allocated from per-worker arenas (64 KB chunks), a single cache lock, 4-way set-associative with random replacement. A hit reads the body inside `sync(cache)`; a miss waits for the simulated database (parks), builds a new User, and replaces an entry inside `mutate(cache)`, freeing the evicted one. Checksums of the rendered output are identical in the two layouts in every scenario. Steady-state rows: median of 5 runs with the layouts alternating in order (300,000 requests per worker). Flush rows: median of 3.
 
 ## Loss first: steady state

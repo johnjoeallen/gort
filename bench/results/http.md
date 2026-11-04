@@ -1,9 +1,9 @@
 # HTTP server: C-as-the-compiler-would-emit vs Tokio
 
-Code: `c/runtime/rt.h`, `c/generated/http/server.c`, `stra/http/server.stra`, `bench/http/{loadgen.c,run_scale.sh}`, `rust/src/bin/http_server.rs`. Raw data: `http_scale.txt`.
+Code: `c/runtime/rt.h`, `c/generated/http/server.c`, `gort/http/server.gort`, `bench/http/{loadgen.c,run_scale.sh}`, `rust/src/bin/http_server.rs`. Raw data: `http_scale.txt`.
 
 ## What was built
-* `server.c` is hand-written to look like compiler output for `server.stra` (blocking-style `handle`/`serve`):
+* `server.c` is hand-written to look like compiler output for `server.gort` (blocking-style `handle`/`serve`):
   one frame struct + step function per parking function, callee frames embedded/overlaid, parking = `return PARKED`,
   one 88-byte `ConnTask` per connection from a per-type arena, 2 KB request buffer taken from a pool only while a
   request is in flight. Thread-per-core: each worker has its own epoll, run queue, SO_REUSEPORT listener, arenas.
@@ -18,9 +18,9 @@ Code: `c/runtime/rt.h`, `c/generated/http/server.c`, `stra/http/server.stra`, `b
 ## Results (4 server workers on cores 0-3, 4 client threads on cores 8-11, loopback, 64 active connections)
 | conns | server | user-space/conn | rps | p50 us | p99 us |
 |---|---|---|---|---|---|
-| 10k   | strata-c | 94 B  | 1.25M | 42 | 98 |
-| 100k  | strata-c | 89 B  | 1.29M | 40 | 88 |
-| 200k  | strata-c | 88 B  | 1.30M | 39 | 83 |
+| 10k   | gort-c | 94 B  | 1.25M | 42 | 98 |
+| 100k  | gort-c | 89 B  | 1.29M | 40 | 88 |
+| 200k  | gort-c | 88 B  | 1.30M | 39 | 83 |
 | 10k   | tokio pc lazy | 904 B | 1.26M | 47 | 72 |
 | 100k  | tokio pc lazy | 897 B | 1.25M | 53 | 78 |
 | 200k  | tokio pc lazy | 896 B | 1.25M | 49 | 78 |
@@ -28,7 +28,7 @@ Code: `c/runtime/rt.h`, `c/generated/http/server.c`, `stra/http/server.stra`, `b
 | 100k  | tokio mt inline | 3,073 B | 1.01M | 62 | 109 |
 
 Kernel memory is ~3-3.6 KB per socket for every server (not a differentiator; ~40x the C server's user-space cost).
-Server-bound (1 worker, saturated): strata-c 318k rps vs tokio 296-301k (5-7% more). 2 workers: 639k vs 589-601k.
+Server-bound (1 worker, saturated): gort-c 318k rps vs tokio 296-301k (5-7% more). 2 workers: 639k vs 589-601k.
 
 ## Reading
 * Per-connection user-space memory: 88 B (= sizeof ConnTask, nothing else retained) vs ~900 B for a Tokio task that
@@ -57,12 +57,12 @@ Server-bound (1 worker, saturated): strata-c 318k rps vs tokio 296-301k (5-7% mo
   deliberately). Large headers and bodies are not measured.
 * Planned shape: size-class buffer pools (start 512 B-1 KB, grow to 4/8/16 KB only when the header block does not
   fit; 414/431 beyond the limit); bodies streamed into a caller-supplied buffer after the header buffer is released;
-  a `T&` into a buffer must not dangle when the buffer grows and moves its bytes. The design only says a `T&` cannot outlive its referent (strata-design.md:40) and leaves growable-array storage TBD (line 44, open question 4), so this is an open design question: non-moving storage, growth as a lifetime-ending effect, offsets/handles instead of pointers, or keeping the old block alive.
+  a `T&` into a buffer must not dangle when the buffer grows and moves its bytes. The design only says a `T&` cannot outlive its referent (gort-design.md:40) and leaves growable-array storage TBD (line 44, open question 4), so this is an open design question: non-moving storage, growth as a lifetime-ending effect, offsets/handles instead of pointers, or keeping the old block alive.
 
 ## Reader change: no move per request (added after review)
 `handle` used to move the leftover pipelined bytes to the front of the buffer after every request. That was written
-by hand in the .stra handler and was a hidden cost. Now:
-* `server.stra`: a library `Reader` type owns the buffer and the unconsumed input `buf[start..end]`; the handler is
+by hand in the .gort handler and was a hidden cost. Now:
+* `server.gort`: a library `Reader` type owns the buffer and the unconsumed input `buf[start..end]`; the handler is
   `input.next_request()` / `route` / `conn.write_all` and never touches a buffer, length or move. `Request` holds
   offsets, resolved through the Reader.
 * `server.c`: `Handle` keeps `start`/`end`; a request is consumed by advancing `start`; bytes are compacted only when
@@ -125,7 +125,7 @@ Held responses must go out on every exit path, not just the normal one. `finish:
 without sending it (unreachable with this server's handler, but any early exit between "hold" and "flush" would have
 lost responses silently). Now `finish:` makes one best-effort non-blocking `send` of whatever is held (cleanup never
 parks). Test: 5 requests pipelined in one write, handler failure injected at request 3 (`-DINJECT_FAIL_AT=3`):
-responses delivered = 2 with the close-time flush, 0 without it (`-DNO_CLOSE_FLUSH`, negative control). In Strata the
+responses delivered = 2 with the close-time flush, 0 without it (`-DNO_CLOSE_FLUSH`, negative control). In Gort the
 mechanism is `Drop` on the batching writer (design section 9, new rule: cleanup never parks; an explicit `flush()` is how
 code waits). Batching is also only allowed for handlers whose may-park effect is "cannot park": a parking handler
 would otherwise hold earlier responses for as long as it waits.
@@ -222,7 +222,7 @@ wakeups); no cancellation (children run to completion and the connection waits f
 decided by method only; timer resolution is that of `epoll_pwait2`; one run per configuration for the parking and slow-CPU
 tables, two for the instant-handler table.
 
-## Syncing server.c with the rewritten server.stra (after the nullable / exceptions / enums rewrite)
+## Syncing server.c with the rewritten server.gort (after the nullable / exceptions / enums rewrite)
 The C had drifted from the source (it was never generated; it is a hand translation). Brought back into line (raw data
 `http_conc_synced.txt`; the earlier `http_conc.txt` is the pre-sync data):
 * 431 for a header block larger than the buffer (both modes; previously the connection just closed).
@@ -256,7 +256,7 @@ scope-waits-for-children rule under an exception (the C waits for children befor
 real handler code (handlers are still a spin and a timer).
 
 ## The equivalent Rust (Tokio) vs the C server
-`rust/src/bin/http_pipe.rs`: the same protocol, routes and behaviour as `server.stra` / `server.c`, written as idiomatic Tokio
+`rust/src/bin/http_pipe.rs`: the same protocol, routes and behaviour as `server.gort` / `server.c`, written as idiomatic Tokio
 (one current-thread runtime and SO_REUSEPORT listener per core; a spawned task per pipelined request; `VecDeque<Slot>` of
 `Done | JoinHandle`; the completed prefix is collected with `is_finished()` and sent as one write; POST and GET /slow are
 barriers; 431; a handler `Err` becomes a 500; a lone request runs inline; each spawned task owns a `Vec` copy of the head).
@@ -291,7 +291,7 @@ it (C only, classify=0) 946 us. Sequential: 12 us in both. (The Rust handler is 
 Idle memory per connection (100k connections): C 88 B sequential / 169 B pipelined; Rust 1,413 B / 1,539 B. The Rust futures
 are 504 B / 584 B; the rest is the task header, the I/O registration and allocator overhead (not broken down).
 
-Code size (non-blank, non-comment lines; NOT like for like): server.stra 373 (includes the Reader, Ring, Prefix, InFlight and
+Code size (non-blank, non-comment lines; NOT like for like): server.gort 373 (includes the Reader, Ring, Prefix, InFlight and
 BatchedWriter types, the sequential and batched loops, and the runtime-leaf declarations), server.c 558 (plus rt.h), http_pipe.rs
 298 (the sequential and pipelined loops only; Tokio, VecDeque and JoinHandle supply the runtime, ring and task types).
 
@@ -300,7 +300,7 @@ loop (the C compiler did not). The row was caught by checking a single request's
 empty inline-asm barrier; the earlier rows are not affected (they use no spin).
 
 ## Size-class input buffers (replacing the fixed 2 KB buffer)
-The fixed `BUFSZ` is gone from both `server.stra` (the reader's buffer is a runtime growable `u8[]`; the only number a program
+The fixed `BUFSZ` is gone from both `server.gort` (the reader's buffer is a runtime growable `u8[]`; the only number a program
 states is the largest header block, `Reader.maxHead`) and `server.c` (512 B, 2 KB, 8 KB, 16 KB classes; `maxhead=` caps the
 largest). A connection takes the 512 B class when its first byte arrives, compacts when the tail is full, and grows into the next
 class (copy, then free the old block) only when the buffer is full of one unfinished header block. Requests are offsets into the
@@ -335,7 +335,7 @@ configuration; a program-chosen limit above that would need more classes.
 ## Request bodies: limits, streaming, and spooling to files (conc mode) - first version; superseded by "Two body readers" below
 Requirement (from the design discussion): bodies must be limited; larger ones arrive as chunked or multipart; very large ones need
 somewhere to live (files, or an explicit mmap); a real server never parses a 200 MB JSON document into structures. Raw data:
-`http_body.txt`. Tests: `body_test.py`. Source: `server.stra` sections 2 and 3b; C: `server.c` ("request bodies").
+`http_body.txt`. Tests: `body_test.py`. Source: `server.gort` sections 2 and 3b; C: `server.c` ("request bodies").
 
 Design (the nginx policy, with the pieces stated in the source): every route declares a `BodyPolicy`. `Buffered(max, memLimit)`: the library
 reads the whole body BEFORE the handler runs; up to memLimit bytes stay in memory (a size-class array), more is spooled to an unnamed
@@ -396,7 +396,7 @@ the connection's input buffer, ending exactly at the end of the body):
   default). The body is written to an unnamed temporary file (`tmpdir=`) as it arrives; the handler gets the finished `Upload` (file, map, length, digest).
 * the host passes a `ServerConfig` (source) / command-line options (C): `maxhead`, `maxbody`, `uploadmax`, `tmpdir`, `yield`, `depth`. The language knows
   nothing about any of it. `yield=` (formerly `bodybudget=`, still accepted) is the number of body bytes a connection processes before it yields to the others.
-Raw data: `http_body.txt`; tests: `body_test.py`; source: `server.stra` sections 2 and 3b.
+Raw data: `http_body.txt`; tests: `body_test.py`; source: `server.gort` sections 2 and 3b.
 
 Tests, all pass: `sizes` (22 cases: API 0 B..1 MB in memory, upload 0 B..5 MB in a file, fixed and chunked with extensions and trailers, digests right);
 `defaultcap` (the SAME 2 MB body is refused 413 by the API reader, fixed and chunked, and accepted by the upload reader; a 1 MB API body is accepted);
@@ -453,23 +453,23 @@ simultaneous hostile lingerers each cost a task slot and a socket for up to `lin
 program can wait on.
 
 ## Code organisation: runtime and HTTP libraries separate from the server (`bench/http/README.md`)
-`server.stra` and `server.c` used to hold everything (about 1,000 lines each). They are now split into layers so each file contains only what belongs to it, and
-anything that can be written in Strata is a `.stra` file, with C used only for what needs the operating system or the scheduler:
-* `runtime/`: `leaves.stra` (the runtime's interface: signatures only), `io.stra` (`writeAll`), `ring.stra` (`Ring<T>`); C: `rt.h` (tasks, pools, scheduler, timers),
+`server.gort` and `server.c` used to hold everything (about 1,000 lines each). They are now split into layers so each file contains only what belongs to it, and
+anything that can be written in Gort is a `.gort` file, with C used only for what needs the operating system or the scheduler:
+* `runtime/`: `leaves.gort` (the runtime's interface: signatures only), `io.gort` (`writeAll`), `ring.gort` (`Ring<T>`); C: `rt.h` (tasks, pools, scheduler, timers),
   `rt_buf.h` (size-class buffers), `rt_io.h` (`write_all`, lingering close), `rt_net.h` (workers, listener, accept loop, with two hooks the application fills in).
-* `http/`: `types.stra`, `config.stra`, `response.stra`, `route.stra`, `body.stra`, `reader.stra`, `pipeline.stra`, `batching.stra`; C: `http_msg.h`, `http_reader.h`, `http_body.h`.
-* `server.stra` (252 lines) and `server.c` (597 lines): the route table, the handlers, the two connection loops, `runConnection`, `serve`, `main`. The Strata files `import` what
+* `http/`: `types.gort`, `config.gort`, `response.gort`, `route.gort`, `body.gort`, `reader.gort`, `pipeline.gort`, `batching.gort`; C: `http_msg.h`, `http_reader.h`, `http_body.h`.
+* `server.gort` (252 lines) and `server.c` (597 lines): the route table, the handlers, the two connection loops, `runConnection`, `serve`, `main`. The Gort files `import` what
   they use (a proposed module syntax; one file is one module).
-Some Strata types have no separate C file because the C keeps them inline for speed (the ring and the ordered set of in-flight requests live inside `conc_step`): the
-headers of those `.stra` files say where. `./build.sh` builds the server and every test variant; `./run_tests.sh` runs everything (46 tests PASS, 11 negative controls FAIL, as before the
+Some Gort types have no separate C file because the C keeps them inline for speed (the ring and the ordered set of in-flight requests live inside `conc_step`): the
+headers of those `.gort` files say where. `./build.sh` builds the server and every test variant; `./run_tests.sh` runs everything (46 tests PASS, 11 negative controls FAIL, as before the
 split). The split is mechanical: the same code in different files, with the globals moved to the layer that owns them. Throughput is unchanged (`http_layout.txt`: 4.11-4.21M requests/s at
-16 pipelined, 307k at K=1 concurrent and 313k sequential, 799k with 200 us parking handlers). Sections above that refer to "server.c" or "server.stra" describe the code as it was in one file; the
+16 pipelined, 307k at K=1 concurrent and 313k sequential, 799k with 200 us parking handlers). Sections above that refer to "server.c" or "server.gort" describe the code as it was in one file; the
 names are the same, only the files differ. One leftover: `Worker` in `rt.h` still has a named pool per application type (requests, rings, heads, bodies, lingers); a generic slot array would
 keep application types out of the runtime entirely.
 
 ## Go added to the comparison (C / Rust / Go; `bench/go/`, raw data `http_go_compare.txt`)
 Two Go servers, standard library only, Go 1.24.4:
-* `bench/go/pipe/main.go`: the equivalent of the Strata and Rust servers, written the way a Go programmer would (goroutines, channels, `sync.Pool`): same routes and
+* `bench/go/pipe/main.go`: the equivalent of the Gort and Rust servers, written the way a Go programmer would (goroutines, channels, `sync.Pool`): same routes and
   behaviour, a goroutine per pipelined request, the completed prefix sent as one write, barriers, depth limit, inline path, 431, a handler error becomes a 500, each goroutine owns a copy
   of the request head, size-class input buffers released when a connection is idle. `conc=0` flushes every response. `batch=1` calls `runtime.Gosched()` once after the oldest
   request finishes (see below).
@@ -525,9 +525,9 @@ With 64 connections active on top of the 100,000 idle ones: C 1.29-1.30M request
 cost per connection is a goroutine stack (grown beyond the 2 KB minimum by the parser and the handler), the per-connection state and, for `net/http`, a 4 KB reader and a 4 KB writer buffer kept for
 the life of the connection plus the request and header structures; the hand-written Go server holds no input buffer while idle.
 
-Code size, non-blank non-comment lines (not like for like): Go `pipe` 462, Rust `http_pipe` 298, Go `net/http` 93; the Strata server file is 252 lines of server plus the libraries, the C server 597.
+Code size, non-blank non-comment lines (not like for like): Go `pipe` 462, Rust `http_pipe` 298, Go `net/http` 93; the Gort server file is 252 lines of server plus the libraries, the C server 597.
 
-Reading the three together: C (hand-translated Strata) is fastest and by far the leanest per connection because child frames and connection state live in per-type arenas with no per-request allocation;
+Reading the three together: C (hand-translated Gort) is fastest and by far the leanest per connection because child frames and connection state live in per-type arenas with no per-request allocation;
 Rust and Go are within a factor of two of it on pipelined throughput and equal each other there; Go uses roughly 3x Rust's memory per connection, and `net/http` roughly 20x; Go has the best
 timer behaviour of the two managed runtimes at 1 ms and is subject to the same sub-ms floor as Tokio; and a Go program written with the standard server gives up in-connection concurrency entirely.
 Caveats: single runs per point except where a range is shown; loopback; the hand-written servers skip bodies and lingering; Go's GC settings are the defaults (no tuning), and the Rust and Go servers were

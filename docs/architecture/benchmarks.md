@@ -1,6 +1,6 @@
 # Evaluation plan
 
-The question is not "is Strata faster?" It is: **does Strata reach the same performance class as Go and Java virtual threads, with a program no more complicated than Go's?** Rust async is measured as a reference ceiling, not as a rival. Both halves are measured. A result that is slightly slower with much less source ceremony is a success; a result that is faster with a more complicated model is not the goal.
+The question is not "is Gort faster?" It is: **does Gort reach the same performance class as Go and Java virtual threads, with a program no more complicated than Go's?** Rust async is measured as a reference ceiling, not as a rival. Both halves are measured. A result that is slightly slower with much less source ceremony is a success; a result that is faster with a more complicated model is not the goal.
 
 ## What exists, and what it does not show
 
@@ -9,12 +9,12 @@ The HTTP, mini-redis and micro benchmarks in `bench/` are promising (see `docs/j
 ## Ground rules
 
 1. **Equivalent behaviour.** Same protocol, same limits, same error behaviour, same cleanup, on the same wire. Each variant passes the same black-box test suite before it is timed (the existing `run_tests.sh` pattern).
-2. **Comparable I/O models.** Strata (readiness plus epoll) against Go (goroutines and the runtime's netpoller) and Java virtual threads on the JDK's NIO selector, with Tokio (epoll) as the reference ceiling. Not against blocking thread-per-request unless that is the stated question.
+2. **Comparable I/O models.** Gort (readiness plus epoll) against Go (goroutines and the runtime's netpoller) and Java virtual threads on the JDK's NIO selector, with Tokio (epoll) as the reference ceiling. Not against blocking thread-per-request unless that is the stated question.
 3. **Idiomatic baselines.** The Go, Java and Rust versions are written by someone who would ship them, with the executor and pool settings tuned and recorded.
 4. **Pre-registered bars.** Before measuring, write down what counts as "same class" (for example, within a stated factor on throughput and p99 latency, and no worse on memory). The factor is set once and not adjusted afterwards. **No factor is proposed here**; it is a decision for the author once the first end-to-end numbers exist.
 5. **Report variance.** Repeated runs, pinned CPUs, fixed frequency, warm-up for the JVM, p50/p99/p99.9, not only means.
 6. **Scheduler cost is separated from application cost.** Each workload is run with a *null* body (spawn, park, resume, finish) to get the pure scheduling and frame overhead, and with the real body. Reported as: `total = scheduling + application`.
-7. **Nothing is claimed beyond what ran.** A benchmark that has no Strata compiler behind it is labelled hand-written.
+7. **Nothing is claimed beyond what ran.** A benchmark that has no Gort compiler behind it is labelled hand-written.
 
 ## Workloads
 
@@ -42,12 +42,12 @@ Metrics for all: throughput, CPU utilisation (user, system), p50/p99/p99.9 laten
 
 ## Ceremony metrics (the half that matters most here)
 
-For each application, written equivalently in Strata, Go, Java and Rust (Go is the main comparison for ceremony):
+For each application, written equivalently in Gort, Go, Java and Rust (Go is the main comparison for ceremony):
 
 - Lines of code and number of tokens.
 - Count of `async`/`await`, `Pin`, `Box<dyn ...>`, lifetime names, `Arc`/`Mutex` wrapper types, executor/runtime setup lines.
 - Count of explicit cancellation or resource-handling constructs.
-- Whether a reviewer who has not seen the code can state where it may wait (needs tooling support for Strata; its quality is part of the result).
+- Whether a reviewer who has not seen the code can state where it may wait (needs tooling support for Gort; its quality is part of the result).
 
 The Go, Java and Rust versions are not made artificially verbose; the comparison is only meaningful for code each community would write.
 

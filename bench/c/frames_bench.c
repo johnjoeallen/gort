@@ -1,5 +1,5 @@
 // Option C: compiler-sized fiber frames (stackless state machines), hand-written as a
-// Strata compiler would emit them. Each parking function gets an exact-size frame
+// Gort compiler would emit them. Each parking function gets an exact-size frame
 // allocated from its own per-type arena. Non-parking code uses the native stack.
 //
 // usage: frames_bench <n> <foot_bytes> <depth> <resume:nested|direct> <alloc:arena|malloc> <rounds>

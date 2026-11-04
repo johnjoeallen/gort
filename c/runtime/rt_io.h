@@ -1,6 +1,6 @@
 #ifndef RT_IO_H
 #define RT_IO_H
-// runtime/rt_io.h - socket I/O for tasks (C runtime; the Strata side is the leaves in runtime/leaves.stra and `writeAll` in runtime/io.stra).
+// runtime/rt_io.h - socket I/O for tasks (C runtime; the Gort side is the leaves in runtime/leaves.gort and `writeAll` in runtime/io.gort).
 //   * write_all: send everything, parking on EAGAIN (W_WR)
 //   * lingering close: the connection a SERVER ended while the client may still be sending is handed to a small task that half-closes, then reads and
 //     discards input (bounded by time and bytes, yielding like a body reader) before closing, so the client can read the response instead of getting a reset.

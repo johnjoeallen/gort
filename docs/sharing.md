@@ -1,8 +1,8 @@
 # Sharing and access checking
 
-One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` or `mutate` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `stra/redis/db.stra`.
+One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` or `mutate` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `gort/redis/db.gort`.
 
-Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Nothing here is implemented; the C beside the `.stra` is hand-written.
+Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Nothing here is implemented; the C beside the `.gort` is hand-written.
 
 ## The rules
 
@@ -23,9 +23,9 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R7. No hoisting.** Every access goes through the `Ref`, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling `deref()` itself is unsafe, allowed only inside an `unsafe` block, and never on a shared object outside `sync`/`mutate` (D18 item 8). A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
 
-**R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Strata-defined types follow R1 to R7.
+**R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Gort-defined types follow R1 to R7.
 
-**Globals and `spawn`.** A module-level `let` is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level `var` is local to each vthread. `stra/http/store.stra` shows a `let users: Ref<UserTable>`. A `Ref<T>` to a local passed to `spawn` inside a `scope` is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.
+**Globals and `spawn`.** A module-level `let` is one process-wide binding set before any vthread starts, so the object it holds is published at that point (R5); a module-level `var` is local to each vthread. `gort/http/store.gort` shows a `let users: Ref<UserTable>`. A `Ref<T>` to a local passed to `spawn` inside a `scope` is allowed because the scope waits for the child; the object it refers to is reachable from another vthread from then on, so R5 applies to it.
 
 **Fresh results.** A function whose result is a new allocation that nothing else refers to is marked `fresh` in its summary, so `let db = Db.make(lim)` is local in the caller until it escapes. Without `fresh` the caller must treat the result as incoming.
 
@@ -36,7 +36,7 @@ Mutability, escape (retains/publishes), access mode per parameter, and `fresh` a
 A test or a command-line tool builds a store and reads it back in one vthread. Nothing escapes, so there is nothing to lock.
 
 ```cpp
-// tools/load.stra
+// tools/load.gort
 package tools
 
 fn loadAndCount(path: String): usize {
@@ -55,7 +55,7 @@ Under the earlier `SharedRef` idea this would have needed a different type or a 
 `Db` is shared by every connection, so its fields are *incoming* (R2). For each access the question is the one in R1: is the field mutable? A field that is set once in `make()` and never written again is write-once (R3), and reading it needs no block, however many workers share the `Db`.
 
 ```cpp
-// redis/db.stra
+// redis/db.gort
 package redis
 
 struct Db {
@@ -85,7 +85,7 @@ struct Db {
 }
 ```
 
-`stra/redis/db.stra` is written this way, with these notes in its header.
+`gort/redis/db.gort` is written this way, with these notes in its header.
 
 | Access | Block? | Why |
 |---|---|---|
@@ -100,7 +100,7 @@ This is why the code writes `sync(store)` and not `sync(db)`: the lock belongs t
 ## Example 3: errors the compiler reports
 
 ```cpp
-// redis/stats.stra
+// redis/stats.gort
 package redis
 
 fn size(db: Ref<Db>): usize {
@@ -109,7 +109,7 @@ fn size(db: Ref<Db>): usize {
 ```
 
 ```cpp
-// redis/trim.stra
+// redis/trim.gort
 package redis
 
 fn trim(store: Ref<Store>) {
@@ -120,7 +120,7 @@ fn trim(store: Ref<Store>) {
 ```
 
 ```cpp
-// redis/peek.stra
+// redis/peek.gort
 package redis
 
 fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
@@ -140,7 +140,7 @@ The messages name the chain and the fix. A missing block on a reference that tur
 ## Example 4: publishing, and what changes after it
 
 ```cpp
-// redis/main.stra
+// redis/main.gort
 package redis
 
 fn main(args: Ref<Args>) {
@@ -157,7 +157,7 @@ Before the `spawn`, `db` is local and could be inspected directly. After it, eve
 ## Example 5: modes across a call
 
 ```cpp
-// redis/expire.stra
+// redis/expire.gort
 package redis
 
 fn expireAndCount(store: Ref<Store>): usize {
@@ -248,7 +248,7 @@ mutate(all) { all[0].spawnMore(all) }    // error: all[0] is pinned for the call
 
 ## Example 7: the same field, inline or `Ref`
 
-A field whose type is a struct is stored **inline** when written plainly, and is a **separate counted object** when written `Ref<...>` (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. `stra/` uses both.
+A field whose type is a struct is stored **inline** when written plainly, and is a **separate counted object** when written `Ref<...>` (D18 item 1). The choice is the programmer's, and it decides identity, sharing, copying and locking. `gort/` uses both.
 
 ```cpp
 struct Limits { maxConns: usize; maxSubs: usize; maxFrame: usize }   // plain data
@@ -279,7 +279,7 @@ fn make(shared: Ref<Limits>): Ref<Db> {
 | Naming it | no `Ref` can name it | a `Ref` is the name |
 | Cost | larger container body | an allocation, a count and a pointer chase |
 
-Rule of thumb used in `stra/`: a part the container exclusively owns is inline (`Db.lim`, `Reader.scanner`, `Route.path`, `InFlight.ring`); anything shared, pooled, optional or returned from a handler is a `Ref` (`Reader.lim`, `Server.cfg`, `Server.table`, `Resp`, `Ref<OutBuf>?`). Library containers, `String` and `Array` are always handles.
+Rule of thumb used in `gort/`: a part the container exclusively owns is inline (`Db.lim`, `Reader.scanner`, `Route.path`, `InFlight.ring`); anything shared, pooled, optional or returned from a handler is a `Ref` (`Reader.lim`, `Server.cfg`, `Server.table`, `Resp`, `Ref<OutBuf>?`). Library containers, `String` and `Array` are always handles.
 
 ## What the module file carries
 

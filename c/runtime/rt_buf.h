@@ -1,6 +1,6 @@
 #ifndef RT_BUF_H
 #define RT_BUF_H
-// runtime/rt_buf.h - buffers for connections (C runtime; the Strata side is the growable `u8[]` in runtime/leaves.stra).
+// runtime/rt_buf.h - buffers for connections (C runtime; the Gort side is the growable `u8[]` in runtime/leaves.gort).
 //   * output buffers: one fixed unit per write (OUTSZ), from a per-worker pool
 //   * input buffers: size classes (512 B .. 16 KB). A connection takes the smallest when its first byte arrives, compacts when the tail is full, and moves to
 //     the next class (copying the unconsumed bytes) only when full of one unfinished header block. Requests are offsets, so growth invalidates nothing.
@@ -11,7 +11,7 @@
 #define OUTSZ 2048
 typedef struct { char data[OUTSZ]; } Buf;
 
-// Input buffers are size classes (server.stra: Reader.buf is a runtime-provided growable u8[]). A connection takes the smallest
+// Input buffers are size classes (server.gort: Reader.buf is a runtime-provided growable u8[]). A connection takes the smallest
 // class when the first byte arrives, compacts when the tail is full, and moves to the next class (copying the unconsumed bytes)
 // only when the buffer is full of one unfinished header block; the old block returns to its pool. Requests are offsets into the
 // buffer, so a move never invalidates one. Nothing is held while the connection is idle. maxhead= caps the largest class.

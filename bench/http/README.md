@@ -1,29 +1,29 @@
-# HTTP server - an HTTP server written as it would be in Strata, with the C a compiler would emit for it
+# HTTP server - an HTTP server written as it would be in Gort, with the C a compiler would emit for it
 
-The server is split into layers. The Strata files are the source; each has a C counterpart that stands in for the compiler's output (hand-written, kept
-in step by the tests). Anything that CAN be written in Strata is in a `.stra` file; C is used only for what needs the operating system or the scheduler.
+The server is split into layers. The Gort files are the source; each has a C counterpart that stands in for the compiler's output (hand-written, kept
+in step by the tests). Anything that CAN be written in Gort is in a `.gort` file; C is used only for what needs the operating system or the scheduler.
 
 ```
-stra/runtime/                 the runtime, Strata side
-  leaves.stra                   its interface: signatures of what only C can do (sockets, files, timers, scheduler, size-class buffers)   -> c/runtime/rt*.h
-  io.stra                       writeAll                                                                                                   -> rt_io.h
-  ring.stra                     Ring<T>, a fixed-capacity queue                                                                            (inline in server.c)
-stra/http/                    the HTTP library, Strata side
-  types.stra                    Request, Resp, Method, Cost, Input, Ending, exceptions                                                     -> http_msg.h
-  config.stra                   ServerConfig (limits, yield size, linger): passed in by the host                                           -> options in server.c main()
-  response.stra                 canned responses, reasonPhrase, keepsAlive                                                                 -> http_msg.h
-  route.stra                    Handler, Payload, Route, runHandler                                                                        -> route() in server.c
-  body.stra                     request bodies: framing decoder, sinks, Body, Upload                                                       -> http_body.h
-  reader.stra                   Reader: the connection's input, request heads, the two body readers                                        -> http_reader.h, rt_buf.h, conc_step
-  pipeline.stra                 Prefix, InFlight: the ordered set of in-flight requests                                                    (inline in conc_step)
-  batching.stra                 opt-in response batching (off by default)                                                                  -> BATCH_N blocks of handle_step
-  server.stra                   the HTTP server itself: the route table, the handlers, the connection loops (sequential and pipelined), runConnection, serve, main
+gort/runtime/                 the runtime, Gort side
+  leaves.gort                   its interface: signatures of what only C can do (sockets, files, timers, scheduler, size-class buffers)   -> c/runtime/rt*.h
+  io.gort                       writeAll                                                                                                   -> rt_io.h
+  ring.gort                     Ring<T>, a fixed-capacity queue                                                                            (inline in server.c)
+gort/http/                    the HTTP library, Gort side
+  types.gort                    Request, Resp, Method, Cost, Input, Ending, exceptions                                                     -> http_msg.h
+  config.gort                   ServerConfig (limits, yield size, linger): passed in by the host                                           -> options in server.c main()
+  response.gort                 canned responses, reasonPhrase, keepsAlive                                                                 -> http_msg.h
+  route.gort                    Handler, Payload, Route, runHandler                                                                        -> route() in server.c
+  body.gort                     request bodies: framing decoder, sinks, Body, Upload                                                       -> http_body.h
+  reader.gort                   Reader: the connection's input, request heads, the two body readers                                        -> http_reader.h, rt_buf.h, conc_step
+  pipeline.gort                 Prefix, InFlight: the ordered set of in-flight requests                                                    (inline in conc_step)
+  batching.gort                 opt-in response batching (off by default)                                                                  -> BATCH_N blocks of handle_step
+  server.gort                   the HTTP server itself: the route table, the handlers, the connection loops (sequential and pipelined), runConnection, serve, main
 c/runtime/                    C only: tasks, pools, scheduler, timers (rt.h) | buffers (rt_buf.h) | write_all and lingering close (rt_io.h) | workers, listener, accept loop (rt_net.h)
 c/generated/http/             the C counterparts, hand-written stand-ins for compiler output: http_msg.h  http_reader.h  http_body.h  server.c
 bench/http/                   tests, load generator and scripts (this directory)
 ```
 ```
-Imports: one file is one module; `import runtime.leaves` makes the public declarations of `runtime/leaves.stra` visible (a proposal; there are no cycles).
+Imports: one file is one module; `import runtime.leaves` makes the public declarations of `runtime/leaves.gort` visible (a proposal; there are no cycles).
 
 Comparators in other languages, driven by the same tests and load generator: `bench/rust/src/bin/http_pipe.rs` (Tokio) and `bench/go/` (`pipe`: the same design in Go; `stdhttp`: plain `net/http`). Results are in `bench/results/http.md`.
 
@@ -33,7 +33,7 @@ Build and test, from `bench/http/` (needs gcc, python3; `ab` and the load genera
 ./run_tests.sh      # every test must PASS and every negative control must FAIL (FRAG=frag_test.py also runs the fragmented-input test)
 ```
 
-## Syntax used in the Strata files (a proposal, not yet in the design doc)
+## Syntax used in the Gort files (a proposal, not yet in the design doc)
 Syntax used here (a proposal, not yet in the design doc):
   * `T?` is a nullable T. The compiler narrows it after a null check, an assignment or an `assert`. There is no Option type.
   * Methods are declared inside the type. `self` is available in every non-static method and is OPTIONAL: members can be
@@ -56,7 +56,7 @@ Syntax used here (a proposal, not yet in the design doc):
     may wait (`extern parks fn recv(...)`), and a function-typed parameter can require the opposite with `noparks` (`handler: fn(Array<u8>): Resp noparks`).
 
 
-## Helpers the Strata files assume but do not define
+## Helpers the Gort files assume but do not define
 Assumed library helpers, not defined in this file: ok(text): Resp, HELLO, Pattern(string), routes.find(head), queryUs(head),
 pathParam(head), expensiveSummary(), NO_BYTES, MAX_RESPONSE, log(e), exit(code), leak(bytes), string/byte-slice helpers
 (contains, find, lines, startsWithIgnoreCase, copyFrom, moveWithin, copy), Instant, Duration, spawnWorker.

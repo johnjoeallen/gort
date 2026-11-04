@@ -1,11 +1,11 @@
-// Strata C runtime, as it would exist next to compiler output (hand-written stand-in).
+// Gort C runtime, as it would exist next to compiler output (hand-written stand-in).
 //
 // Model: one worker per core, each with its own epoll instance, run queue and per-type arenas.
 // A task is a compiler-sized frame plus a small header; it either finishes (DONE) or suspends (PARKED).
 // Readiness is edge-triggered: a task always tries the syscall first and parks only on EAGAIN, so an
 // edge that arrives while the task is running is never lost (events are consumed only between task runs).
-#ifndef STRATA_RT_H
-#define STRATA_RT_H
+#ifndef GORT_RT_H
+#define GORT_RT_H
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>

@@ -9,7 +9,7 @@ a raw pointer? The first run summed an array, the easiest loop to be unfair to a
 **Answer for this test: a typical loss of 1 to 3%, shrinking as the work per element grows. The worst single case is +28%, and that is 0.25 ns.**
 
 Source `bench/c/handle_real.c`, run by `bench/run_handle_real.sh`. Raw output `handle_real.txt` (`-O2`) and `handle_real_O3.txt` (`-O3`), per-case tables
-`handle_real.tables.md` and `handle_real_O3.tables.md`. gcc 14.2, one pinned core, best of 9 runs. Hand-written C, no Strata compiler.
+`handle_real.tables.md` and `handle_real_O3.tables.md`. gcc 14.2, one pinned core, best of 9 runs. Hand-written C, no Gort compiler.
 
 ## What was timed
 
@@ -59,12 +59,12 @@ With any real lock around the element, the lock costs 3 to 4 ns and the reload i
 
 ## How to read this for an I/O-bound service
 
-Strata targets servers, where most of a request is spent in blocking calls: a database query, a remote call, a socket or file read. The handle cost applies
+Gort targets servers, where most of a request is spent in blocking calls: a database query, a remote call, a socket or file read. The handle cost applies
 only to the in-memory work *between* those calls, so this benchmark is deliberately the conservative case: CPU-bound loops over container data with no I/O in them.
 
 - **Scale.** A database round trip or socket wait takes tens of microseconds to milliseconds; the handle costs 0.01 to 0.3 ns per element. After each park the base pointer is reloaded once, about a nanosecond, so a request with ten parks adds roughly ten nanoseconds. The simple HTTP handler in this repo already costs about 3 microseconds per request and is syscall-bound.
 - **I/O is never inside a locked window.** `sync` and `mutate` bodies cannot park (a database call inside one is a compile error), so a shared container's window is a lock, a tight in-memory loop and an unlock, the shape measured here. For an unshared container the window simply ends at each park.
-- **Where the cost can matter** is the CPU-bound parts of a request: sorting, grouping and mapping rows (`handleReport` in `stra/experiments/handlers.stra`), parsing headers or frames, rendering JSON, bulk imports. Those loops are a small share of an I/O-bound request.
+- **Where the cost can matter** is the CPU-bound parts of a request: sorting, grouping and mapping rows (`handleReport` in `gort/experiments/handlers.gort`), parsing headers or frames, rendering JSON, bulk imports. Those loops are a small share of an I/O-bound request.
 - **Not measured here:** a mixed request (parse, query, render, with real parks, benchmark B12); cache effects when many vthreads interleave and a container's header is evicted between a park and its resume; the cost of the park itself (separately measured in [`lazy.md`](lazy.md), hand-written C).
 
 ## Caveats

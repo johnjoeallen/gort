@@ -1,5 +1,5 @@
 ### N=10000
--- strata-c
+-- gort-c
 N=10000 srcips=1 | server_rss_delta=0 MB (94 B/conn) | client_rss=2 MB | system_delta=-13 MB | kernel_est=-859 B/socket
 conns=10000 ready=10000 active=64 threads=4 | reqs=3758256 rps=1252722 | lat_us p50=42 p90=78 p99=98 p999=117 max=202 (>20ms: 0) | err connect=0 io=0 partial=0 | client_mem_delta=21 MB
 -- tokio pc lazy
@@ -12,7 +12,7 @@ conns=10000 ready=10000 active=64 threads=4 | reqs=3658094 rps=1219333 | lat_us 
 N=10000 srcips=1 | server_rss_delta=29 MB (3075 B/conn) | client_rss=2 MB | system_delta=96 MB | kernel_est=3428 B/socket
 conns=10000 ready=10000 active=64 threads=4 | reqs=2955909 rps=985280 | lat_us p50=63 p90=90 p99=113 p999=133 max=2984 (>20ms: 0) | err connect=0 io=0 partial=0 | client_mem_delta=82 MB
 ### N=100000
--- strata-c
+-- gort-c
 N=100000 srcips=9 | server_rss_delta=8 MB (89 B/conn) | client_rss=4 MB | system_delta=565 MB | kernel_est=2898 B/socket
 conns=100000 ready=100000 active=64 threads=4 | reqs=3882181 rps=1294027 | lat_us p50=40 p90=74 p99=88 p999=110 max=304 (>20ms: 0) | err connect=0 io=0 partial=0 | client_mem_delta=553 MB
 -- tokio pc lazy
@@ -25,7 +25,7 @@ conns=100000 ready=100000 active=64 threads=4 | reqs=3745437 rps=1248448 | lat_u
 N=100000 srcips=9 | server_rss_delta=293 MB (3073 B/conn) | client_rss=4 MB | system_delta=930 MB | kernel_est=3318 B/socket
 conns=100000 ready=100000 active=64 threads=4 | reqs=3031919 rps=1010615 | lat_us p50=62 p90=88 p99=109 p999=125 max=3745 (>20ms: 0) | err connect=0 io=0 partial=0 | client_mem_delta=884 MB
 ### N=200000
--- strata-c
+-- gort-c
 N=200000 srcips=17 | server_rss_delta=16 MB (88 B/conn) | client_rss=6 MB | system_delta=1256 MB | kernel_est=3231 B/socket
 conns=200000 ready=200000 active=64 threads=4 | reqs=3890607 rps=1296836 | lat_us p50=39 p90=72 p99=83 p999=91 max=436 (>20ms: 0) | err connect=0 io=0 partial=0 | client_mem_delta=1236 MB
 -- tokio pc lazy
@@ -46,5 +46,5 @@ try_read hit WouldBlock and the task parked holding it). Corrected handler (no b
 -- tokio pc lazy (fixed) N=100000  server_rss_delta=85 MB  (897 B/conn)  rps=1246358 p50=53 p99=78
 -- tokio pc lazy (fixed) N=200000  server_rss_delta=170 MB (896 B/conn)  rps=1252726 p50=49 p99=78
 Server-bound runs (256 active conns, 6 client threads, server CPU-saturated), rps / p50 us:
-workers=1  strata-c 317517/791   tokio pc lazy 296397/849   tokio pc inline 301306/837   tokio mt inline 296934/860
-workers=2  strata-c 639491/405   tokio pc lazy 599561/438   tokio pc inline 600697/420   tokio mt inline 588517/429
+workers=1  gort-c 317517/791   tokio pc lazy 296397/849   tokio pc inline 301306/837   tokio mt inline 296934/860
+workers=2  gort-c 639491/405   tokio pc lazy 599561/438   tokio pc inline 600697/420   tokio mt inline 588517/429

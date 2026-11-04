@@ -1,13 +1,13 @@
 # 2. Measuring the foundations
 
-Before writing any Strata, the expensive questions got small C benchmarks, compared with Rust (Tokio, `slab`) and Java virtual threads where one existed. Full tables: [`group1.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group1.md), [`group2.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md), [`group56.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group56.md), [`lazy.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/lazy.md).
+Before writing any Gort, the expensive questions got small C benchmarks, compared with Rust (Tokio, `slab`) and Java virtual threads where one existed. Full tables: [`group1.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group1.md), [`group2.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md), [`group56.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/group56.md), [`lazy.md`](https://github.com/johnjoeallen/strata/blob/main/bench/results/lazy.md).
 
 ## Fibers and stacks
 
 | Unit (100k idle, 1 KB state) | Resident bytes each |
 |---|---|
 | Tokio task | 1,419 (395 with no state) |
-| Strata pooled-stack fiber | 4,113 (one page floor) |
+| Gort pooled-stack fiber | 4,113 (one page floor) |
 | Java virtual thread | about 809 heap with no state |
 
 - A stackful fiber has a 4 KB floor; a stackless task is about 10x smaller when idle state is small. The gap closes near page size.

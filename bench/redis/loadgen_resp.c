@@ -1,4 +1,4 @@
-// loadgen_resp - RESP load generator for mini-redis (the original and the Strata/C one speak the same protocol).
+// loadgen_resp - RESP load generator for mini-redis (the original and the Gort/C one speak the same protocol).
 //
 //   mode=getset  `conns` closed-loop connections; each sends `pipe` commands (readpct% GET, the rest SET of `vsize` bytes over `keys` keys), waits for all the replies, repeats
 //   mode=pubsub  `subs` subscribers (each on all `chans` channels) + `conns` publishers closed-loop PUBLISHing `vsize`-byte messages whose first 16 bytes are a timestamp;

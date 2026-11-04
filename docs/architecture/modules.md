@@ -1,6 +1,6 @@
 # Compiled modules and application linking
 
-A **compiled Strata module** (working extension `.smod`; a bundle of them is an archive, `.sar`) is the compiled form of one source *package* (a folder of files that all start with the same `package name` line, see [D14](open-decisions.md#d14-packages-and-imports)); the module takes the package's name. It is what a library ships and what an application consumes. It carries enough to type-check, lifetime-check, effect-check and optimise a program against it **without the original source**. Names and extensions are placeholders.
+A **compiled Gort module** (working extension `.smod`; a bundle of them is an archive, `.sar`) is the compiled form of one source *package* (a folder of files that all start with the same `package name` line, see [D14](open-decisions.md#d14-packages-and-imports)); the module takes the package's name. It is what a library ships and what an application consumes. It carries enough to type-check, lifetime-check, effect-check and optimise a program against it **without the original source**. Names and extensions are placeholders.
 
 ## 1. Three tiers of information
 
@@ -186,7 +186,7 @@ Step 5 is where the retained IR is consumed. If a module lacks Tier C, calls int
 | Cache invalidation | A wrong key gives wrong code | Keys include everything in section 4; unknown dimensions invalidate |
 | Cold full build | Whole-program mode over all modules | Not the default; development uses incremental |
 
-These costs are estimated from experience of comparable systems, not measured for Strata. Evaluating the build-time cost is part of the [plan](benchmarks.md#build-and-tooling-measurements).
+These costs are estimated from experience of comparable systems, not measured for Gort. Evaluating the build-time cost is part of the [plan](benchmarks.md#build-and-tooling-measurements).
 
 ## 6. When a module needs recompiling
 

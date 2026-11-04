@@ -10,7 +10,7 @@ without breaking references. How much slower is that than holding a raw pointer?
 so it is the *hardest* case for a handle to hide in. The [realistic run](handle_real.md) does real work per element and shows 1 to 2% typical.
 
 Source `bench/c/handle_bench.c`, run by `bench/run_handle.sh`; raw output `handle.txt` (`-O2`) and `handle_O3.txt` (`-O3`).
-gcc 14.2, one pinned core, best of 15 runs. Hand-written C, no Strata compiler. Times are nanoseconds per element.
+gcc 14.2, one pinned core, best of 15 runs. Hand-written C, no Gort compiler. Times are nanoseconds per element.
 
 ## Where the handle loses
 

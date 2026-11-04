@@ -1,9 +1,9 @@
-# Strata language and runtime assessment against Rust and Go
+# Gort language and runtime assessment against Rust and Go
 
 Assessment date: 31 October 2026.
 
-This assessment covers the [language specification](strata-design.md), the
-[runtime interface](stra/runtime/leaves.stra), the C runtime prototypes,
+This assessment covers the [language specification](gort-design.md), the
+[runtime interface](gort/runtime/leaves.gort), the C runtime prototypes,
 [design decisions](docs/decisions.md), and the recorded benchmark findings.
 It incorporates the discussion of explicit `yield()`, reader/writer locking,
 possible compiler-inserted scheduling points, and (in a later update) the
@@ -12,11 +12,11 @@ a compiler audit or an independent reproduction of the benchmarks.
 
 ## Positioning (added after this assessment)
 
-This review compares Strata with Rust and Go. The project has since been positioned as a Go-like language with a sprinkle of Java, for servers and services, and not as a systems language (spec 1.1, `docs/decisions.md`). Read the Rust comparisons below as a performance reference ceiling; the comparisons with Go and Java are the ones that set the bar.
+This review compares Gort with Rust and Go. The project has since been positioned as a Go-like language with a sprinkle of Java, for servers and services, and not as a systems language (spec 1.1, `docs/decisions.md`). Read the Rust comparisons below as a performance reference ceiling; the comparisons with Go and Java are the ones that set the bar.
 
 ## Overall judgment
 
-Strata has a credible position: a server-focused language combining ordinary
+Gort has a credible position: a server-focused language combining ordinary
 sequential code, lightweight concurrency, deterministic cleanup, and static
 reference safety without programmer-written lifetime names.
 
@@ -26,8 +26,8 @@ remains unproven: there is no compiler demonstrating that the proposed borrowing
 sharing, effects, and cleanup rules work together on realistic programs.
 
 The hand-written C establishes useful evidence about particular runtime and
-server architectures. It does not yet establish that a safe Strata compiler can
-generate equivalent programs, or that Strata generally outperforms Rust or Go.
+server architectures. It does not yet establish that a safe Gort compiler can
+generate equivalent programs, or that Gort generally outperforms Rust or Go.
 The repository is appropriately explicit about this limitation.
 
 My judgment is that this is a promising language research project with a
@@ -38,7 +38,7 @@ either language across every application domain.
 
 ## Comparison at a glance
 
-| Dimension | Strata as proposed | Rust | Go |
+| Dimension | Gort as proposed | Rust | Go |
 |---|---|---|---|
 | Primary memory model | Inferred borrows, reference-counted dynamic objects, scoped storage | Ownership and borrowing, with explicit shared ownership when needed | Garbage collection and escape analysis |
 | Cyclic object graphs | Strong cycles need weak-edge discipline | Reference-counted cycles also need weak-edge discipline | Unreachable ordinary object cycles are collectable |
@@ -55,13 +55,13 @@ follows its [memory model](https://go.dev/ref/mem) and
 [GC guide](https://go.dev/doc/gc-guide). Different Rust libraries and application
 architectures can make substantially different trade-offs.
 
-## What Strata gets right
+## What Gort gets right
 
 ### A coherent target
 
 Concurrent servers are a sensible initial scope. They benefit from readable
 control flow, predictable cleanup, bounded memory use, efficient waiting, and
-safe access to shared state. Strata's design choices address those needs rather
+safe access to shared state. Gort's design choices address those needs rather
 than merely offering alternative syntax.
 
 Ordinary blocking-looking calls with inferred parking effects are especially
@@ -123,7 +123,7 @@ inferred contracts also need stability rules: a body change must not produce an
 unexplained compatibility failure in downstream code.
 
 Rust has a substantial advantage here: a working system and years of experience
-with difficult cases. Strata's opportunity is simpler interaction for its target
+with difficult cases. Gort's opportunity is simpler interaction for its target
 workloads, not an assumption that the underlying problem disappears.
 
 ### Lifetime safety is only part of reference safety
@@ -195,11 +195,11 @@ parking effect even though ordinary cleanup methods cannot park.
 
 ### Explicit yielding is already present
 
-Strata provides `yield()` in the runtime interface. It goes to the back of the
+Gort provides `yield()` in the runtime interface. It goes to the back of the
 worker's run queue and resumes in its turn. The C prototype implements the
 corresponding behavior through `yield_now`.
 
-Consequently, the assessment should not describe Strata as lacking a mechanism
+Consequently, the assessment should not describe Gort as lacking a mechanism
 for long-running tasks to share CPU time. The issue is how much scheduling
 fairness depends on programmers placing those calls frequently enough.
 
@@ -223,7 +223,7 @@ points in ordinary user code. This generally protects other runnable goroutines
 from a forgotten yield in a tight loop, although it is not a hard scheduling
 deadline. See the [Go runtime preemption implementation](https://go.dev/src/runtime/preempt.go).
 
-Strata's current cooperative approach therefore shares a real limitation with
+Gort's current cooperative approach therefore shares a real limitation with
 Tokio. Go provides stronger automatic protection against that particular mistake.
 
 ### Compiler-inserted scheduling checks are feasible, with important consequences
@@ -251,7 +251,7 @@ operations such as sorting and copying may need internal checks or separate
 execution policies.
 
 A useful initial guarantee would be eventual scheduling opportunities in
-ordinary generated Strata code outside explicitly exempt regions. A strict
+ordinary generated Gort code outside explicitly exempt regions. A strict
 maximum delay would require much stronger bounds on all work between checks.
 
 Scheduling and cancellation should be specified separately. A check can allow
@@ -283,7 +283,7 @@ inside those blocks under the declared parking effect. A non-parking block can
 still contain a very expensive or infinite computation. The rule bounds the kinds
 of suspension, not the elapsed hold time.
 
-If automatic preemption is added, Strata must either defer it inside protected
+If automatic preemption is added, Gort must either defer it inside protected
 blocks or permit holder suspension and revise the current invariant that two
 virtual threads on one worker never contend. Either choice has consequences;
 it needs an explicit contract.
@@ -372,7 +372,7 @@ authoritative semantic contract and a separate account of prototype limitations.
 ## What the benchmarks establish
 
 The recorded [HTTP comparison](docs/journey/04-comparison.md) reports about
-4.05 million requests/second for Strata-style C versus approximately 2.1 million
+4.05 million requests/second for Gort-style C versus approximately 2.1 million
 for Rust/Tokio and the Go pipelined server in a single-worker pipelined test.
 It also reports much smaller idle memory per connection for the C prototype.
 
@@ -402,7 +402,7 @@ after churn. Add a Rust and Go mini-redis baseline to exercise shared-state cost
 Rust is the strongest choice when a project needs established static safety,
 precise ownership control, low runtime requirements, or broad systems integration.
 Its complexity is real, but its compiler already handles the difficult cases
-that Strata still needs to define and implement.
+that Gort still needs to define and implement.
 
 Go is the strongest choice when straightforward service development, automatic
 memory management, runtime preemption, and mature operational tooling matter
@@ -410,7 +410,7 @@ more than deterministic memory reclamation or minimizing every allocation cost.
 Its GC and race-discipline trade-offs remain real, but they are understood and
 measurable in production.
 
-Strata's potential advantage is a combination: sequential service code,
+Gort's potential advantage is a combination: sequential service code,
 deterministic cleanup, static protection of shared mutable state, and efficient
 logical tasks. No individual ingredient establishes superiority. The value would
 come from delivering them together with substantially less programmer friction
@@ -438,7 +438,7 @@ for the intended workloads.
    mixed CPU/I/O work. Introduce compiler checks with measured cost and clear
    exemptions if automatic scheduling becomes part of the design.
 
-The decisive milestone is generated, statically checked Strata code that remains
+The decisive milestone is generated, statically checked Gort code that remains
 pleasant to write under those constraints. If it achieves that, the existing
 runtime work gives the project a meaningful foundation. Until then, the strongest
 claim is a promising design backed by useful runtime experiments, with its most

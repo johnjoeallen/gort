@@ -5,7 +5,7 @@
 | Area | Before | Now |
 |---|---|---|
 | Virtual-thread implementation | Spec 6.1: stackful fibers with independently managed stacks | Programming model unchanged; implementation is compiler-generated resumable frames (Direction). Stackful runtime kept as reference and baseline |
-| Parking | Spec principle 10, leaves.stra: inferred may-park effect, informally | Defined as a lattice (`Never`, `Cond(P)`, `May`) with propagation rules, exported in contracts |
+| Parking | Spec principle 10, leaves.gort: inferred may-park effect, informally | Defined as a lattice (`Never`, `Cond(P)`, `May`) with propagation rules, exported in contracts |
 | Separate compilation | Spec 5.1: interface artifact with escape summaries and effects | A full module format with three information tiers, hashes, versions and a native-cache key |
 | Compiler architecture | Not described (Phase 0 and 5 only) | The pipeline in [index](index.md); C stays the backend |
 | Interfaces, function values, FFI | Spec 5.2, 9, 10.9 mention them | Bound-based dispatch, `extern blocking`, callbacks, dynamic loading rules |
@@ -13,7 +13,7 @@
 | Sharing | Undecided: `shared var`, shareable `Ref<T>`, or a type-level declaration | One `Ref<T>`; sharing inferred; blocks required by path analysis ([sharing](../sharing.md)) |
 | Open questions | 10.8 stacks, 10.10 API stability | Superseded and refined into [D1 to D15](open-decisions.md) |
 
-The syntax of existing Strata is unchanged. Proposed additions, each marked placeholder and Open: the `package` declaration (placeholder), the attributes `[yield]`, `[noyield]` and `[nopark]` (control of compiler-inserted slice checks and an assertion of no parking), and `extern blocking`.
+The syntax of existing Gort is unchanged. Proposed additions, each marked placeholder and Open: the `package` declaration (placeholder), the attributes `[yield]`, `[noyield]` and `[nopark]` (control of compiler-inserted slice checks and an assertion of no parking), and `extern blocking`.
 
 ## Contradictions found, and how each is resolved
 

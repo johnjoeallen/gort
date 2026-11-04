@@ -1,0 +1,185 @@
+// Pseudo-Gort request handlers, hand-classified for the "may park" analysis (Never / May in the design docs: //@N is Never, //@P is May).
+// Nothing here is marked [yield]: the compiler inserts no yields, so a loop with no park point in it adds no effect. Section 8 lists what the
+// checker rejects under the sharing and no-park rules.
+// Tags on call sites:  /*N*/ cannot park   /*P*/ parks (direct)   /*I:x*/ indirect call resolved to class x
+//                      /*B*/ blocking foreign call (offloaded to blocking pool, parks the caller)
+// Tags on definitions: //@N  or  //@P frame=<bytes live across the longest park>
+// Primitives (stdlib leaves): conn.read/write/accept, connect, pool.acquire, sleep, qget, and lock entry of
+// sync/mutate are P. Everything else in the stdlib (map, string, json, sort) is N.
+
+package experiments
+import runtime
+
+// Sharing in this file (docs/sharing.md): Env's fields are set once at startup, so reading env.users, env.pool and the rest needs no block.
+// Cache, KeySet and SubList are Gort types with mutable fields reached through a Ref, so every access to their contents is in sync/mutate.
+
+// ---------- 1. cache + db read path ----------
+fn cacheGet(cache: Ref<Cache>, key: i64): User? {   //@P frame=40
+    sync(cache) {                                              // lock entry parks if contended  /*P*/
+        return cache.entries.get(key);                         /*N*/
+    }
+}
+fn cachePut(cache: Ref<Cache>, key: i64, u: User) {           //@P frame=56
+    mutate(cache) {                                            /*P*/
+        cache.entries.insert(key, u);                          /*N*/
+    }
+}
+fn parseId(path: String): i64 {                             //@N
+    let seg = path.splitLast('/');                            /*N*/
+    return seg.toI64();                                       /*N*/
+}
+fn renderUser(u: Ref<User>): String {                           //@N
+    var b = StringBuilder.make();                          /*N*/
+    b.append("{\"id\":");                                      /*N*/
+    b.appendI64(u.id);                                        /*N*/
+    b.append(",\"name\":");                                    /*N*/
+    b.appendJson(u.name);                                     /*N*/
+    b.append("}");                                             /*N*/
+    return b.finish();                                         /*N*/
+}
+fn writeJson(conn: Ref<Conn>, body: String) {                     //@P frame=48
+    conn.write(HEADER_200_JSON);                               /*P*/
+    conn.write(body);                                          /*P*/
+}
+fn dbQuery(pool: Ref<Pool>, sql: String, id: i64): Row {    //@P frame=120
+    let c = pool.acquire();                                    /*P*/
+    c.sendQuery(sql, id);                                     /*P*/
+    let r = c.readRow();                                      /*P*/
+    pool.release(c);                                           /*N*/
+    return r;
+}
+fn rowToUser(r: Ref<Row>): User {                              //@N
+    return User { id: r.i64(0), name: r.str(1) };              /*N*/ /*N*/
+}
+fn handleGetUser(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {    //@P frame=64
+    let id = parseId(req.path);                               /*N*/
+    let hit = cacheGet(env.users, id);                        /*P*/
+    if hit.isSome() {
+        writeJson(conn, renderUser(hit.get()));              /*P*/ /*N*/ /*N*/
+        return;
+    }
+    let row = dbQuery(env.pool, SQL_USER, id);                /*P*/
+    let user = rowToUser(row);                               /*N*/
+    cachePut(env.users, id, user);                            /*P*/
+    writeJson(conn, renderUser(user));                       /*P*/ /*N*/
+}
+
+// ---------- 2. streaming proxy ----------
+fn logEvent(env: Ref<Env>, ev: Event) {                           //@N
+    env.logRing.tryPush(ev);                                 /*N*/  // bounded ring; a separate task drains it
+}
+fn proxy(client: Ref<Conn>, addr: Addr, env: Ref<Env>) {               //@P frame=4168  // 72 B of state + the 4 KB buf live across every park
+    let up = connect(addr);                                    /*P*/
+    var buf = [u8; 4096];
+    loop {
+        let n = client.read(buf);                              /*P*/
+        if n == 0 { break; }
+        up.writeAll(buf[..n]);                                /*P*/
+        let m = up.read(buf);                                  /*P*/
+        client.writeAll(buf[..m]);                            /*P*/
+        logEvent(env, Event.bytes(n, m));                    /*N*/ /*N*/
+    }
+}
+
+// ---------- 3. report: higher-order, mostly compute ----------
+fn handleReport(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {      //@P frame=88
+    let range = parseRange(req.query);                        /*N*/
+    let rows = loadRows(env.pool, range);                     /*P*/
+    let sorted = sortBy(rows, |a, b| a.ts < b.ts);            /*N*/ /*N*/  // closure is a compile-time value
+    let groups = groupBy(sorted, |r| r.region);               /*N*/ /*N*/
+    let out = map(groups, |g| summarize(g));                   /*N*/ /*N*/
+    writeJson(conn, renderReport(out));                      /*P*/ /*N*/
+}
+fn loadRows(pool: Ref<Pool>, r: Range): Array<Row> {             //@P frame=112
+    var rows = Row[];
+    let c = pool.acquire();                                    /*P*/
+    c.sendQuery(SQL_REPORT, r.from, r.to);                    /*P*/
+    loop {
+        let row = c.readRow();                                /*P*/
+        if row.done() { break; }
+        rows.push(row);                                        /*N*/
+    }
+    pool.release(c);                                           /*N*/
+    return rows;
+}
+fn parseRange(q: String): Range { return Range.parse(q); }/*N*/ //@N
+fn summarize(g: Ref<Group>): Summary { return Summary.of(g); }  /*N*/ //@N
+fn renderReport(o: Array<Summary>): String { return json(o); }   /*N*/ //@N
+
+// ---------- 4. routing + middleware through function values ----------
+fn health(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {             //@N
+    conn.writeNowait(HEADER_200_OK);                          /*N*/  // small response written to a buffered socket
+}
+fn auth(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>, next: Handler) {//@P frame=80
+    let tok = req.header("authorization");                     /*N*/
+    let ok = verifyToken(env.keys, tok);                      /*P*/  // takes sync(keys)
+    if !ok { writeJson(conn, ERR_401); return; }              /*P*/
+    next(conn, req, env);                                      /*I:P*/  // targets: getUser, report, health -> mixed
+}
+fn verifyToken(keys: Ref<KeySet>, tok: String): bool {      //@P frame=40
+    sync(keys) { return keys.verify(tok); }                    /*P*/ /*N*/
+}
+fn dispatch(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {           //@P frame=72
+    let h = env.routes.get(req.path);                          /*N*/
+    auth(conn, req, env, h);                                   /*P*/
+}
+
+// ---------- 5. recursive directory walk (parks per node) ----------
+fn walk(dir: Path, env: Ref<Env>, acc: Ref<Stats>) {                   //@P frame=64
+    let entries = readDir(dir);                               /*B*/  // blocking syscalls via the blocking pool
+    for e in entries {
+        if e.isDir() { walk(e.path, env, acc); }              /*P*/  // recursion, one heap frame per level
+        else { acc.add(e.size()); }                            /*N*/ /*N*/
+    }
+}
+
+// ---------- 6. foreign library calls ----------
+fn thumbnail(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {          //@P frame=96
+    let img = req.body();                                      /*N*/
+    let out = c_resize(img.ptr(), img.len(), 256);             /*B*/  // CPU-bound C library, declared `extern blocking`: run on the blocking pool, so it must not stall the worker
+    writeJson(conn, encodeB64(out));                         /*P*/ /*N*/
+}
+fn[nopark] checksum(buf: Ref<Bytes>): u32 { return c_crc32(buf.ptr(), buf.len()); }  /*N*/ /*N*/ /*N*/ //@N  // plain extern fn: a promise of a short call; [nopark] makes it usable under a lock and in a cleanup
+
+// ---------- 7. pub/sub fan-out ----------
+fn broadcast(subs: Ref<SubList>, msg: Msg) {                   //@P frame=56
+    sync(subs) {                                               /*P*/
+        for s in subs.list.iter() {                            /*N*/  // loops: long (size of the list is not stated); warns only under --warn-loops=all
+            s.outbox.tryPush(msg.clone());                    /*N*/ /*N*/
+        }
+    }
+}
+fn subscriber(conn: Ref<Conn>, env: Ref<Env>) {                        //@P frame=64
+    loop {
+        let m = env.bus.qget();                                /*P*/
+        conn.writeAll(m.bytes());                             /*P*/ /*N*/
+    }
+}
+
+// ---------- 8. rejected by the checker ----------
+// fn bad(cache: Ref<Cache>, pool: Ref<Pool>, k: i64) {
+//     mutate(cache) {
+//         let v = dbQuery(pool, SQL_USER, k);               // ERROR: parking call while holding lock
+//         cache.entries.insert(k, v);                       //   bad -> dbQuery -> pool.acquire (parks)
+//     }
+// }
+//
+// fn peek(cache: Ref<Cache>, k: i64): i64 {
+//     return cache.entries.get(k);                          // ERROR: cache is incoming and Cache.entries is mutable: needs sync(cache)
+// }
+//
+// fn touch(cache: Ref<Cache>, k: i64) {
+//     sync(cache) {
+//         cache.entries.insert(k, 0);                       // ERROR: insert writes its receiver: needs mutate(cache), have sync(cache)
+//     }
+// }
+//
+// fn[nopark] pause() {
+//     sleep(1ms);                                           // ERROR: park source in a [nopark] function (pause -> sleep)
+// }
+//
+// fn spin(cache: Ref<Cache>, flag: Ref<Flag>) {
+//     mutate(cache) {
+//         while !flag.isSet() { }                           // WARNING (always on in a lock body): unbounded loop under a lock
+//     }
+// }

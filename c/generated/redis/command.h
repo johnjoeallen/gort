@@ -1,6 +1,6 @@
 #ifndef REDIS_COMMAND_H
 #define REDIS_COMMAND_H
-// redis/command.h - C counterpart of redis/command.stra: the commands, as borrowed views into the connection's input buffer (valid until the frame is finished).
+// redis/command.h - C counterpart of redis/command.gort: the commands, as borrowed views into the connection's input buffer (valid until the frame is finished).
 #include "resp.h"
 
 enum { C_GET, C_SET, C_PUBLISH, C_SUBSCRIBE, C_UNSUBSCRIBE, C_PING, C_UNKNOWN };

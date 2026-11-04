@@ -1,6 +1,6 @@
 # bench/go - Go comparators for the HTTP server
 
-* `pipe/main.go`   the same design as the Strata/C and Rust servers, in Go (goroutine per pipelined request, ordered completion, barriers, depth limit)
+* `pipe/main.go`   the same design as the Gort/C and Rust servers, in Go (goroutine per pipelined request, ordered completion, barriers, depth limit)
 * `stdhttp/main.go` plain `net/http`
 
 ```

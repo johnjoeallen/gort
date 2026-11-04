@@ -1,4 +1,4 @@
-// The Rust equivalent of bench/c/http/server.stra: same protocol, routes, and behaviour as server.c.
+// The Rust equivalent of bench/c/http/server.gort: same protocol, routes, and behaviour as server.c.
 //
 //   http_pipe port=18080 workers=4 cpu0=0 conc=1 depth=16 inline=1 work=0 sleep_us=0 slow=1250000
 //

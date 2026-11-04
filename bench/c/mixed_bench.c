@@ -1,11 +1,11 @@
 // B12 (mixed request) for D15: a request that parses, authenticates, looks up a shared cache under a lock, parks on a simulated database wait
-// on a miss, renders JSON into growable buffers and "sends" it, run as vthread-like tasks on the Strata C runtime (c/runtime/rt.h: workers, run queue,
+// on a miss, renders JSON into growable buffers and "sends" it, run as vthread-like tasks on the Gort C runtime (c/runtime/rt.h: workers, run queue,
 // timer heap, park/wake). Closed loop: C requests are always in flight per worker. busy_ns_per_req is the time a worker spent running tasks and
 // timers per request (waiting for a database reply is not counted). See bench/results/mixed.md.
 //
 // Three builds differ ONLY in how a loop reads through a container (-DMODE=n):
 //   0 raw      the base pointer is copied into a local once per window (after the lock) and used for every read: the C baseline
-//   1 handle   every read is h->ptr[i]; the C compiler decides when to reload (this is what a Strata-to-C emitter would write)
+//   1 handle   every read is h->ptr[i]; the C compiler decides when to reload (this is what a Gort-to-C emitter would write)
 //   2 barrier  every read is h->ptr[i] after a compiler barrier, so the pointer is reloaded at every access: the pessimistic bound
 // Growing code (the output buffers' append) is identical in all three: a growable buffer must be reached through its header there.
 //

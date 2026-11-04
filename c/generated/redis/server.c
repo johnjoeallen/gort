@@ -1,8 +1,8 @@
-// server.c - the mini-redis server itself, as the C a Strata compiler would emit for server.stra: the accept hook, the per-connection state machine
+// server.c - the mini-redis server itself, as the C a Gort compiler would emit for server.gort: the accept hook, the per-connection state machine
 // (commandLoop, subscribeLoop), the purge task, shutdown, main. Everything else is in runtime/ (rt_sync.h) and redis/ (db.h, resp.h, command.h), on top of
 // the HTTP runtime (c/runtime/rt*.h) which is used unchanged.
 //
-// A connection is one task: a compiler-sized frame plus a header. Each `park` point of the Strata source is a state here; on resume the state re-checks its
+// A connection is one task: a compiler-sized frame plus a header. Each `park` point of the Gort source is a state here; on resume the state re-checks its
 // condition (a wake is a hint), so spurious wakes are harmless.
 //   ST_CMD     read the next frame and start its command            (waitAny(readable, shutdown))
 //   ST_DB      take the database lock (parks while another worker holds it), run the command, release
@@ -37,7 +37,7 @@ static Limiter g_conns;
 static ConnTask *g_clist[MAXW];
 static int g_stats = 0;
 
-// ---------------------------------------------------------------- input buffer (Strata: Reader.buf, a runtime growable u8[])
+// ---------------------------------------------------------------- input buffer (Gort: Reader.buf, a runtime growable u8[])
 // Size classes 512 B .. 16 KB come from the worker's pools (rt_buf.h); larger ones, up to maxFrame, are malloc'd (x4 each step).
 static inline u32 icap(u8 cls) { return cls < NCLS ? g_cls_size[cls] : 16384u << (2 * (cls - (NCLS - 1))); }
 static char *ib_alloc(Worker *w, u8 cls) { return cls < NCLS ? cbuf_get(w, cls) : malloc(icap(cls)); }
@@ -61,7 +61,7 @@ static int ib_room(ConnTask *c, u32 needed) {
     return 1;
 }
 
-// The next complete frame, if one can be had without waiting (Strata: Reader.tryNextFrame). The buffer exists only while there is unconsumed input.
+// The next complete frame, if one can be had without waiting (Gort: Reader.tryNextFrame). The buffer exists only while there is unconsumed input.
 static int next_frame(ConnTask *c) {
     Worker *w = c->t.w;
     for (;;) {
@@ -100,7 +100,7 @@ static void finish(ConnTask *c) {
     if (c->istart == c->iend && c->ib) { ib_free(w, c->icls, c->ib); c->ib = NULL; c->istart = c->iend = 0; }
 }
 
-// ---------------------------------------------------------------- the lock (Strata: sync/mutate; entering parks)
+// ---------------------------------------------------------------- the lock (Gort: sync/mutate; entering parks)
 static inline int lock_enter(LockWait *lw, u8 *waiting, Task *t, int write) {   // 1: held. 0: park (W_SIG) and call again on resume
     if (*waiting) { if (!__atomic_load_n(&lw->granted, __ATOMIC_ACQUIRE)) return 0; *waiting = 0; return 1; }
     if (rw_acquire(&g_db.lock, lw, t, write)) return 1;
@@ -108,7 +108,7 @@ static inline int lock_enter(LockWait *lw, u8 *waiting, Task *t, int write) {   
     return 0;
 }
 
-// ---------------------------------------------------------------- ending a connection (Strata: scope exit + cleanup())
+// ---------------------------------------------------------------- ending a connection (Gort: scope exit + cleanup())
 static int conn_end(ConnTask *c, int linger) {
     Worker *w = c->t.w;
     if (c->mb) {
@@ -325,7 +325,7 @@ static int conn_resume(Task *t) {
     }
 }
 
-// ---------------------------------------------------------------- the purge task (Strata: Db.purgeLoop): expired keys, and the reaper queue
+// ---------------------------------------------------------------- the purge task (Gort: Db.purgeLoop): expired keys, and the reaper queue
 typedef struct { Task t; u8 st, waiting; LockWait lw; Reap *cur; u64 next; u32 hidx; } PurgeTask;
 static PurgeTask *g_purge;                                     // set once by worker 0, read by every worker at shutdown (atomic)
 

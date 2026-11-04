@@ -17,7 +17,7 @@ with the order `Never < Cond(P) < May`. The complete summary, which also records
 
 A function's own body can park only through these, and the analysis starts from them:
 
-1. A call to an `extern parks fn` (`sleep`, `yield`, `waitAny`, `Conn.recv`, `Conn.send`, ...). Already in `stra/runtime/leaves.stra`.
+1. A call to an `extern parks fn` (`sleep`, `yield`, `waitAny`, `Conn.recv`, `Conn.send`, ...). Already in `gort/runtime/leaves.gort`.
 2. Entering `sync`/`mutate` (it queues FIFO, see spec 7.1). The body of the block can never park, so a lock is never held across a suspension.
 3. A call to a function whose summary is `May`, or `Cond(P)` with a member of `P` bound to something that may park.
 4. A call through an interface or function value whose declared bound permits parking (see [dispatch](dispatch-and-ffi.md#interface-calls)).
@@ -70,7 +70,7 @@ Three attributes on a function (`fn[yield] name(...)`). Spellings are the author
   | Default | nothing written | nothing inserted |
 
   A CPU-heavy type marks itself once and tags its hot, bounded helpers `[noyield]`. A `[nopark]` type asserts that none of its methods can park; a method can still override it, and the override is then reported at the method. Files are not a level: a file is a layout accident.
-- **Package.** Follows the Java folder convention. A package is a folder, its name is the folder path under the source root with dots for slashes (`stra/http/styles/cpp/` is `http.styles.cpp`), and every file in the folder starts with the same `package` line. There is no special file. A package default is written on that package line, `package[yield] imaging`; because the line is repeated in every file, the setting is visible wherever you read, and all files of a package must state the identical line (a file that differs or omits it is an error). The package compiles to one `.smod` named after it. Placeholder syntax; the rules are in [D14](open-decisions.md#d14-packages-and-imports).
+- **Package.** Follows the Java folder convention. A package is a folder, its name is the folder path under the source root with dots for slashes (`gort/http/styles/cpp/` is `http.styles.cpp`), and every file in the folder starts with the same `package` line. There is no special file. A package default is written on that package line, `package[yield] imaging`; because the line is repeated in every file, the setting is visible wherever you read, and all files of a package must state the identical line (a file that differs or omits it is an error). The package compiles to one `.smod` named after it. Placeholder syntax; the rules are in [D14](open-decisions.md#d14-packages-and-imports).
 - **Resolved at definition.** The compiler resolves each function's effective attribute when it compiles the defining package, and the IR carries the resolved value. A generic instantiated in another package keeps the setting of the package that defined it; settings are never inherited by importers. The package default is part of the module's input hash: changing it recompiles the package and its effect changes ripple as usual.
 - **Tooling must show the effective setting and its source** (function, type or package) in hover, because it is no longer visible at the function itself. That is the cost of having levels.
 - **Spelling.** The attribute follows `fn` on a function and the name on a type, which differ; whether to unify them (`fn f[yield]`) is **Open**.
@@ -118,7 +118,7 @@ What it costs: no I/O under a lock (copy out, release, then act, as `Db.get` and
 
 A lint, not a proof. Termination is undecidable, so these are warnings and never errors.
 
-**Classification.** Each loop gets a class, and each function gets a `loops` class in its summary, composed over its callees by the same rules as nested loops. The class describes *uninterrupted* work: a loop whose body contains a park point (a call to any `May` function, a `[yield]` check, `yield()`, a lock entry) contributes `none`, because every iteration gives the scheduler a chance. `purgeExpired` in `stra/redis/db.stra` is the example: its outer loop yields, and the inner loop under the lock is bounded by a counter against a constant.
+**Classification.** Each loop gets a class, and each function gets a `loops` class in its summary, composed over its callees by the same rules as nested loops. The class describes *uninterrupted* work: a loop whose body contains a park point (a call to any `May` function, a `[yield]` check, `yield()`, a lock entry) contributes `none`, because every iteration gives the scheduler a chance. `purgeExpired` in `gort/redis/db.gort` is the example: its outer loop yields, and the inner loop under the lock is bounded by a counter against a constant.
 
 | `loops` | Meaning |
 |---|---|
@@ -147,10 +147,10 @@ Calls through interfaces, function values and foreign code contribute nothing at
 
 ### Example: attributes, `sync` and loop warnings
 
-Illustrative Strata source and C. Neither is compiler output.
+Illustrative Gort source and C. Neither is compiler output.
 
 ```cpp
-// http/headers.stra
+// http/headers.gort
 package http
 
 // Opted in: the compiler inserts a slice check in this loop. May, yields only.
@@ -199,12 +199,12 @@ The three levels together. The folder is the package; each file repeats the pack
 
 ```
 imaging/
-    renderer.stra
-    metrics.stra
+    renderer.gort
+    metrics.gort
 ```
 
 ```cpp
-// imaging/renderer.stra
+// imaging/renderer.gort
 package[yield] imaging                    // package default: functions here get slice checks
 
 struct Renderer {                         // no attribute: inherits [yield] from the package
@@ -212,8 +212,8 @@ struct Renderer {                         // no attribute: inherits [yield] from
     fn[noyield] crc(data: Array<u8>): u32 { ... }                          // the function overrides: plain C
 }
 
-// imaging/metrics.stra
-package[yield] imaging                    // the same line as in renderer.stra
+// imaging/metrics.gort
+package[yield] imaging                    // the same line as in renderer.gort
 
 struct Metrics[noyield] {                 // the type overrides the package default
     fn width(c: u32): u32 { return c < 128 ? 1 : 2 }                  // no checks (the type says noyield)
@@ -328,7 +328,7 @@ Frames come from a per-function arena, sized exactly. This matches the existing 
 ### Pseudocode
 
 ```
-// db/query.stra
+// db/query.gort
 package db                                  // compiled separately         Park(query) = May   (calls Conn.recv)
 fn query(sql: String, id: i64): Row throws DbError {
     let c = pool.acquire();                 // May: waits for a free connection
@@ -336,7 +336,7 @@ fn query(sql: String, id: i64): Row throws DbError {
     return decode(c.recv());                // May
 }
 
-// app/handle.stra
+// app/handle.gort
 package app
 import db
 fn handle(req: Ref<Request>): Response throws DbError {
@@ -450,7 +450,7 @@ Limits on fusion: code size growth; an exported function still needs its own sta
 
 ## 8. Relative to Java virtual threads and Rust async
 
-| Aspect | Java virtual threads | Rust async | Strata (Direction) |
+| Aspect | Java virtual threads | Rust async | Gort (Direction) |
 |---|---|---|---|
 | Source | Plain blocking style | `async fn`, `.await`, runtime choice | Plain blocking style |
 | Suspension visible in signatures | No | Yes (`async`) | No in source; yes in tooling and module summaries |
@@ -463,7 +463,7 @@ Limits on fusion: code size growth; an exported function still needs its own sta
 | `dyn` / virtual | Natural | Needs `Box<dyn Future>` and `Pin` | Uniform: effect bound in the interface |
 | Cost of a function that might park but does not | A call | A poll, plus the state machine's size | A call plus a status test (Measured, toy) |
 
-**Advantages Strata is aiming for:** no function colouring and no `Pin`; precise frames with no stack copying; deterministic cleanup on cancellation (Rust async cancels by dropping, Java by interrupts); no runtime beyond the C one.
+**Advantages Gort is aiming for:** no function colouring and no `Pin`; precise frames with no stack copying; deterministic cleanup on cancellation (Rust async cancels by dropping, Java by interrupts); no runtime beyond the C one.
 
 **Trade-offs and limitations, stated plainly:**
 
@@ -477,6 +477,6 @@ Limits on fusion: code size growth; an exported function still needs its own sta
 
 1. **As the reference semantics.** The tests that decide whether a language feature is correct should pass under both implementations, which is cheap to arrange if the stackful runtime is kept working.
 2. **As a baseline** for the evaluation plan: stackful fibers are the cost to beat on memory (4 KB floor, 4.1 KB resident at 1 KB state against Tokio's 1.4 KB).
-3. **For synchronous drivers** on blocking-pool threads, where a foreign callback needs to call parking Strata code ([dispatch](dispatch-and-ffi.md#foreign-callbacks)).
+3. **For synchronous drivers** on blocking-pool threads, where a foreign callback needs to call parking Gort code ([dispatch](dispatch-and-ffi.md#foreign-callbacks)).
 
 It is no longer the primary implementation path. Spec section 6.1 is rewritten accordingly.

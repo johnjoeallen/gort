@@ -1,12 +1,12 @@
-# mini-redis in Strata
+# mini-redis in Gort
 
-Second proving ground, after the HTTP server (`../http/`, `stra/http/`). Source being converted: `tokio-rs/mini-redis` (MIT), unmodified copy in `orig/src/`
+Second proving ground, after the HTTP server (`../http/`, `gort/http/`). Source being converted: `tokio-rs/mini-redis` (MIT), unmodified copy in `orig/src/`
 (cloned from GitHub, `.git` removed). Only the server side is converted: `frame, parse, connection, db, server, shutdown, cmd/*`, about 2,400
 lines with comments. The client, CLI, examples and tests are not converted; `orig/src/tests/server.rs` is the behavioural reference.
 
 ## What it tests that the HTTP server did not
 
-| mini-redis | Strata feature |
+| mini-redis | Gort feature |
 |---|---|
 | `Frame` (Simple, Error, Integer, Bulk, Null, Array) | tagged enum, `switch` arms |
 | `Command` (Get, Set, Publish, Subscribe, ...) | tagged enum, one arm per command |
@@ -18,7 +18,7 @@ lines with comments. The client, CLI, examples and tests are not converted; `ori
 | `select!` in `Subscribe::apply` over N streams + socket + shutdown | `waitAny` over mailboxes, socket and a shutdown source |
 | `Shutdown` + `mpsc` completion + `Semaphore(250)` | structured scope: leaving it waits for children; connection limit |
 
-## Layout (the rule from `strata-code-layout`)
+## Layout (the rule from `gort-code-layout`)
 
 ```
 bench/redis/
@@ -27,15 +27,15 @@ bench/redis/
   tests/               protocol tests, pub/sub tests, expiry tests, limit tests (port 18080 is NOT used here; use 16379)
   loadgen_resp.c       RESP load generator (GET/SET/PING/PUBLISH, pipelining)
   build.sh  run_tests.sh  run_bench.sh  run_bench_lock.sh
-stra/redis/            the library: frame.stra, command.stra, db.stra, connection.stra, reply.stra, limits.stra, types.stra
-stra/redis/server.stra the server only: listener, per-connection loop, subscribe loop, shutdown, main
-stra/runtime/sync.stra NEW runtime support (declarations); everything else is reused from stra/runtime/ and c/runtime/
+gort/redis/            the library: frame.gort, command.gort, db.gort, connection.gort, reply.gort, limits.gort, types.gort
+gort/redis/server.gort the server only: listener, per-connection loop, subscribe loop, shutdown, main
+gort/runtime/sync.gort NEW runtime support (declarations); everything else is reused from gort/runtime/ and c/runtime/
 c/runtime/rt_sync.h    NEW runtime support in C (lock, wake queue); the rest is reused from the HTTP server
 c/generated/redis/     the C implementation of the same: server.c and its headers
 ```
 
-New runtime support needed (everything else already exists in `stra/runtime/` and `c/runtime/`):
-1. **Channel / mailbox with a stated capacity**, one producer side per publisher, many consumers (`runtime/rt_chan.h`, `chan.stra`).
+New runtime support needed (everything else already exists in `gort/runtime/` and `c/runtime/`):
+1. **Channel / mailbox with a stated capacity**, one producer side per publisher, many consumers (`runtime/rt_chan.h`, `chan.gort`).
 2. **Shutdown source**: a wait source for `waitAny` that becomes ready for every connection when the server is told to stop.
 3. **Cross-worker wakeup**: a publish on worker A must wake a subscriber parked on worker B. The HTTP server never needed this.
 4. **Shared database with a lock** usable from all workers (`sync`); with per-worker or sharded variants as an experiment.
@@ -45,7 +45,7 @@ New runtime support needed (everything else already exists in `stra/runtime/` an
 These are decided deliberately in the conversion (principles 10 and 11), not copied:
 
 - `Frame::parse` does `Vec::with_capacity(len)` with `len` read from the wire, and bulk lengths are unchecked, so one connection can ask for
-  gigabytes. Convert with declared limits: `maxArgs`, `maxBulk`, `maxFrame` (all in `redis/limits.stra`), answered with a protocol error.
+  gigabytes. Convert with declared limits: `maxArgs`, `maxBulk`, `maxFrame` (all in `redis/limits.gort`), answered with a protocol error.
 - The read buffer grows without bound. Bounded by `maxFrame`.
 - `check()` walks the frame, then `parse()` walks it again; the conversion parses once into offsets (like the HTTP `Request`), copying only what the database keeps.
 - The database has no size limit: add `maxKeys` (values are bounded by `maxBulk`).
@@ -58,32 +58,32 @@ These are decided deliberately in the conversion (principles 10 and 11), not cop
 ## Plan
 
 1. Reference run of the original (build, a load generator for RESP, baseline numbers). **Blocked: see below.**
-2. `redis/*.stra`: frame, parse, commands, db.
+2. `redis/*.gort`: frame, parse, commands, db.
 3. `runtime/`: channel, shutdown source, cross-worker wake.
-4. `server.stra` + `server.c`; tests ported from `orig/src/tests/server.rs`.
+4. `server.gort` + `server.c`; tests ported from `orig/src/tests/server.rs`.
 5. Compare with the original Rust (and a Go version if wanted): throughput at 1 core and 4, memory per connection, pub/sub fan-out latency, expiry accuracy.
 
 ## Third-party crates and what replaces them
 
-The original needs `tokio, bytes, atoi, clap, tracing, async-stream, tokio-stream`; Strata has no equivalents of those, so nothing here may depend on them.
+The original needs `tokio, bytes, atoi, clap, tracing, async-stream, tokio-stream`; Gort has no equivalents of those, so nothing here may depend on them.
 
 | Crate | Used for | In this conversion |
 |---|---|---|
-| tokio | scheduler, sockets, timers, `select!`, broadcast/mpsc/Semaphore/Notify | the runtime: `stra/runtime/leaves.stra` + new `runtime/sync.stra` (Signal, Flag, Mailbox, Limiter, `Wakeup.at`) |
+| tokio | scheduler, sockets, timers, `select!`, broadcast/mpsc/Semaphore/Notify | the runtime: `gort/runtime/leaves.gort` + new `runtime/sync.gort` (Signal, Flag, Mailbox, Limiter, `Wakeup.at`) |
 | bytes | refcounted immutable buffers (`Bytes`) | `Ref<Value>`, atomic count because values cross workers |
-| atoi | integer parsing | `parseDecimal` in `redis/frame.stra` |
+| atoi | integer parsing | `parseDecimal` in `redis/frame.gort` |
 | async-stream, tokio-stream | `StreamMap` over subscriptions | not needed: one mailbox per connection, `waitAny` |
 | tracing | logging | not converted; `log(e)` stub |
 | clap | CLI | not converted; options read in `main` |
 
-Standard-library pieces the original also uses and the Strata files ASSUME (as in `../http/README.md`): `Map<K,V>` (hash map keyed by bytes),
+Standard-library pieces the original also uses and the Gort files ASSUME (as in `../http/README.md`): `Map<K,V>` (hash map keyed by bytes),
 `OrderedSet<T>` (sorted, first/remove), `Bytes` (owned byte string), `Instant`, `Duration`, `equalsIgnoreCase`, `isUtf8`, `toString`, `copy`, `find`,
 `decimalText`, `min`, `assert`, `log`, `onSignal`, `spawnWorkers`, `Limits.fromArgs`, `args.getInt`. `server.c` has to write
-its own hash table and expiry heap, which gives an honest cost for what a Strata standard library must supply.
+its own hash table and expiry heap, which gives an honest cost for what a Gort standard library must supply.
 
 ## Status
 
-Written (Strata, not compiled): `runtime/sync.stra`, `redis/{limits,types,frame,reply,connection,command,db}.stra`, `server.stra`.
+Written (Gort, not compiled): `runtime/sync.gort`, `redis/{limits,types,frame,reply,connection,command,db}.gort`, `server.gort`.
 Behaviour differences from the original, all deliberate and listed above, plus: one mailbox per subscriber connection (not per channel), so
 lag is per connection; nested arrays and `-` elements inside a command are refused at scan time; `UNSUBSCRIBE` with no names drops all;
 no lazy expiry on `get` (as the original: an expired key is visible until the purge vthread runs).
@@ -114,8 +114,8 @@ Port 16379 (never 8080). Options: `port workers cpu0 maxconns maxframe maxbulk m
 Results: 27/27 on `server`, `server_asan` (no errors, no leaks) and `server_tsan` (no reports); the four controls (no yield, no reaper hand-off,
 no limits, no wake) fail as intended; under `stress`/`churn` the contended lock path runs (about 100 handoffs) and every channel is released.
 Found by the tests: a pipelining publisher on one worker flooded the subscribers' queues, because the command loop never yielded (now PER_TURN = 64
-commands per turn, in server.stra too); a wake request for a worker that had not finished starting wrote to fd 0 (now dropped until its eventfd exists).
-Not done: loadgen and numbers, Rust/Go comparators, Strata never compiled, no incremental table resize (tables are sized for the limits instead).
+commands per turn, in server.gort too); a wake request for a worker that had not finished starting wrote to fd 0 (now dropped until its eventfd exists).
+Not done: loadgen and numbers, Rust/Go comparators, Gort never compiled, no incremental table resize (tables are sized for the limits instead).
 
 ## Measurements
 `bench/results/miniredis.md` (commands, the lock, pub/sub, idle memory). Headlines: 328k ops/s per worker, 1.0-1.3M on four; a 10% write mix with a park-only lock loses 55% of

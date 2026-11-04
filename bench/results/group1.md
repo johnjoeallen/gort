@@ -12,10 +12,10 @@ Raw output: `fiber.txt` (C), commands in `../run_fiber.sh`. Tokio and Java were 
 | Tokio task | 1 KB | 1,419 | 1 |
 | Tokio task | 4 KB | 4,491 | 1 |
 | Tokio task | 16 KB | 16,778 | 1 |
-| Strata fiber, pooled stack (no guard) | 1 KB | **4,113** (1 page floor) | 1 total |
-| Strata fiber, pooled stack | 4 KB | 8,209 | 1 total |
-| Strata fiber, pooled stack | 16 KB | 20,497 | 1 total |
-| Strata fiber, pooled stack | 64 KB | 69,649 | 1 total |
+| Gort fiber, pooled stack (no guard) | 1 KB | **4,113** (1 page floor) | 1 total |
+| Gort fiber, pooled stack | 4 KB | 8,209 | 1 total |
+| Gort fiber, pooled stack | 16 KB | 20,497 | 1 total |
+| Gort fiber, pooled stack | 64 KB | 69,649 | 1 total |
 | Java virtual thread (heap used) | 0 B | 809 | ~70 |
 | Java virtual thread (heap used) | 4 KB | 4,848 | ~60 |
 | Java virtual thread (RSS, incl. touched garbage) | 4 KB | 10,401 | |
@@ -72,7 +72,7 @@ With THP=always and no `MADV_NOHUGEPAGE` on the pool:
 
 # Option C — compiler-sized frames (`c/frames_bench.c`, `run_frames.sh`, `frames.txt`)
 
-Hand-written C state machines as a Strata compiler would emit them: one exact-size frame per parking function,
+Hand-written C state machines as a Gort compiler would emit them: one exact-size frame per parking function,
 each frame type in its own arena (256 KB chunks, NOHUGEPAGE, free list), non-parking code on the native stack.
 Pinned to one core. "depth" = parking calls nested under the root besides the leaf (frames = depth + 2).
 

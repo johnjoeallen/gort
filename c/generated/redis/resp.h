@@ -1,6 +1,6 @@
 #ifndef REDIS_RESP_H
 #define REDIS_RESP_H
-// redis/resp.h - C counterpart of redis/frame.stra (the single-pass resumable request scanner) and redis/reply.stra (reply writer).
+// redis/resp.h - C counterpart of redis/frame.gort (the single-pass resumable request scanner) and redis/reply.gort (reply writer).
 // A request is an array of simple/bulk/integer elements, scanned into offsets (relative to the frame's first byte) in one pass. Limits are checked
 // from the length lines, before the bytes they announce are read. Replies go into ONE pooled output unit; a bulk too big for it is sent from where it is.
 #include "db.h"

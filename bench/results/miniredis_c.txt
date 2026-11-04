@@ -1,4 +1,4 @@
-# mini-redis (Strata/C) benchmarks, 2026-10-28, server cores 0.., loadgen cores 8..
+# mini-redis (Gort/C) benchmarks, 2026-10-28, server cores 0.., loadgen cores 8..
 ## GET/SET 90/10, 16-byte values, 10000 keys: ops/s and batch latency (one batch = pipe commands, each answered separately)
 workers=1 mode=getset conns=16 subs=0 pipe=1 vsize=16 threads=1: ops/s=328163 batch_lat_us p50=48 p99=53 max=142 errors=0
 workers=1 mode=getset conns=16 subs=0 pipe=16 vsize=16 threads=1: ops/s=467828 batch_lat_us p50=548 p99=765 max=907 errors=0

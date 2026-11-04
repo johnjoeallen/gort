@@ -38,10 +38,10 @@ A library that is only available as a native object and header (no `.smod`) is a
 
 ## Native C interoperability
 
-C declarations carry no ownership or effect information (spec 5.2). A Strata binding must state it:
+C declarations carry no ownership or effect information (spec 5.2). A Gort binding must state it:
 
 ```
-// bindings/crc.stra
+// bindings/crc.gort
 package bindings
 
 extern fn crc32(data: Array<u8>): u32                  // plain: Never. Assumed short and non-blocking.
@@ -51,7 +51,7 @@ extern blocking fn pqExec(c: Ref<PgConn>, sql: String) // proposed: may block th
 
 An `extern fn` without a modifier is a **promise** that it returns quickly and does not block. The compiler cannot verify the promise and nothing in the runtime enforces it. A violation stalls one worker for the length of the call (the same failure mode as a Java thread stuck while pinned); a watchdog may report it (see the table).
 
-`extern blocking` is the one proposed new keyword in this update (**Open**; placeholder). It states that the call may block the thread, and is the only way a binding can say so. It carries `foreign = blocking` and `park = May` in the summary: the Strata caller sees an ordinary suspending call.
+`extern blocking` is the one proposed new keyword in this update (**Open**; placeholder). It states that the call may block the thread, and is the only way a binding can say so. It carries `foreign = blocking` and `park = May` in the summary: the Gort caller sees an ordinary suspending call.
 
 ## Blocking foreign calls
 
@@ -59,9 +59,9 @@ A foreign C function is native stack that cannot be captured, so it cannot be su
 
 | Strategy | What happens | Cost and limits |
 |---|---|---|
-| **1. Nonblocking binding** (best) | Use a readiness/async API of the library (nonblocking sockets, `epoll`, `io_uring`); the Strata wrapper calls it and parks on the descriptor. | Library must offer it. No extra thread. |
+| **1. Nonblocking binding** (best) | Use a readiness/async API of the library (nonblocking sockets, `epoll`, `io_uring`); the Gort wrapper calls it and parks on the descriptor. | Library must offer it. No extra thread. |
 | **2. Offload to a blocking pool** (**Direction** for `extern blocking`) | The call is a park point: the vthread parks, a pool thread runs the call, and a completion wakes the vthread. | A thread hop per call (some microseconds); a bounded pool, so a full pool queues work (and that wait is itself a park). Arguments must outlive the park: arguments that are addresses of locals must be **frame-resident**, not on the native stack (same rule as [here](suspension.md#locals-whose-address-a-callee-holds)). Thread-affine libraries need a pinned thread (strategy 3). |
-| **3. Dedicated thread** | A thread owns a library (a connection, a context) and Strata sends it work and awaits replies as messages. | Serialises that library's calls; good for thread-affine code. |
+| **3. Dedicated thread** | A thread owns a library (a connection, a context) and Gort sends it work and awaits replies as messages. | Serialises that library's calls; good for thread-affine code. |
 | **4. Run on the worker** | Plain `extern fn`: the call blocks the worker. | Only right for calls that are truly short. Stalls everything on that worker. |
 | **5. Compensating worker** | A monitor notices a worker stuck in foreign code past a threshold and starts another worker so the scheduler keeps a core busy. | Does not fix the stuck call. Useful as a backstop and as a diagnostic, not a design. |
 
@@ -69,10 +69,10 @@ Recommendation: 1 where available, 2 as the default for anything declared `exter
 
 ## Foreign callbacks
 
-C code calls a Strata function (a `qsort` comparator, a library event callback). The callback runs on whatever native stack C is using.
+C code calls a Gort function (a `qsort` comparator, a library event callback). The callback runs on whatever native stack C is using.
 
 - **Default (Direction):** a callback is compiled as `Never` (it may call only `Never` functions, and no slice check is inserted). Calling a `May` function from it is a compile error. Because a callback is invoked from C, it is `f_call`-only: nothing underneath it can be captured.
-- **Exception: callbacks that must park.** Declared as parking callbacks, they run on a **blocking-pool thread only**, under a **synchronous driver**: the wrapper calls `f_call`; on `PARKED` it blocks the OS thread on a wake-up object, and on the wake calls `f_resume` until `DONE`. Parking then blocks that thread, not a scheduler worker. This is the `block_on` of Strata. It is forbidden on scheduler workers (compile error if the call is made from a worker context that is not a pool thread; at minimum, a runtime check).
+- **Exception: callbacks that must park.** Declared as parking callbacks, they run on a **blocking-pool thread only**, under a **synchronous driver**: the wrapper calls `f_call`; on `PARKED` it blocks the OS thread on a wake-up object, and on the wake calls `f_resume` until `DONE`. Parking then blocks that thread, not a scheduler worker. This is the `block_on` of Gort. It is forbidden on scheduler workers (compile error if the call is made from a worker context that is not a pool thread; at minimum, a runtime check).
 - Exceptions cannot cross a C frame. The wrapper catches `THROWN` and converts it to the library's error convention or aborts. The binding says which.
 
 ## Dynamically loaded modules

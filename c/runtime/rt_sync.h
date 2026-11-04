@@ -1,6 +1,6 @@
 #ifndef RT_SYNC_H
 #define RT_SYNC_H
-// runtime/rt_sync.h - C counterpart of runtime/sync.stra and of the parking sync/mutate lock (design doc 7.1). NEW runtime support; the rest of the runtime is
+// runtime/rt_sync.h - C counterpart of runtime/sync.gort and of the parking sync/mutate lock (design doc 7.1). NEW runtime support; the rest of the runtime is
 // c/runtime/{rt,rt_buf,rt_io,rt_net}.h, unchanged and included by server.c.
 //
 //   * cross-worker wake: any thread asks worker W to wake task T (or a mailbox's consumer). The request goes on W's lock-free stack and an eventfd that W's

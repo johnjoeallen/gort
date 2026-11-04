@@ -1,5 +1,5 @@
 // D17 benchmark: combined slot (counts + body in one arena slot) against a split control block (counts + body pointer in a
-// never-moving control-block arena, body in a movable type arena). Hand-written C, no Strata compiler.
+// never-moving control-block arena, body in a movable type arena). Hand-written C, no Gort compiler.
 //
 //   gcc -O2 -DSPLIT=0 -o split_0 split_bench.c      combined: Ref = pointer to a slot { strong, weak, meta, body[] }
 //   gcc -O2 -DSPLIT=1 -o split_1 split_bench.c      split:    Ref = pointer to a control block { strong, weak, body*, meta }; the body is

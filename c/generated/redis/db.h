@@ -1,7 +1,7 @@
 #ifndef REDIS_DB_H
 #define REDIS_DB_H
-// redis/db.h - C counterpart of redis/db.stra: the shared database. A hash table (chained), a binary min-heap of expiries, a channel table, and the
-// reaper queue, all behind ONE parking RwLock (runtime/rt_sync.h). Written by hand because C has no HashMap/BTreeSet; this is the cost the Strata
+// redis/db.h - C counterpart of redis/db.gort: the shared database. A hash table (chained), a binary min-heap of expiries, a channel table, and the
+// reaper queue, all behind ONE parking RwLock (runtime/rt_sync.h). Written by hand because C has no HashMap/BTreeSet; this is the cost the Gort
 // standard library would hide. Tables are sized once at startup for the declared limits (maxKeys, maxTopics), so a lock hold never includes a resize:
 // the arrays are calloc'd, which the OS maps lazily, so unused capacity costs address space, not memory.
 // Callers hold the lock (read for get/publish, write for the rest); none of these functions parks.
@@ -16,7 +16,7 @@ static Limits L = { 250, 4194304, 1048576, 512, 1000000, 10000, 100, 1024, 31536
 
 #define PURGE_BATCH 1000
 
-// ---- Value: immutable bytes, shared by atomic count (Strata: Ref<Value>) ----
+// ---- Value: immutable bytes, shared by atomic count (Gort: Ref<Value>) ----
 typedef struct Value { u32 refs, len; char d[]; } Value;
 static Value *value_new(const char *p, u32 len) {
     Value *v = malloc(sizeof *v + len);

@@ -3,7 +3,7 @@
 The second proving ground, chosen because it differs from HTTP: long-lived connections, pub/sub fan-out and one shared database. The server side of `tokio-rs/mini-redis` was converted (frame, parse, connection, db, server, shutdown, commands).
 
 !!! note "Conversion depends on no third-party crates"
-    If a program needs a crate, Strata would have no equivalent. The README maps each crate used by the original to a replacement, and lists the standard-library pieces the Strata source assumes.
+    If a program needs a crate, Gort would have no equivalent. The README maps each crate used by the original to a replacement, and lists the standard-library pieces the Gort source assumes.
 
 ## What was new
 

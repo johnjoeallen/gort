@@ -1,6 +1,6 @@
 # Architecture: compilation, suspension and modules
 
-This section extends [`strata-design.md`](https://github.com/johnjoeallen/strata/blob/main/strata-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in `c/` is hand-written to look like compiler output.
+This section extends [`gort-design.md`](https://github.com/johnjoeallen/strata/blob/main/gort-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in `c/` is hand-written to look like compiler output.
 
 | Page | Covers |
 |---|---|
@@ -8,13 +8,13 @@ This section extends [`strata-design.md`](https://github.com/johnjoeallen/strata
 | [Suspension and continuations](suspension.md) | The may-park effect, resumable frames, recursion, cancellation, cleanup, fusion |
 | [Compiled modules and linking](modules.md) | The module format, the three information tiers, ABI and IR boundaries, incremental versus optimised builds, recompilation rules |
 | [Dynamic dispatch and external code](dispatch-and-ffi.md) | Interfaces, function values, generics, C interop, blocking foreign calls, callbacks, dynamic loading |
-| [Evaluation plan](benchmarks.md) | How Strata is compared with Go and Java virtual threads, and with Rust async as a reference ceiling |
+| [Evaluation plan](benchmarks.md) | How Gort is compared with Go and Java virtual threads, and with Rust async as a reference ceiling |
 | [Open decisions](open-decisions.md) | Unresolved questions, alternatives, recommended direction |
 | [Changes and contradictions](changes.md) | What this update changed in the existing design, and what it contradicted |
 
 ## Objective
 
-The target is **excellent performance with a simpler programming model**, not performance superiority. A Strata server should be written as plain sequential code (no `async`/`await`, no lifetime names, no pinning, no executor choice) and should land in the same performance class as hand-tuned Rust async or Java virtual-thread code. When the two disagree, the simpler source wins, provided the cost is measured and stated. The evaluation plan therefore measures source ceremony as well as speed.
+The target is **excellent performance with a simpler programming model**, not performance superiority. A Gort server should be written as plain sequential code (no `async`/`await`, no lifetime names, no pinning, no executor choice) and should land in the same performance class as hand-tuned Rust async or Java virtual-thread code. When the two disagree, the simpler source wins, provided the cost is measured and stated. The evaluation plan therefore measures source ceremony as well as speed.
 
 ## Status labels
 
@@ -40,17 +40,17 @@ Nothing in the language may depend on which implementation is used. A program th
 ## The pipeline
 
 ```
-Strata source (.stra)
+Gort source (.gort)
     |
     v
 Parsing, name resolution, type checking
 Escape and effect inference (local)
     |
     v
-Typed Strata IR (per module, ownership and effects explicit)
+Typed Gort IR (per module, ownership and effects explicit)
     |
     v
-Compiled Strata module (.smod) -------------------------------+
+Compiled Gort module (.smod) -------------------------------+
     |  interface: types, signatures, ownership modes,           |
     |             effect summaries, dispatch contracts         |
     |  retained IR (generic bodies, inlinable bodies, the rest)|

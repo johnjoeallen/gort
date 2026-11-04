@@ -1,6 +1,6 @@
 #ifndef HTTP_READER_H
 #define HTTP_READER_H
-// http/http_reader.h - read one request head into a size-class input buffer, parking while the client is slow (C counterpart of http/reader.stra,
+// http/http_reader.h - read one request head into a size-class input buffer, parking while the client is slow (C counterpart of http/reader.gort,
 // Reader.nextRequest). The concurrent server reads inline in its connection loop instead (Reader.tryNextRequest).
 #include "rt_buf.h"
 

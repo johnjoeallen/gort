@@ -1,6 +1,6 @@
 #ifndef HTTP_BODY_H
 #define HTTP_BODY_H
-// http/http_body.h - request bodies (C counterpart of http/body.stra and Reader.readBody / readUpload in http/reader.stra).
+// http/http_body.h - request bodies (C counterpart of http/body.gort and Reader.readBody / readUpload in http/reader.gort).
 #include "rt.h"
 #include "rt_buf.h"
 

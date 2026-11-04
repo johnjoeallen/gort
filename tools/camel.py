@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""camel.py - rename the snake_case Strata identifiers listed in NAMES to camelCase in the files given. usage: camel.py file..."""
+"""camel.py - rename the snake_case Gort identifiers listed in NAMES to camelCase in the files given. usage: camel.py file..."""
 import re, sys
 NAMES = """append_i64 append_json bad_request cache_get cache_put db_query encode_b64 group_by handle_get_user handle_report headers_too_large
 is_dir is_some keep_alive load_rows log_event log_ring max_batch max_hold not_found not_implemented ok_close ok_ka parse_id parse_range

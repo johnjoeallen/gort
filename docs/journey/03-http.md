@@ -1,12 +1,12 @@
 # 3. An HTTP server
 
-The first proving ground. The server is written as `.stra` source, with a hand-written C counterpart standing in for compiler output. Tests pin the two together.
+The first proving ground. The server is written as `.gort` source, with a hand-written C counterpart standing in for compiler output. Tests pin the two together.
 
 ## What it showed
 
 | 4 workers, 64 active connections | per idle connection | requests/s |
 |---|---|---|
-| Strata-style C, 100k connections | 89 B | 1.29M |
+| Gort-style C, 100k connections | 89 B | 1.29M |
 | Tokio, lazy futures | 897 B | 1.25M |
 | Tokio, naive handler | 3,074 B | 1.25M |
 
@@ -21,7 +21,7 @@ The first proving ground. The server is written as `.stra` source, with a hand-w
 - **Pipelined requests** run as one child task each, answered in request order, with a barrier for unsafe methods.
 - **Opt-in response batching,** off by default, with a bound on held responses and a max hold time. It exists to honour principle 10.
 - **Lingering close,** so an error response is not destroyed by a reset when the client is still sending.
-- **Layering:** generic support moved into runtime and library files; `server.stra` holds only the server.
+- **Layering:** generic support moved into runtime and library files; `server.gort` holds only the server.
 
 ## Negative controls
 

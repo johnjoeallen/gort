@@ -1,3 +1,3 @@
-module strata/bench/gohttp
+module gort/bench/gohttp
 
 go 1.24
