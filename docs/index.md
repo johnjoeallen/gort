@@ -1,6 +1,6 @@
 <p align="center">
-  <img alt="Gort" src="assets/logo-light.svg#only-light" height="110">
-  <img alt="Gort" src="assets/logo-dark.svg#only-dark" height="110">
+  <img alt="Gort" src="assets/logo-light.svg#only-light" style="height:200px;width:auto">
+  <img alt="Gort" src="assets/logo-dark.svg#only-dark" style="height:200px;width:auto">
 </p>
 
 # Gort
