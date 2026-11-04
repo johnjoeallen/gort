@@ -281,6 +281,31 @@ fn make(shared: Ref<Limits>): Ref<Db> {
 
 Rule of thumb used in `gort/`: a part the container exclusively owns is inline (`Db.lim`, `Reader.scanner`, `Route.path`, `InFlight.ring`); anything shared, pooled, optional or returned from a handler is a `Ref` (`Reader.lim`, `Server.cfg`, `Server.table`, `Resp`, `Ref<OutBuf>?`). Library containers, `String` and `Array` are always handles.
 
+## Example 8: a plain `new`, and when it is counted
+
+The compiler decides at each `new` whether the value is ever converted to a `Ref` on any path (assignment, a `Ref` parameter, a return, a store, a capture, `spawn`). If so, the object is counted from allocation and the scope holds it in an injected `Ref`. If not, it is scope-owned: a bare body with no control block, freed at exit (D18 item 5).
+
+```cpp
+fn demo(flag: bool): Ref<Point> {
+    let p = new Point { x: 1, y: 2 }     // COUNTED: p is converted to a Ref below (show, return), so p is the injected Ref
+    p.move(1, 1)                         // a method call: self is a place, no conversion
+    let q = p                            // a copy of the body (a value), no conversion
+    if (flag) {
+        show(p)                          // show takes Ref<Point>: a conversion on one path is enough
+    }
+    return p                             // moves the injected Ref out: the Point outlives demo
+}
+```
+
+```cpp
+fn temp() {
+    let b = new Builder {}               // never converted to a Ref on any path: scope-owned
+    b.add(1)
+}                                        // freed here; may live in a frame, with no control block and no counts
+```
+
+The decision is conservative: a conversion on a path that is rarely taken still makes the site counted for every execution. The compiler reports it ("counted because of line N") so the cost is visible, and writing `Ref<Point> p = new Point {...}` makes the choice explicit.
+
 ## What the module file carries
 
 ```
@@ -313,7 +338,7 @@ A container that can relocate its storage (arrays, builders, map tables) is reac
 ## Open
 
 - **Publishing a graph.** Setting the flag on everything reachable costs a walk at the publish. Alternatives: refuse to publish an object whose graph has local-only parts that are not themselves being published; or make `spawn` and message sends take only values whose reachable graph is already shared or immutable.
-- **Where the lock word lives.** In every control block (costs bytes on every `new`), or allocated at the first publish (costs an indirection).
+- **Where the lock word lives.** In every control block (costs bytes on every promoted object), or allocated at the first publish (costs an indirection).
 - **Counts per instance.** A flag test in each count operation, or atomic always for non-local references. Needs `refcount_bench` on realistic access patterns.
 - **Write-once across modules.** A field is write-once if no code in its defining module writes it. Public fields that other modules may write need either a mutability declaration or a rule that they are mutable by default.
 - **Immutable types.** Inferred from R3 as above; whether to also let the programmer assert it (for a compile error if a later change breaks it) is undecided.
