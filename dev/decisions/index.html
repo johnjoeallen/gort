@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time">
+        <meta name="description" content="A small compiled language for network servers: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector. Designed one measured step at a time">
       
       
       
@@ -1019,7 +1019,7 @@
 <td>Gort would have no equivalents.</td>
 </tr>
 <tr>
-<td>Positioning: a Go-like language with a sprinkle of Java, for servers and services; not a systems language and not a Rust or C/C++ competitor</td>
+<td>Positioning: a small compiled language for network servers and services, with C++-style value types, Go-style embedding and built-in reference counting; not a systems language and not a Rust or C/C++ competitor</td>
 <td>Its runtime and its trade of control for simplicity rule out systems work. Types are structs that carry their functions, written inside the struct or implemented out of line as <code>fn T::name</code> (Java and C++ styles, both supported; a deliberate break with Go); no inheritance, <code>struct Dog: Animal with Body</code> (Direction, D16). Comparison set is Go and Java; Rust is a performance reference. Beyond them (intent, unbuilt): no GC, compile-time-checked sharing. See spec 1.1.</td>
 </tr>
 <tr>

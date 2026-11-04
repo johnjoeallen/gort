@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time">
+        <meta name="description" content="A small compiled language for network servers: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector. Designed one measured step at a time">
       
       
       
@@ -1027,7 +1027,7 @@
 <li>deterministic cleanup of files, sockets and locks</li>
 <li>reference safety without writing lifetime names like <code>'a</code></li>
 </ul>
-<p>It is not a Goose fork or a Rust dialect, and it does not try for feature parity with Rust. Understandable semantics win over zero overhead at all costs. Where it sits: a Go-like language with a sprinkle of Java for servers and services, not a systems language (spec 1.1). Rust appears in the story below as a performance reference, because the first benchmarks needed a native, no-GC baseline.</p>
+<p>It is not a Goose fork or a Rust dialect, and it does not try for feature parity with Rust. Understandable semantics win over zero overhead at all costs. Where it sits: a small compiled language for servers and services, with C++-style value types, Go-style embedding and built-in reference counting, not a systems language (spec 1.1). Rust appears in the story below as a performance reference, because the first benchmarks needed a native, no-GC baseline.</p>
 <h2 id="the-first-rules">The first rules<a class="headerlink" href="#the-first-rules" title="Permanent link">&para;</a></h2>
 <p>Two rules shaped everything after them, and both came from the user rather than from measurement:</p>
 <div class="admonition tip">

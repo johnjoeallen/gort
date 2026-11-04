@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Designing a Go-like server language with a sprinkle of Java, without a garbage collector, one measured step at a time">
+        <meta name="description" content="A small compiled language for network servers: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector. Designed one measured step at a time">
       
       
       
@@ -1041,7 +1041,8 @@
 </p>
 
 <h1 id="gort">Gort<a class="headerlink" href="#gort" title="Permanent link">&para;</a></h1>
-<p>Gort is a design for a Go-like language with a sprinkle of Java, aimed at network servers and services. From Go: a small language, plain sequential code, cheap concurrent tasks with blocking-style I/O, little ceremony. From Java: classes, interfaces, exceptions, structured concurrency, packages that follow folders. Beyond both: no tracing garbage collector (compiler-managed lifetimes, deterministic cleanup) and compile-time-checked shared state, which neither Go nor Java has. It is not a systems language: it has a runtime, and it does not compete with Rust or C/C++. There are no lifetime annotations.</p>
+<p><strong>A small compiled language for network servers: C++-style value types, Go-style embedding, reference counting built into the language, and no garbage collector.</strong></p>
+<p>Gort is a design for a small, statically typed language for network servers and services. Types are plain values, as in C++: a struct is stored inline and copied by value. Reuse is by composition, as in Go: a struct embeds other structs with <code>with</code> (their fields and functions are promoted) and satisfies interfaces with <code>:</code>, with no class inheritance. Sharing is explicit and counted: <code>Ref&lt;T&gt;</code>, <code>Array&lt;T&gt;</code> and <code>String</code> are language elements with built-in reference counts, so there is no tracing garbage collector and cleanup is deterministic. Concurrency is plain blocking-style code on virtual threads, and the compiler checks that shared mutable state is only touched under <code>sync</code> or <code>mutate</code>. It compiles to C. Nothing is implemented yet.</p>
 <p><em>Gort is also a small town in County Galway, in the west of Ireland. The name comes from the Irish word for a field.</em></p>
 <div class="admonition note">
 <p class="admonition-title">Status</p>
@@ -1053,7 +1054,7 @@
 <a class="md-button" href="decisions/">Decisions so far</a></p>
 <h2 id="the-design-in-six-lines">The design in six lines<a class="headerlink" href="#the-design-in-six-lines" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Ordinary values carry no reference-count header; <code>new</code> makes a strong <code>Ref&lt;T&gt;</code>, and <code>WeakRef&lt;T&gt;</code> breaks cycles.</li>
+<li>Plain values carry no reference-count header; a <code>Ref&lt;T&gt;</code> is a counted handle to an object made by <code>new</code>, and <code>WeakRef&lt;T&gt;</code> breaks cycles.</li>
 <li>Lifetimes are inferred, not written.</li>
 <li>Shared state is accessed through <code>sync</code> (read) and <code>mutate</code> (write) blocks; entering one may park the virtual thread.</li>
 <li>Nothing is hidden except virtual threads and parking: no implicit buffering, batching or retry.</li>
