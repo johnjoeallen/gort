@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://johnjoeallen.github.io/strata/dev/architecture/open-decisions/">
+        <link rel="canonical" href="https://johnjoeallen.github.io/gort/dev/architecture/open-decisions/">
       
       
         <link rel="prev" href="../benchmarks/">
@@ -197,13 +197,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/johnjoeallen/strata" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/johnjoeallen/gort" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    johnjoeallen/strata
+    johnjoeallen/gort
   </div>
 </a>
       </div>
@@ -242,13 +242,13 @@
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/johnjoeallen/strata" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/johnjoeallen/gort" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    johnjoeallen/strata
+    johnjoeallen/gort
   </div>
 </a>
     </div>
@@ -1473,7 +1473,7 @@
 </ul>
 <p>Costs and open points:</p>
 <ul>
-<li><strong>One dependent load</strong> of <code>ptr</code> per access outside a hoisted window. <em>Measured, micro-benchmark only</em> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle.md"><code>handle.md</code></a>, B14): reloading on every access is not visible at <code>-O2</code> and equals a raw pointer when hoisted. At <code>-O3</code> a window that ends every iteration costs vectorisation (about 0.14 to 0.23 ns/element in L1), and a may-grow call in the loop costs the call (0.7 to 0.9 ns), not the reload. A second run with realistic bodies and a lock around every variant (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle_real.md"><code>handle_real.md</code></a>) gives a typical loss of 1 to 3% (0.01 to 0.3 ns per element) over a raw pointer for bodies that do work, individual configurations up to about 10%, and up to +28% only for an almost-empty body with no lock (0.25 ns); the noise floor is up to 19% in a few cells because gcc compiled two identical loops differently. One machine, single thread, uncontended locks, synthetic windows, A third run, a mixed request on the C runtime with a lock-protected cache, a simulated database wait and growable-buffer rendering (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>, B12), found the handle build within noise of a raw pointer in work per request, throughput and latency (0.5 to 3% run-to-run spread; worst case +2.1% for the pessimistic reload-at-every-access build). So what remains open is how often real windows end, which needs a compiler.</li>
+<li><strong>One dependent load</strong> of <code>ptr</code> per access outside a hoisted window. <em>Measured, micro-benchmark only</em> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/handle.md"><code>handle.md</code></a>, B14): reloading on every access is not visible at <code>-O2</code> and equals a raw pointer when hoisted. At <code>-O3</code> a window that ends every iteration costs vectorisation (about 0.14 to 0.23 ns/element in L1), and a may-grow call in the loop costs the call (0.7 to 0.9 ns), not the reload. A second run with realistic bodies and a lock around every variant (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/handle_real.md"><code>handle_real.md</code></a>) gives a typical loss of 1 to 3% (0.01 to 0.3 ns per element) over a raw pointer for bodies that do work, individual configurations up to about 10%, and up to +28% only for an almost-empty body with no lock (0.25 ns); the noise floor is up to 19% in a few cells because gcc compiled two identical loops differently. One machine, single thread, uncontended locks, synthetic windows, A third run, a mixed request on the C runtime with a lock-protected cache, a simulated database wait and growable-buffer rendering (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>, B12), found the handle build within noise of a raw pointer in work per request, throughput and latency (0.5 to 3% run-to-run spread; worst case +2.1% for the pessimistic reload-at-every-access build). So what remains open is how often real windows end, which needs a compiler.</li>
 <li><strong>FFI.</strong> C needs a stable address. An <code>extern</code> call takes a <em>pinned</em> pointer: the container is excluded from growing for the call. A library that retains the pointer needs a non-moving allocation (a fixed-capacity array or a dedicated virtual region), declared in the binding contract (spec 5.2).</li>
 <li><strong>Large arrays.</strong> A dedicated virtual-address reservation grows in place, so its <code>ptr</code> never changes and its handle test is free. Whether to use one is the older question in <a href="../../open-questions/">open questions</a>; it becomes an optimisation under this rule, not a correctness requirement.</li>
 <li><strong>Precision of the may-grow summary.</strong> A coarse summary ends windows too often. Start per container parameter; refine only if B-series results show it matters.</li>
@@ -1494,7 +1494,7 @@
 </ul>
 <p>Open points: the name of the inline field (<code>dog.body</code>?); clashes when two incorporated structs promote the same name (compile error until the author disambiguates); whether <code>with</code> may name an interface-typed field; <code>cleanup()</code> order (fields in reverse order of declaration, incorporated structs in the same order); how interface access modes (sharing, <code>sync</code>/<code>mutate</code>) are stated; and whether <code>: Animal</code> can be declared outside the struct (as Go and Rust allow) or only in its header.</p>
 <h2 id="d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion">D17. Moving objects between chunks: split control blocks, and weak promotion<a class="headerlink" href="#d17-moving-objects-between-chunks-split-control-blocks-and-weak-promotion" title="Permanent link">&para;</a></h2>
-<p><em>Status: the split control block and the moving of bodies between chunks are <strong>rejected for counted objects</strong> by <a href="#d18-memory-model-values-handles-chunks-arrays-scopes-and-c-interop">D18</a>; the measurements below are the evidence. <code>weak.promote()</code> returning <code>Ref&lt;T&gt;?</code> stays.</em> <em>Direction, proposed by the author; unmeasured.</em> The finding that motivates it: long-lived objects scattered through shared chunks pin memory (Measured, <a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/group2.md"><code>group2.md</code></a>: 6 to 11x retained after a burst). Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks. Chunked arenas already let a type arena grow without moving anything; this decision is about shrinking.</p>
+<p><em>Status: the split control block and the moving of bodies between chunks are <strong>rejected for counted objects</strong> by <a href="#d18-memory-model-values-handles-chunks-arrays-scopes-and-c-interop">D18</a>; the measurements below are the evidence. <code>weak.promote()</code> returning <code>Ref&lt;T&gt;?</code> stays.</em> <em>Direction, proposed by the author; unmeasured.</em> The finding that motivates it: long-lived objects scattered through shared chunks pin memory (Measured, <a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/group2.md"><code>group2.md</code></a>: 6 to 11x retained after a burst). Per-type arenas separate types, not lifetimes, so a type that mixes short and long lifetimes still pins chunks. Chunked arenas already let a type arena grow without moving anything; this decision is about shrinking.</p>
 <ul>
 <li><strong>Split.</strong> The control block (strong and weak counts, metadata, a pointer to the body as <code>{chunk, offset}</code>) lives in one fixed-size control-block arena shared by all types, and never moves. <code>Ref&lt;T&gt;</code> and <code>WeakRef&lt;T&gt;</code> point at it. The body (the fields) stays in the type's chunked arena and may be moved to another chunk by copying it and updating the one pointer in the control block. No <code>Ref</code> or <code>WeakRef</code> changes, and counting never touches the body.</li>
 <li><strong>Lifetimes.</strong> When the strong count reaches zero the body is destroyed (<code>cleanup()</code> runs) and its slot freed. The control block stays until the weak count is also zero. Today's layout (spec 3.3) keeps the whole slot until then, so a dead object with a lingering <code>WeakRef</code> pins its full size; after the split it pins only the control block (about 32 bytes). A <code>WeakRef</code> that is never dropped, for example in a long-lived cache, pins that block until its holder drops the entry; holders should drop an entry when promotion fails.</li>
@@ -1509,26 +1509,26 @@
 <li><strong>Allocation epoch in the control block (Direction).</strong> The slot header has a 32-bit allocation epoch, packed into <code>meta</code> beside the worker index so the header does not grow and the layout is the same in every build. It is filled in only when age tracking is on (<code>--track-age</code>, implied by <code>--debug</code>), from a global epoch counter that a ticker advances (no clock read in <code>new</code>); otherwise it is 0, meaning unknown. Because release builds leave it empty, nothing in the runtime may depend on it: it is for age histograms and finding leaks. With D18 nothing moves, so there is no mover to use it.</li>
 <li><strong>Tiny objects</strong> (about 16 bytes or less) gain little: the control block is a large fraction of the body. They could live inline in the control block.</li>
 <li><strong>Generations may become unnecessary</strong> for object arenas: a <code>Ref</code> points at the control block, so validity comes from the counts, and the chunk-epoch fix for decommit (<code>group2.md</code>, section 7) would apply only to the control-block arena. Check before relying on it.</li>
-<li><strong>Measured, micro-benchmark only</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>, B15; single thread, hand-written C):<ul>
+<li><strong>Measured, micro-benchmark only</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/split.md"><code>split.md</code></a>, B15; single thread, hand-written C):<ul>
 <li><em>Time (loss).</em> <code>new</code> is 9 to 45% slower, a free 58 to 135% slower, a free-plus-allocate pair about 2x. A dereference through the control block is 13 to 97% slower for independent reads and <strong>75 to 174% slower on a pointer chase</strong> (two cache lines in two arenas). This is much more than the D15 header (0 to 3%), which sits next to its array.</li>
 <li><em>Memory (gain).</em> Dead objects held by a <code>WeakRef</code>: 157 MB falls to 50 MB (64 B bodies), 263 MB to 25 MB (256 B). After a burst leaving 1% scattered survivors: 44 MB with moving, 70 MB with page release only, 157 MB with nothing. At 10% survivors only moving helps (64 MB against 157 MB).</li>
 <li><em>Memory (cost).</em> A live object is 96 B against 80 B for a 64 B body (+22% on a full heap), and the control blocks of scattered survivors stay pinned (about 24 B each), which is the floor of the 44 MB.</li>
 <li><em>When it pays.</em> Not when objects die roughly in allocation order (nothing is retained and the split is pure cost); for types with mixed lifetimes and for long-lived <code>WeakRef</code>s.</li>
 </ul>
 </li>
-<li><strong>Measured, a whole service</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>, the mixed-request service with a cache of <code>Ref&lt;User&gt;</code> objects):<ul>
+<li><strong>Measured, a whole service</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>, the mixed-request service with a cache of <code>Ref&lt;User&gt;</code> objects):<ul>
 <li><em>Time (loss).</em> Work per request +4 to +12% with one worker and +6 to +27% with four; throughput -2 to -10% (one worker) and -16 to -21% (four) where requests are served from the cache; no difference where the service waits on its database. With four workers the longer critical section (a second dependent miss inside <code>sync</code>) raises failed lock attempts per request from 3.9 to 7.0.</li>
 <li><em>Memory.</em> Steady state is 14 to 17% larger. After 90% of the cache is evicted at random and traffic narrows, only moving returns memory: 44 MB resident at the end against 54 MB for the combined layout and 63 MB for the split without the mover.</li>
 <li><em>Moving while the service runs.</em> Readers exist only inside <code>sync</code>, so a move takes <code>mutate</code> on the cache lock for one chunk at a time (longest hold 48 us); no grace period or epoch tracking is needed. 54,000 bodies cost 48 ms of mover CPU and about 7% of the workers' throughput while it ran.</li>
 </ul>
 </li>
-<li><strong>Measured, sharded locks and clone-on-hit</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>, the same service with 16 cache locks and a hit that clones the <code>Ref</code> and reads the body after leaving the lock):<ul>
+<li><strong>Measured, sharded locks and clone-on-hit</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>, the same service with 16 cache locks and a hit that clones the <code>Ref</code> and reads the body after leaving the lock):<ul>
 <li><em>Time (loss).</em> Most of the four-worker loss above came from the single lock. With 16 locks the split costs +4 to +10% work per request over the combined layout (one worker: +7 to +10%) and 0 to -8% throughput; failed lock attempts per request fall from 6.3 to 0.15. The remaining cost is the second dependent cache miss per hit (about 35 ns).</li>
 <li><em>Clone-on-hit</em> is not measurably slower for the combined layout and 0 to 1.5% cheaper for the split (a shorter critical section). With half the requests on 1,000 hot users the atomic count updates cost about 5 ns per request.</li>
 <li><em>Moving with clones.</em> A move takes every shard lock and skips a chunk if any of its objects has <code>strong &gt; 1</code> or is held by a request alone. The flush scenario still ends at 49 MB resident against 63 MB (split without the mover) and 54 MB (combined); 1 of 330 chunks was skipped, because a request holds its clone only across a non-parking render. A Ref held across a park (D2) would pin chunks far more often: not measured.</li>
 </ul>
 </li>
-<li><strong>Measured, a Ref held across a park and Refs held for good</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/hold.md"><code>hold.md</code></a>):<ul>
+<li><strong>Measured, a Ref held across a park and Refs held for good</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/hold.md"><code>hold.md</code></a>):<ul>
 <li><em>Held across a park</em> (100 us to 10 ms after every hit): no cost in steady state, and the mover recovers the same memory (35 MB resident at the end against 63 MB without it) while wasting up to about 78% of its attempts on pinned chunks.</li>
 <li><em>Held for good</em> (a Ref stored somewhere long-lived): with 0.1% of hits keeping their Ref the mover recovers 9 MB instead of 14 MB (54 MB at the end, against 49 MB without stashing and 63 MB with no mover), and at 1% nothing, because a scattered pin blocks its whole chunk. The mover is all-or-nothing per chunk; moving only the unpinned bodies was not tried.</li>
 <li><em>For D2.</em> A Ref held across a park needs no special rule for moving; a stored Ref is the case that defeats it.</li>

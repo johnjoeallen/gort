@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://johnjoeallen.github.io/strata/dev/architecture/benchmarks/">
+        <link rel="canonical" href="https://johnjoeallen.github.io/gort/dev/architecture/benchmarks/">
       
       
         <link rel="prev" href="../dispatch-and-ffi/">
@@ -197,13 +197,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/johnjoeallen/strata" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/johnjoeallen/gort" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    johnjoeallen/strata
+    johnjoeallen/gort
   </div>
 </a>
       </div>
@@ -242,13 +242,13 @@
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/johnjoeallen/strata" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/johnjoeallen/gort" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    johnjoeallen/strata
+    johnjoeallen/gort
   </div>
 </a>
     </div>
@@ -1228,19 +1228,19 @@
 <td>B14</td>
 <td>Handle indirection (D15)</td>
 <td>Element access through a non-moving header <code>{ptr,len,cap}</code> against a raw pointer: hoisted, reloaded every access, reloaded after a may-grow call every K accesses; (handle, offset) cursor; sequential and random, L1, L2, memory</td>
-<td><strong>First run done</strong> on hand-written C (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle.md"><code>handle.md</code></a>): no visible per-access cost at <code>-O2</code>; at <code>-O3</code> the cost is lost vectorisation in a loop that contains a may-grow call. <strong>Second run</strong> with realistic bodies, a lock around every variant and W (work per element) swept 0 to 64 (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/handle_real.md"><code>handle_real.md</code></a>): median overhead 1 to 2%, larger only for near-empty bodies. Noise floor up to 19% in a few cells. One machine, uncontended; the real risk (how often windows end) needs a compiler.</td>
+<td><strong>First run done</strong> on hand-written C (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/handle.md"><code>handle.md</code></a>): no visible per-access cost at <code>-O2</code>; at <code>-O3</code> the cost is lost vectorisation in a loop that contains a may-grow call. <strong>Second run</strong> with realistic bodies, a lock around every variant and W (work per element) swept 0 to 64 (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/handle_real.md"><code>handle_real.md</code></a>): median overhead 1 to 2%, larger only for near-empty bodies. Noise floor up to 19% in a few cells. One machine, uncontended; the real risk (how often windows end) needs a compiler.</td>
 </tr>
 <tr>
 <td>B12</td>
 <td>Mixed realistic service</td>
 <td>Parse, route, query, render, with a shared cache (<code>sync</code>/<code>mutate</code>)</td>
-<td>The end-to-end result everything else supports. <strong>First run done for D15</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>): parse, authenticate, locked cache lookup, simulated database wait, growable-buffer render, on the C runtime; the handle build is within noise of a raw pointer in work per request, throughput and latency (worst case +2.1% for reload-at-every-access). In-process requests, simulated database, hand-written C: not yet the full B12.</td>
+<td>The end-to-end result everything else supports. <strong>First run done for D15</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/mixed.md"><code>mixed.md</code></a>): parse, authenticate, locked cache lookup, simulated database wait, growable-buffer render, on the C runtime; the handle build is within noise of a raw pointer in work per request, throughput and latency (worst case +2.1% for reload-at-every-access). In-process requests, simulated database, hand-written C: not yet the full B12.</td>
 </tr>
 <tr>
 <td>B15</td>
 <td>Split control block (D17)</td>
 <td>Combined slot against a never-moving control block with a movable body: allocation, dereference (sequential, random, pointer chase), memory kept after a burst, dead objects held by a <code>WeakRef</code></td>
-<td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Second run, a whole service (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>): +4 to +27% work per request, no difference when database-bound; moving costs about 7% of throughput while it runs. <strong>Third run</strong>, sharded locks and clone-on-hit (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>): with 16 cache locks the split costs +4 to +10% work per request (the single lock was most of the earlier four-worker loss); clone-on-hit is free; moving still returns memory. <strong>Fourth run</strong>, Refs held across a park (<a href="https://github.com/johnjoeallen/strata/blob/main/bench/results/hold.md"><code>hold.md</code></a>): holds up to 10 ms cost nothing and leave the recovered memory unchanged; Refs held for good block it (9 of 14 MB recovered at 0.1% of hits, none at 1%).</td>
+<td><strong>First run done for D17</strong> (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/split.md"><code>split.md</code></a>): costs 9 to 174% in time, saves memory only where objects are pinned or weakly held. Second run, a whole service (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/service_split.md"><code>service_split.md</code></a>): +4 to +27% work per request, no difference when database-bound; moving costs about 7% of throughput while it runs. <strong>Third run</strong>, sharded locks and clone-on-hit (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/b12_ref.md"><code>b12_ref.md</code></a>): with 16 cache locks the split costs +4 to +10% work per request (the single lock was most of the earlier four-worker loss); clone-on-hit is free; moving still returns memory. <strong>Fourth run</strong>, Refs held across a park (<a href="https://github.com/johnjoeallen/gort/blob/main/bench/results/hold.md"><code>hold.md</code></a>): holds up to 10 ms cost nothing and leave the recovered memory unchanged; Refs held for good block it (9 of 14 MB recovered at 0.1% of hits, none at 1%).</td>
 </tr>
 <tr>
 <td>B16</td>
