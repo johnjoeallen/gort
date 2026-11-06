@@ -347,3 +347,11 @@ static bool gort_arg_bool(const char *a, size_t n, const char *v, const char *us
     gort_arg_fail(a, n, "expected true or false", usage);
     return false;
 }
+
+/* ---- the runtime's view (see rt/posix.c): non-static entry points for a separately compiled C runtime ---- */
+void *gort_rt_new(size_t n) { return gort_new(n); }                       /* a counted object of n bytes, for an extern struct */
+void *gort_rt_arr_data(gort_arr *a) { return a->data; }
+size_t gort_rt_arr_len(gort_arr *a) { return a->len; }
+size_t gort_rt_arr_cap(gort_arr *a) { return a->cap; }
+void gort_rt_arr_release(gort_arr *a) { gort_arr_release(a); }              /* an array argument arrives owned: the extern function releases it */
+void gort_rt_exit_hook(void) __attribute__((weak));                        /* run after main returns: the runtime joins its threads here */

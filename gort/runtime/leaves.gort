@@ -60,6 +60,7 @@ extern struct Conn {
     fn readableHint(): bool                              // has the poller reported input since the last EAGAIN? (rd_ready)
     fn readableWakeup(): Wakeup                          // a wait source for waitAny
     fn hasUnread(): bool                                 // does the socket still hold input nobody has read? (ioctl FIONREAD)
+    fn cleanup()                                         // closes the socket if it is still open (lingerClose has taken it over, or not)
     fn lingerClose(time: Duration, maxBytes: u64)        // CONSUMES the connection and does not park: half-closes the write side (the client sees the
                                                          // response and a clean end), then the runtime reads and discards input until the client closes,
                                                          // `time` passes or `maxBytes` have been discarded, and then closes it. server.c: start_linger /
@@ -69,6 +70,7 @@ extern struct Conn {
 extern struct Listener {
     static fn bindReusePort(port: u16): Listener throws IoError
     parks fn accept(): Conn throws IoError               // parks until a client arrives
+    fn cleanup()                                         // closes the listening socket
 }
 
 // ---------- memory and files ----------

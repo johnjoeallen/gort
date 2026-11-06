@@ -56,6 +56,13 @@ pub fn generate(prog: &Program) -> String {
     for d in EXTDEFS.with(|e| std::mem::take(&mut *e.borrow_mut())) {
         out.push_str(&d);
     }
+    // for a C runtime: raise IoError from an extern function (returns 1: the exception is in flight)
+    if let Some(sid) = prog.structs.iter().position(|s| s.is_exception && s.name == "IoError") {
+        out.push_str(&format!(
+            "int gort_rt_throw_io(void) {{\n    G_IoError* t = (G_IoError*)gort_new(sizeof(G_IoError));\n    gort_exc.obj = t; gort_exc.id = {}; gort_exc.name = \"IoError\"; gort_exc.rel = (void (*)(void*))G_IoError_release;\n    return 1;\n}}\n",
+            sid + 1
+        ));
+    }
     out.push_str(&eq_defs(prog));
     out.push_str(&json_decoders(prog));
     out.push_str(&bodies);
@@ -102,7 +109,7 @@ pub fn generate(prog: &Program) -> String {
             }
         };
         out.push_str(&format!(
-            "\nint main({}) {{\n{}{}    {};\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
+            "\nint main({}) {{\n{}{}    {};\n    if (gort_rt_exit_hook) gort_rt_exit_hook();\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
             head, inits, setup, call, drops
         ));
     }
