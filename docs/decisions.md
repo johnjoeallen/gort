@@ -12,7 +12,7 @@ Rules the design has settled on, with the reason each was chosen.
 | `MADV_NOHUGEPAGE` on stack pools | With transparent huge pages a 64 KB stack costs 65 KB resident. |
 | Errors are exceptions with `throws` | Throwing is visible in signatures; no `throws` clause means nothing escapes. |
 | Cleanup never parks and never throws | It runs on every exit path, including unwinding. |
-| `sync` acquisition parks, FIFO | Fairness, and workers keep running other vthreads. |
+| `sync` acquisition parks, FIFO queue, wake-and-retry, 1 ms bound on overtaking | Fairness without handing the lock to a descheduled vthread; workers keep running other vthreads. |
 | Spin briefly before parking | Pure parking lost up to 75% of throughput under mixed load. |
 | Multi-object heads acquire all-or-nothing | Mis-ordered heads cannot deadlock. |
 | Default slow-subscriber policy: `Disconnect` | Never silently loses messages; `Notice` is available. Not yet confirmed by the user. |
