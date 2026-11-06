@@ -1,0 +1,23 @@
+package t
+struct Node { n: i64, next: Ref<Node>? }
+fn total(x: Ref<Node>): i64 {
+    sync(x) {
+        var t = x.n
+        let nx = x.next
+        if (nx != null) { t = t + total(nx) }       // another object each level: fine
+        return t
+    }
+}
+fn depthSum(x: Ref<Node>, d: i64): i64 {
+    sync(x) {
+        if (d == 0) { return x.n }
+        return x.n + depthSum(x, d - 1)             // the same object again, read under read: fine
+    }
+}
+fn main() {
+    let c = new Node { n: 3 }
+    let b = new Node { n: 2, next: c }
+    let a = new Node { n: 1, next: b }
+    println(total(a))
+    println(depthSum(a, 3))
+}
