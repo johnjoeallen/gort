@@ -59,7 +59,11 @@ static inline size_t gort_chk(size_t i, size_t len) {
  * threads upgrading the same object. ---- */
 #define GORT_WRBIT 0x80000000u
 #define GORT_WAITBIT 0x40000000u
-#define GORT_CNTMASK 0x3fffffffu
+#define GORT_PRIOBIT 0x20000000u   /* the oldest waiter has waited too long: newcomers must queue behind it */
+#define GORT_CNTMASK 0x0fffffffu
+#ifndef GORT_STARVE_NS
+#define GORT_STARVE_NS 1000000     /* 1 ms */
+#endif
 enum { GORT_H_READ, GORT_H_WRITE, GORT_H_NOOP, GORT_H_UP };
 typedef struct { void *obj; unsigned char kind; } gort_held;
 #define GORT_HELD_MAX 256
@@ -71,7 +75,7 @@ extern void *gort_rt_vt_self(void) __attribute__((weak));                  /* th
 extern void gort_rt_vt_park(void *vt) __attribute__((weak));               /* return when gort_rt_vt_unpark(vt) has been called */
 extern void gort_rt_vt_unpark(void *vt) __attribute__((weak));             /* callable from any thread; a wake before the park is not lost */
 
-typedef struct gort_waiter { void *obj; int write; int signaled; void *vt; struct gort_waiter *next; pthread_cond_t cv; } gort_waiter;
+typedef struct gort_waiter { void *obj; int write; int signaled; uint64_t since; void *vt; struct gort_waiter *next; pthread_cond_t cv; } gort_waiter;
 typedef struct { pthread_mutex_t m; gort_waiter *head, *tail; } gort_bucket;
 static gort_bucket gort_buckets[64];       /* all zero is a valid unlocked mutex on glibc */
 static size_t gort_stat_parked, gort_stat_blocked;
@@ -93,6 +97,7 @@ static inline unsigned char gort_held_pop(void *p) {
     return gort_held_stk[--gort_held_n].kind;
 }
 
+static inline uint64_t gort_lk_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000u + (uint64_t)t.tv_nsec; }
 static bool gort_queued(gort_bucket *b, void *p) {
     for (gort_waiter *x = b->head; x; x = x->next) if (x->obj == p) return true;
     return false;
@@ -127,7 +132,7 @@ static bool gort_try_take(gort_bucket *b, gort_waiter *x) {
     gort_unqueue(b, x);
     bool more = false;
     for (gort_waiter *w = b->head; w; w = w->next) if (w->obj == p) { more = true; break; }
-    if (!more) __atomic_fetch_and(l, ~GORT_WAITBIT, __ATOMIC_ACQ_REL);
+    __atomic_fetch_and(l, more ? ~GORT_PRIOBIT : ~(GORT_PRIOBIT | GORT_WAITBIT), __ATOMIC_ACQ_REL);   /* the starved waiter has its turn */
     return true;
 }
 static void gort_signal(gort_waiter *x) {
@@ -139,7 +144,7 @@ static void gort_signal(gort_waiter *x) {
 static void gort_wake_head(gort_bucket *b, void *p) {
     gort_waiter *w = b->head;
     while (w && w->obj != p) w = w->next;
-    if (!w) { __atomic_fetch_and(&GORT_CTL(p)->lock, ~GORT_WAITBIT, __ATOMIC_ACQ_REL); return; }
+    if (!w) { __atomic_fetch_and(&GORT_CTL(p)->lock, ~(GORT_WAITBIT | GORT_PRIOBIT), __ATOMIC_ACQ_REL); return; }
     if (w->write) { gort_signal(w); return; }
     for (; w; w = w->next) { if (w->obj != p) continue; if (w->write) break; gort_signal(w); }
 }
@@ -156,16 +161,31 @@ static inline void gort_cpu_relax(void) {
     __asm__ __volatile__("yield");
 #endif
 }
+/* Bounded overtaking: if the oldest waiter for p has waited over GORT_STARVE_NS, set the priority bit. Newcomers (fast path and spin alike) then
+ * queue behind it, the holders drain, and it takes the lock next. Only newcomers that find waiters queued come here, so the common path is untouched. */
+static void gort_check_starved(gort_bucket *b, void *p) {
+    for (gort_waiter *w = b->head; w; w = w->next)
+        if (w->obj == p) {
+            if (gort_lk_now() - w->since > GORT_STARVE_NS) __atomic_fetch_or(&GORT_CTL(p)->lock, GORT_PRIOBIT, __ATOMIC_ACQ_REL);
+            return;
+        }
+}
 static void gort_lock_slow(void *p, int w) {
     gort_bucket *b = gort_bucket_of(p);
     uint32_t *l = &GORT_CTL(p)->lock;
+    if (__atomic_load_n(l, __ATOMIC_RELAXED) & GORT_WAITBIT) {
+        pthread_mutex_lock(&b->m);
+        gort_check_starved(b, p);
+        pthread_mutex_unlock(&b->m);
+    }
     for (int i = 0; i < GORT_SPIN; i++) {
         uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+        if (v & GORT_PRIOBIT) break;
         if ((w ? (v & (GORT_WRBIT | GORT_CNTMASK)) == 0 : (v & GORT_WRBIT) == 0) &&
             __atomic_compare_exchange_n(l, &v, w ? (v | GORT_WRBIT) : v + 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
         gort_cpu_relax();
     }
-    gort_waiter x; x.obj = p; x.write = w; x.signaled = 0; x.next = NULL;
+    gort_waiter x; x.obj = p; x.write = w; x.signaled = 0; x.next = NULL; x.since = gort_lk_now();
     void *vt = (gort_held_n == 0 && gort_rt_vt_self) ? gort_rt_vt_self() : NULL;   /* park only while holding nothing */
     x.vt = vt;
     pthread_cond_init(&x.cv, NULL);
@@ -206,7 +226,7 @@ static inline void gort_rd_lock(void *p) {
     if (gort_held_mode(p)) { gort_held_push(p, GORT_H_NOOP); return; }
     uint32_t *l = &GORT_CTL(p)->lock;
     uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-    if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_READ); return; }
+    if (!(v & (GORT_WRBIT | GORT_PRIOBIT | GORT_WAITBIT)) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_READ); return; }
     gort_lock_slow(p, 0);                       /* returns holding it */
     gort_held_push(p, GORT_H_READ);
 }
@@ -223,7 +243,7 @@ static inline void gort_wr_lock(void *p) {
         unsigned spins = 0;
         for (;;) {
             uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-            if (!(v & GORT_WRBIT) && (v & GORT_CNTMASK) == 1 && __atomic_compare_exchange_n(l, &v, (v & GORT_WAITBIT) | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
+            if (!(v & GORT_WRBIT) && (v & GORT_CNTMASK) == 1 && __atomic_compare_exchange_n(l, &v, (v & (GORT_WAITBIT | GORT_PRIOBIT)) | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
             if (++spins > 100000000u) gort_trap("lock wait too long (two threads upgrade the same lock)");
             if ((spins & 1023) == 0) sched_yield();
         }
@@ -231,7 +251,7 @@ static inline void gort_wr_lock(void *p) {
         return;
     }
     uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-    if (!(v & (GORT_WRBIT | GORT_CNTMASK)) && __atomic_compare_exchange_n(l, &v, v | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_WRITE); return; }
+    if (!(v & (GORT_WRBIT | GORT_CNTMASK | GORT_PRIOBIT | GORT_WAITBIT)) && __atomic_compare_exchange_n(l, &v, v | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_WRITE); return; }
     gort_lock_slow(p, 1);
     gort_held_push(p, GORT_H_WRITE);
 }
@@ -244,7 +264,7 @@ static inline void gort_wr_unlock(void *p) {
     } else if (k == GORT_H_UP) {                /* back to the plain read it was (one reader: this thread) */
         for (;;) {
             uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-            if (__atomic_compare_exchange_n(l, &v, (v & GORT_WAITBIT) | 1, 1, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) break;
+            if (__atomic_compare_exchange_n(l, &v, (v & (GORT_WAITBIT | GORT_PRIOBIT)) | 1, 1, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) break;
         }
     }
 }
