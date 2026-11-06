@@ -1,5 +1,0 @@
-// error: this sync block locks an object that an enclosing sync/mutate block already holds (it would wait for itself)
-package t
-struct S { n: i64 }
-fn f(s: Ref<S>) { mutate(s) { sync(s) { println(s.n) } } }
-fn main() { f(new S { n: 0 }) }

@@ -36,54 +36,71 @@ static inline size_t gort_chk(size_t i, size_t len) {
 }
 
 /* ---- counted objects ---- */
-/* ---- sync / mutate: a reader-writer spin lock in the object header. A block never parks (the compiler checks), so the thread that holds a
- * lock is the only code that runs on it until the block ends. That makes the OS thread the identity of "this call tree": every lock it holds
- * is on a small thread-local stack, and taking a lock the stack already has is a bug in the program (a recursive or nested block on the same
- * object, or a sync that is asked to become a mutate), reported at once. Two readers of one object in one call tree are fine.
- * Waiting for another thread too long still traps (two threads taking two objects in opposite orders). ---- */
+/* ---- sync / mutate: a reader-writer spin lock in the object header, re-entrant within one call tree. A block never parks (the compiler
+ * checks), so the OS thread that holds a lock is the only code running on it until the block ends: the thread is the identity of "this call
+ * tree". Every block pushes an entry on a thread-local stack saying what it did, and the lock is released only when the entry that actually took
+ * it is popped (the outermost block):
+ *   not held yet                    -> take it (READ or WRITE), released on pop
+ *   sync, already held (any mode)   -> nothing to do, nothing to release (NOOP)
+ *   mutate, already held for mutate -> NOOP
+ *   mutate, held for sync only      -> UPGRADE in place (waits until this thread is the only reader); pop drops back to a plain read
+ * Two threads that both upgrade the same object wait for each other; the wait watchdog traps that, as it does two objects taken in opposite
+ * orders. ---- */
 #define GORT_WRBIT 0x80000000u
-typedef struct { void *obj; bool w; } gort_held;
-#define GORT_HELD_MAX 64
+enum { GORT_H_READ, GORT_H_WRITE, GORT_H_NOOP, GORT_H_UP };
+typedef struct { void *obj; unsigned char kind; } gort_held;
+#define GORT_HELD_MAX 256
 static __thread gort_held gort_held_stk[GORT_HELD_MAX];
 static __thread unsigned gort_held_n;
-static inline void gort_held_push(void *p, bool w) {
-    for (unsigned i = 0; i < gort_held_n; i++) {
-        if (gort_held_stk[i].obj == p && (w || gort_held_stk[i].w))
-            gort_trap(w ? (gort_held_stk[i].w ? "mutate on an object this call tree already holds (a recursive or nested block on the same object)"
-                                              : "mutate on an object this call tree already holds for sync (a sync cannot become a mutate)")
-                        : "sync on an object this call tree already holds for mutate (a nested block on the same object)");
-    }
-    if (gort_held_n == GORT_HELD_MAX) gort_trap("sync/mutate blocks nested too deeply");
-    gort_held_stk[gort_held_n].obj = p; gort_held_stk[gort_held_n].w = w; gort_held_n++;
-}
-static inline void gort_held_pop(void *p) {
-    if (gort_held_n == 0 || gort_held_stk[gort_held_n - 1].obj != p) gort_trap("internal error: sync/mutate released out of order");
-    gort_held_n--;
-}
 static void gort_lock_wait(unsigned *spins) {
-    if (++*spins > 100000000u) gort_trap("lock wait too long (another thread holds this object, or two objects are locked in opposite orders)");
+    if (++*spins > 100000000u) gort_trap("lock wait too long (another thread holds this object, two threads upgrade the same sync to a mutate, or two objects are locked in opposite orders)");
     if ((*spins & 1023) == 0) sched_yield();
 }
+/* what this call tree holds on p: 0 nothing, 1 read, 2 write */
+static inline int gort_held_mode(void *p) {
+    int m = 0;
+    for (unsigned i = 0; i < gort_held_n; i++)
+        if (gort_held_stk[i].obj == p) { if (gort_held_stk[i].kind == GORT_H_WRITE || gort_held_stk[i].kind == GORT_H_UP) return 2; m = 1; }
+    return m;
+}
+static inline void gort_held_push(void *p, unsigned char kind) {
+    if (gort_held_n == GORT_HELD_MAX) gort_trap("sync/mutate blocks nested too deeply");
+    gort_held_stk[gort_held_n].obj = p; gort_held_stk[gort_held_n].kind = kind; gort_held_n++;
+}
+static inline unsigned char gort_held_pop(void *p) {
+    if (gort_held_n == 0 || gort_held_stk[gort_held_n - 1].obj != p) gort_trap("internal error: sync/mutate released out of order");
+    return gort_held_stk[--gort_held_n].kind;
+}
 static inline void gort_rd_lock(void *p) {
-    gort_held_push(p, false);
+    if (gort_held_mode(p)) { gort_held_push(p, GORT_H_NOOP); return; }
     uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
     for (;;) {
         uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-        if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
         gort_lock_wait(&spins);
     }
+    gort_held_push(p, GORT_H_READ);
 }
-static inline void gort_rd_unlock(void *p) { __atomic_fetch_sub(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE); gort_held_pop(p); }
+static inline void gort_rd_unlock(void *p) {
+    if (gort_held_pop(p) == GORT_H_READ) __atomic_fetch_sub(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE);
+}
 static inline void gort_wr_lock(void *p) {
-    gort_held_push(p, true);
+    int m = gort_held_mode(p);
+    if (m == 2) { gort_held_push(p, GORT_H_NOOP); return; }
     uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
+    uint32_t from = m == 1 ? 1 : 0;                /* held for sync: this thread is one reader; upgrade when it is the only one */
     for (;;) {
-        uint32_t v = 0;
-        if (__atomic_compare_exchange_n(l, &v, GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        uint32_t v = from;
+        if (__atomic_compare_exchange_n(l, &v, GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
         gort_lock_wait(&spins);
     }
+    gort_held_push(p, m == 1 ? GORT_H_UP : GORT_H_WRITE);
 }
-static inline void gort_wr_unlock(void *p) { __atomic_store_n(&GORT_CTL(p)->lock, 0, __ATOMIC_RELEASE); gort_held_pop(p); }
+static inline void gort_wr_unlock(void *p) {
+    unsigned char k = gort_held_pop(p);
+    if (k == GORT_H_WRITE) __atomic_store_n(&GORT_CTL(p)->lock, 0, __ATOMIC_RELEASE);
+    else if (k == GORT_H_UP) __atomic_store_n(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE);   /* back to the plain read it was */
+}
 
 static inline void *gort_new(size_t size) {
     gort_ctl *c = (gort_ctl *)calloc(1, sizeof(gort_ctl) + size);

@@ -702,7 +702,7 @@ impl<'a> Sema<'a> {
         for f in &self.prog.fns {
             let Some(body) = &f.body else { continue };
             let mut open: Vec<&TExpr> = Vec::new();
-            sync_walk(body, &mut open, &mut |mutate, target, b, outer: &[&TExpr], line| {
+            sync_walk(body, &mut open, &mut |mutate, target, b, _outer: &[&TExpr], line| {
                 let kw = if mutate { "mutate" } else { "sync" };
                 // 1. no parking
                 let mut found: Option<String> = None;
@@ -724,10 +724,6 @@ impl<'a> Sema<'a> {
                 // 2. sync is read-only
                 if !mutate && block_writes(b, target, &writes) {
                     errs.push((line, format!("this {} block writes through its object: it needs mutate, have sync", kw)));
-                }
-                // 3. already locked
-                if outer.iter().any(|o| same_place(o, target)) {
-                    errs.push((line, format!("this {} block locks an object that an enclosing sync/mutate block already holds (it would wait for itself)", kw)));
                 }
             });
         }

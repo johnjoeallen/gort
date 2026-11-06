@@ -1,0 +1,29 @@
+package t
+struct Node { n: i64 }
+struct Holder { node: Ref<Node> }
+fn walk(x: Ref<Node>, depth: i64) {
+    mutate(x) {
+        x.n = x.n + 1
+        if (depth > 0) { walk(x, depth - 1) }       // the same object, one level down: nothing new is taken, nothing released here
+        x.n = x.n + 10                              // still held after the inner call returns
+    }
+}
+fn readTwice(x: Ref<Node>): i64 {
+    sync(x) { sync(x) { return x.n } }
+}
+fn readInside(x: Ref<Node>): i64 {
+    var v = 0
+    mutate(x) { v = readTwice(x) }                   // sync inside mutate: the exclusive lock already covers it
+    return v
+}
+fn poke(h: Ref<Holder>) { mutate(h.node) { h.node.n = h.node.n + 100 } }
+fn main() {
+    let x = new Node { n: 0 }
+    walk(x, 2)
+    println(x.n)
+    println(readInside(x))
+    let h = new Holder { node: x }
+    sync(x) { println(x.n); poke(h); println(x.n) }  // mutate inside sync, through an alias: upgraded in place, back to a read after
+    mutate(x) { x.n = 0 }                            // and the lock is free again once the outermost block has ended
+    sync(x) { println(x.n) }
+}
