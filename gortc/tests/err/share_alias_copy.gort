@@ -1,0 +1,11 @@
+// error: writing `C.n` needs `sync (writes d)`
+package t
+struct C { n: i64 }
+extern fn startThread(body: fn())
+fn w(c: Ref<C>) { sync (writes c) { c.n = c.n + 1 } }
+fn main() {
+    let c = new C { n: 0 }
+    let d: Ref<C> = c
+    startThread(fn() { w(c) })
+    d.n = 5
+}

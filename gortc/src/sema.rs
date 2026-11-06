@@ -3328,6 +3328,7 @@ pub(crate) fn place_name(prog: &Program, f: &FnInfo, e: &TExpr) -> String {
 pub(crate) fn same_place(a: &TExpr, b: &TExpr) -> bool {
     match (&a.kind, &b.kind) {
         (EK::Var(x), EK::Var(y)) => x == y,
+        (EK::Global(x), EK::Global(y)) => x == y,
         (EK::SelfPlace, EK::SelfPlace) => true,
         (EK::ObjRef(x), EK::ObjRef(y)) | (EK::ObjPlace(x), EK::ObjPlace(y)) | (EK::ObjRef(x), EK::ObjPlace(y)) | (EK::ObjPlace(x), EK::ObjRef(y)) => x == y,
         (EK::Field(x, f), EK::Field(y, g)) => f == g && same_place(x, y),

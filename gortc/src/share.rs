@@ -243,7 +243,8 @@ impl<'a> Cx<'a> {
         match &s.kind {
             TS::Let(id, e) => {
                 self.expr(e, s.line, Need::Read);
-                let fresh = self.is_fresh_value(e);
+                // a new name for an existing local is a second handle on the object, not a new object: only an allocation starts a local
+                let fresh = self.is_fresh_value(e) && !matches!(strip(e).kind, EK::Var(_) | EK::ObjRef(_));
                 self.escape_in(&[e]);
                 if fresh {
                     self.locals.insert(*id, false);
@@ -540,7 +541,16 @@ impl<'a> Cx<'a> {
         let want_mutate = need == Need::Write;
         let mut weak: Option<String> = None;
         for (m, t) in &self.open {
-            if nodes.iter().any(|x| same_place(x, t)) || same_place(n, t) {
+            // A block covers the object its reference names and the by-value places inside it, not another object reached through a field that
+            // holds a reference: that one may be held by someone else too, who locks a different object. So no further reference hop may lie
+            // between the access and the block's reference (the one hop that opens the named object itself is the allowed one).
+            let j = nodes.iter().position(|x| same_place(x, t)).or_else(|| if same_place(n, t) { Some(nodes.len()) } else { None });
+            let Some(j) = j else { continue };
+            let hops = nodes[..j].iter().filter(|x| matches!(x.kind, EK::Deref(_))).count() + usize::from(via_ref);
+            if hops > 1 {
+                continue;
+            }
+            {
                 if *m || !want_mutate {
                     return;
                 }
@@ -574,4 +584,11 @@ impl<'a> Cx<'a> {
         };
         self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
     }
+}
+
+fn strip(mut e: &TExpr) -> &TExpr {
+    while let EK::BoxVal(i) | EK::Borrow(i) = &e.kind {
+        e = i;
+    }
+    e
 }

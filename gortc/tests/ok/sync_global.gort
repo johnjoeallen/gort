@@ -1,0 +1,6 @@
+// a block can name a module-level object
+package t
+struct C { n: i64 }
+let g: Ref<C> = new C { n: 0 }
+fn bump() { sync (writes g) { g.n = g.n + 1 } }
+fn main() { bump() }
