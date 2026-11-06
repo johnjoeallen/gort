@@ -1,0 +1,5 @@
+// error: a function value that may park cannot be given where fn[nopark](i64): i64 is wanted
+package t
+fn apply(f: fn[nopark](i64): i64, x: i64): i64 { return f(x) }
+fn any(g: fn(i64): i64): i64 { return apply(g, 1) }
+fn main() { println(any(fn(x: i64): i64 { return x })) }

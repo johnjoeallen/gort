@@ -1,0 +1,6 @@
+// error: `wait2` may park, so it cannot be used as a `fn[nopark]`
+package t
+extern parks fn wait()
+fn wait2(x: i64): i64 { wait(); return x }
+fn apply(f: fn[nopark](i64): i64, x: i64): i64 { return f(x) }
+fn main() { println(apply(wait2, 1)) }

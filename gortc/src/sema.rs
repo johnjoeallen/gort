@@ -64,6 +64,8 @@ pub struct Sema<'a> {
     /// (callee, parameter, line, col): a value lent to a `Ref` parameter, checked once every body is known
     borrow_sites: Vec<(FnId, usize, u32, u32)>,
     lambda_count: usize,
+    /// functions given where a `fn[nopark]` is wanted: (function, line, col); checked once the effects are known
+    nopark_uses: Vec<(usize, u32, u32)>,
     pending_label: Option<String>,
     /// the expected type of the expression being lowered right now
     exp_here: Option<Ty>,
@@ -99,6 +101,7 @@ pub fn analyze(files: &[ast::File]) -> Result<Program, Vec<Diag>> {
         for_count: 0,
         borrow_sites: Vec::new(),
         lambda_count: 0,
+        nopark_uses: Vec::new(),
         pending_label: None,
         exp_here: None,
         string_ids: HashMap::new(),
@@ -662,7 +665,7 @@ impl<'a> Sema<'a> {
                         }
                         match &x.kind {
                             EK::Call(f, _) | EK::Method(f, _, _) if may[*f] => found = Some(format!("it calls `{}`", self.prog.fns[*f].name)),
-                            EK::CallInd(..) => found = Some("it calls a function value, whose target is unknown".into()),
+                            EK::CallInd(fx, _) if !matches!(fx.ty, Ty::Fn(.., true)) => found = Some("it calls a function value, whose target is unknown".into()),
                             _ => {}
                         }
                     })
@@ -734,6 +737,14 @@ impl<'a> Sema<'a> {
                 self.error(f.line, 1, msg);
             }
         }
+        let uses = std::mem::take(&mut self.nopark_uses);
+        for (fid, line, col) in uses {
+            let f = &self.prog.fns[fid];
+            if (may[fid] || locks[fid]) && !f.is_extern && !f.nopark {
+                let msg = format!("`{}` may park, so it cannot be used as a `fn[nopark]`: {}", f.name, reason(fid));
+                self.error(line, col, msg);
+            }
+        }
         self.check_sync(&may);
         for si in 0..self.prog.structs.len() {
             if let Some(c) = self.prog.structs[si].cleanup {
@@ -764,7 +775,7 @@ impl<'a> Sema<'a> {
                         }
                         match &x.kind {
                             EK::Call(c, _) | EK::Method(c, _, _) if may[*c] => found = Some(format!("`{}` may park", self.prog.fns[*c].name)),
-                            EK::CallInd(..) => found = Some("a call through a function value may park".into()),
+                            EK::CallInd(fx, _) if !matches!(fx.ty, Ty::Fn(.., true)) => found = Some("a call through a function value may park".into()),
                             _ => {}
                         }
                     })
@@ -1151,13 +1162,13 @@ impl<'a> Sema<'a> {
                 None => Ty::Error,
             };
         }
-        if t.name == "fn" || t.name == "fn!" {
+        if matches!(t.name.as_str(), "fn" | "fn!" | "fn.np" | "fn!.np") {
             let mut tys: Vec<Ty> = t.args.iter().map(|a| if a.name == "()" { Ty::Unit } else { self.resolve_ty(a) }).collect();
             let ret = tys.pop().unwrap_or(Ty::Unit);
             if tys.iter().any(|a| *a == Ty::Error) || ret == Ty::Error {
                 return Ty::Error;
             }
-            return Ty::Fn(tys, Box::new(ret), t.name == "fn!");
+            return Ty::Fn(tys, Box::new(ret), t.name.starts_with("fn!"), t.name.ends_with(".np"));
         }
         if t.args.is_empty() {
             if let Some(i) = IntTy::from_name(&t.name) {
@@ -1887,9 +1898,30 @@ impl<'a> Sema<'a> {
         if te.ty == Ty::Error || *target == Ty::Error {
             return te;
         }
+        // the effect in a function type: a `fn[nopark]` value goes where a plain function is wanted; a plain one only if it is a function (or a
+        // lambda) that is checked not to park, once the effects are known
+        if let (Ty::Fn(p1, r1, t1, n1), Ty::Fn(p2, r2, _, n2)) = (&te.ty, target) {
+            if p1 == p2 && r1 == r2 && n1 != n2 {
+                let line = te.line;
+                let retag = Ty::Fn(p1.clone(), r1.clone(), *t1, *n2);
+                if *n2 {
+                    match &te.kind {
+                        EK::FnRef(fid, _) | EK::Lambda(fid, _) => self.nopark_uses.push((*fid, at.0, at.1)),
+                        _ => {
+                            self.error(at.0, at.1, format!("a function value that may park cannot be given where {} is wanted", self.prog.type_name(target)));
+                            return te;
+                        }
+                    }
+                }
+                let mut te = te;
+                te.ty = retag;
+                let _ = line;
+                return self.coerce(cx, te, target, at);
+            }
+        }
         // a function that does not throw, given where a throwing function is wanted: it is called through a thunk
-        if let (EK::FnRef(fid, false), Ty::Fn(p1, r1, false), Ty::Fn(p2, r2, true)) = (&te.kind, &te.ty, target) {
-            if p1 == p2 && r1 == r2 {
+        if let (EK::FnRef(fid, false), Ty::Fn(p1, r1, false, n1), Ty::Fn(p2, r2, true, n2)) = (&te.kind, &te.ty, target) {
+            if p1 == p2 && r1 == r2 && n1 == n2 {
                 let fid = *fid;
                 return typed(EK::FnRef(fid, true), target.clone(), te.line);
             }
@@ -2355,7 +2387,7 @@ impl<'a> Sema<'a> {
         if let Some(&fid) = self.fn_ids.get(name) {
             let f = &self.prog.fns[fid];
             if f.owner.is_none() || f.is_static {
-                let ty = Ty::Fn(f.param_tys.clone(), Box::new(f.ret.clone()), !f.throws.is_empty());
+                let ty = Ty::Fn(f.param_tys.clone(), Box::new(f.ret.clone()), !f.throws.is_empty(), f.nopark);
                 return typed(EK::FnRef(fid, !f.throws.is_empty()), ty, line);
             }
         }
@@ -2587,7 +2619,7 @@ impl<'a> Sema<'a> {
     /// which owns the environment (the new task's frame).
     fn lower_lambda(&mut self, cx: &mut FnCtx, e: &Expr, l: &ast::LambdaDecl, want: &Ty, extern_ctx: bool) -> TExpr {
         let line = e.line;
-        let Ty::Fn(ps, ret, th) = want.clone() else {
+        let Ty::Fn(ps, ret, th, np) = want.clone() else {
             self.error(e.line, e.col, "an anonymous function needs a function type to match");
             return error_expr(line);
         };
@@ -2636,7 +2668,7 @@ impl<'a> Sema<'a> {
             body: Some(l.body.clone()),
             is_extern: false,
             parks: false,
-            attr: None,
+            attr: if np { Some("nopark".into()) } else { None },   // the function type promises it: checked like `fn[nopark]`
             line: e.line,
             col: e.col,
         };
@@ -2662,7 +2694,7 @@ impl<'a> Sema<'a> {
     /// `f(args)` where `f` is a value of function type.
     fn call_value(&mut self, cx: &mut FnCtx, e: &Expr, f: TExpr, args: &[Expr]) -> TExpr {
         let line = e.line;
-        let Ty::Fn(ps, ret, throws) = f.ty.clone() else { return error_expr(line) };
+        let Ty::Fn(ps, ret, throws, _) = f.ty.clone() else { return error_expr(line) };
         if ps.len() != args.len() {
             self.error(e.line, e.col, format!("expected {} argument(s), found {}", ps.len(), args.len()));
             return error_expr(line);

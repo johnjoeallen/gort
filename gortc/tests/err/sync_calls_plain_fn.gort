@@ -1,0 +1,5 @@
+// error: a sync block must not park: a call through a function value may park
+package t
+struct S { n: i64 }
+fn run(s: Ref<S>, f: fn(i64): i64) { sync (writes s) { s.n = f(s.n) } }
+fn main() { run(new S { n: 1 }, fn(x: i64): i64 { return x }) }

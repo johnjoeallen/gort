@@ -100,8 +100,8 @@ pub enum Ty {
     Null,
     /// an exception caught by `catch (e: Exception)`: any exception, type erased
     Exc,
-    /// a function value: parameter types, result type, whether it throws (a plain pointer; no closures)
-    Fn(Vec<Ty>, Box<Ty>, bool),
+    /// a function value: parameter types, result type, whether it throws, whether it is `fn[nopark]` (never parks) (a plain pointer; no closures)
+    Fn(Vec<Ty>, Box<Ty>, bool, bool),
     Error,
 }
 
@@ -378,7 +378,7 @@ impl Program {
             Ty::Opt(i) => format!("{}?", self.type_name(i)),
             Ty::Null => "null".into(),
             Ty::Exc => "Exception".into(),
-            Ty::Fn(ps, r, th) => format!("fn({}): {}{}", ps.iter().map(|p| self.type_name(p)).collect::<Vec<_>>().join(", "), self.type_name(r), if *th { " throws" } else { "" }),
+            Ty::Fn(ps, r, th, np) => format!("fn{}({}): {}{}", if *np { "[nopark]" } else { "" }, ps.iter().map(|p| self.type_name(p)).collect::<Vec<_>>().join(", "), self.type_name(r), if *th { " throws" } else { "" }),
             Ty::Error => "<error>".into(),
         }
     }

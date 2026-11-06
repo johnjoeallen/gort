@@ -314,10 +314,11 @@ impl Parser {
 
     fn type_expr(&mut self) -> R<TypeExpr> {
         if self.is_kw("fn") {
-            // `fn[nopark](A, B): R throws X`: name "fn" (or "fn!" when it throws); args are the parameters, then the result
+            // `fn[nopark](A, B): R throws X`: name "fn", "fn!" (throws), with ".np" added for nopark; args are the parameters, then the result
             let t = self.bump();
+            let mut nopark = false;
             if self.eat_sym("[") {
-                self.ident()?;
+                nopark = self.ident()?.0 == "nopark";
                 self.expect_sym("]")?;
             }
             self.expect_sym("(")?;
@@ -345,7 +346,7 @@ impl Parser {
                 throws = true;
                 self.ident()?; // a function type names one exception (usually `Exception`): a comma would be the next parameter
             }
-            return Ok(TypeExpr { name: if throws { "fn!".into() } else { "fn".into() }, args, optional: false, fixed: None, line: t.line, col: t.col });
+            return Ok(TypeExpr { name: format!("fn{}{}", if throws { "!" } else { "" }, if nopark { ".np" } else { "" }), args, optional: false, fixed: None, line: t.line, col: t.col });
         }
         let (name, t) = self.ident()?;
         let mut args = Vec::new();

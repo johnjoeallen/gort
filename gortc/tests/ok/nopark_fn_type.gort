@@ -1,0 +1,16 @@
+// the effect is part of a function type: a call through fn[nopark] does not park, so it may be made where parking is forbidden
+package t
+struct S { n: i64 }
+fn bump(s: Ref<S>) { s.n = s.n + 1 }
+fn[nopark] inc(x: i64): i64 { return x + 1 }
+fn plain_add(x: i64): i64 { return x + 2 }         // inferred not to park, but its type says nothing
+fn apply(f: fn[nopark](i64): i64, x: i64): i64 { return f(x) }
+fn[nopark] apply_np(f: fn[nopark](i64): i64, x: i64): i64 { return f(x) }
+fn any(f: fn(i64): i64, x: i64): i64 { return f(x) }
+fn main() {
+    let s = new S { n: 0 }
+    sync (writes s) { s.n = apply(inc, 1) + apply_np(fn(x: i64): i64 { return x * 3 }, 2) }
+    println(s.n)
+    println(any(inc, 10))               // nopark goes where a plain function is wanted
+    println(apply(plain_add, 10))       // a function that is checked not to park goes where nopark is wanted
+}

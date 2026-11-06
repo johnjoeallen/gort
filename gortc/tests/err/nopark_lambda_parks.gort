@@ -1,0 +1,5 @@
+// error: `_lambda1` is marked nopark but may park
+package t
+extern parks fn wait()
+fn apply(f: fn[nopark](i64): i64, x: i64): i64 { return f(x) }
+fn main() { println(apply(fn(x: i64): i64 { wait(); return x }, 1)) }

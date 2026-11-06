@@ -1254,7 +1254,7 @@ impl<'a> FnGen<'a> {
             }
             EK::Lambda(..) => unreachable!("a lambda with captures is only valid as an argument to a runtime function"),
             EK::ExternFn(inner) => {
-                let Ty::Fn(ps, r, th) = &inner.ty else { unreachable!() };
+                let Ty::Fn(ps, r, th, _) = &inner.ty else { unreachable!() };
                 let n = EXTN.with(|c| { c.set(c.get() + 1); c.get() });
                 let pt: Vec<String> = ps.iter().map(|p| self.ct(p)).collect();
                 let rt = if *th { "int".to_string() } else { self.ct(r) };
@@ -1391,7 +1391,7 @@ impl<'a> FnGen<'a> {
                 }
             }
             EK::CallInd(f, args) => {
-                let Ty::Fn(ps, r, th) = &f.ty else { unreachable!() };
+                let Ty::Fn(ps, r, th, _) = &f.ty else { unreachable!() };
                 let fv = self.expr(f);
                 let mut sig: Vec<String> = ps.iter().map(|p| self.ct(p)).collect();
                 if *th && **r != Ty::Unit {
