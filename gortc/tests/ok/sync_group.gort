@@ -2,7 +2,7 @@ package t
 exception Short { need: i64 }
 struct Acct { n: i64 }
 fn move(from: Ref<Acct>, to: Ref<Acct>, amount: i64) throws Short {
-    mutate(from, to) {                                  // both locked, in one fixed order, whichever way round they are named
+    mutate(from, to) {                                  // both locked, in one fixed order, no matter which way round they are named
         if (from.n < amount) throw Short(amount)        // both released on the way out
         from.n = from.n - amount
         to.n = to.n + amount

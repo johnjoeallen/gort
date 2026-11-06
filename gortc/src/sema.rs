@@ -333,7 +333,12 @@ impl<'a> Sema<'a> {
         self.compute_borrows();
         self.compute_effects();
         for fi in crate::share::check(&self.prog) {
-            self.diags.push(Diag { file: fi.file, line: fi.line, col: 1, msg: fi.msg });
+            let d = Diag { file: fi.file, line: fi.line, col: 1, msg: fi.msg };
+            if fi.warn {
+                self.prog.warnings.push(d);
+            } else {
+                self.diags.push(d);
+            }
         }
         // main: no parameters, or one config struct whose fields (numbers, bool, String) are set from `--name=value`
         if let Some(&m) = self.fn_ids.get("main") {

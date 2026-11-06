@@ -343,6 +343,8 @@ pub struct Program {
     pub instances: Vec<Instance>,
     /// "counted because of line N" notes, one per obj variable that is counted
     pub notes: Vec<String>,
+    /// accepted, but worth a look
+    pub warnings: Vec<crate::diag::Diag>,
 }
 
 impl Program {

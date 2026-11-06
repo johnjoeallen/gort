@@ -1,0 +1,6 @@
+// no-warning: nested
+package t
+struct Acct { n: i64 }
+fn grouped(a: Ref<Acct>, b: Ref<Acct>) { mutate(a, b) { a.n = a.n - 1; b.n = b.n + 1 } }
+fn same(a: Ref<Acct>): i64 { mutate(a) { sync(a) { return a.n } } }       // the same object again: re-entrant, nothing to warn about
+fn main() { grouped(new Acct { n: 1 }, new Acct { n: 0 }); println(same(new Acct { n: 4 })) }

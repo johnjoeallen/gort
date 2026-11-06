@@ -22,6 +22,8 @@ pub struct Finding {
     pub file: String,
     pub line: u32,
     pub msg: String,
+    /// a warning, not an error: the program is accepted
+    pub warn: bool,
 }
 
 fn sid_of(t: &Ty) -> Option<usize> {
@@ -323,6 +325,7 @@ impl<'a> Cx<'a> {
                 }
             }
             TS::Sync(m, ts, b) => {
+                self.warn_nested(*m, ts, s.line);
                 for t in ts {
                     self.expr(t, s.line, Need::Read);      // naming an object to lock it does not let it escape
                     self.open.push((*m, t.clone()));
@@ -333,6 +336,22 @@ impl<'a> Cx<'a> {
                 }
             }
             TS::Return(None) | TS::Break | TS::Continue | TS::BreakL(..) => {}
+        }
+    }
+
+    /// A block nested inside another block on a different object: two threads that nest the same two objects in opposite orders deadlock.
+    /// One block naming both locks them in a fixed order, no matter how they are written.
+    fn warn_nested(&mut self, mutate: bool, targets: &[TExpr], line: u32) {
+        for t in targets {
+            let Some((om, o)) = self.open.iter().find(|(_, o)| !same_place(o, t)) else { continue };
+            let (inner, outer) = (self.name_of(t), self.name_of(o));
+            let kw = |m: bool| if m { "mutate" } else { "sync" };
+            let msg = format!(
+                "`{}({})` is nested inside `{}({})`, two different objects: a thread that nests them the other way round deadlocks; lock both in one block, `{}({}, {})`, so the order is the same no matter how they are written",
+                kw(mutate), inner, kw(*om), outer, kw(mutate || *om), outer, inner
+            );
+            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: true });
+            return;
         }
     }
 
@@ -558,6 +577,6 @@ impl<'a> Cx<'a> {
             Some(w) => format!("{} needs mutate({}), have sync({})", what, w, w),
             None => format!("{} needs {}({}): the object is not local and is mutable", what, kw, owner),
         };
-        self.out.push(Finding { file: self.f().file.clone(), line, msg });
+        self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
     }
 }

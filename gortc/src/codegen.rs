@@ -920,7 +920,7 @@ impl<'a> FnGen<'a> {
             TS::Block(b) => self.block(b),
             TS::Sync(mutate, targets, body) => {
                 // hold a count on each object and the locks for the whole body; both are scope drops, so return, break, continue and throw release
-                // them. With several objects the locks are taken in one canonical order (by address) whatever order they were written in.
+                // them. With several objects the locks are taken in one canonical order (by address) no matter what order they were written in.
                 let saved = self.dead;
                 self.dead = false;
                 self.line("{");

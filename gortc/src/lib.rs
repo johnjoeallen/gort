@@ -18,6 +18,8 @@ pub struct Output {
     pub instances: Vec<String>,
     /// the functions that may park, one per line (`--effects`)
     pub effects: Vec<String>,
+    /// accepted, but worth a look (printed as `warning:`)
+    pub warnings: Vec<Diag>,
 }
 
 /// Compiles the files of one package (name, source) to a single C translation unit.
@@ -70,7 +72,7 @@ pub fn compile_with(files: &[(String, String)], require_main: bool) -> Result<Ou
         .map(|i| format!("{}{}  =>  G_{}", i.shown, if i.is_extern { " [extern]" } else { "" }, prog.structs[i.sid].name))
         .collect();
     let effects = prog.fns.iter().filter(|f| f.may_park && !f.is_extern && f.body.is_some() && !f.name.starts_with('_')).map(|f| format!("may park: {}", f.name)).collect();
-    Ok(Output { c, notes: prog.notes, instances, effects })
+    Ok(Output { c, notes: prog.notes, instances, effects, warnings: prog.warnings })
 }
 
 /// Built-in types written in Gort (src/prelude.gort): `Range`, `Map`, `JsonLimits`, `JsonError`.

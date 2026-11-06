@@ -1,6 +1,6 @@
 //! Runs every program under tests/: ok/ must build under ASan+UBSan and print the .out file (the runtime also fails
 //! the run if any counted object is still live at exit), err/ must be rejected with the message named on its first
-//! line (`// error: ...`), trap/ must exit with the code named in `// expect-exit:` and print `// stderr:` text.
+//! line (`// error: ...`), warn/ must be accepted and print each `// warning:` text (and none that contains a `// no-warning:` text), trap/ must exit with the code named in `// expect-exit:` and print `// stderr:` text.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -73,6 +73,21 @@ fn trapping_programs() {
         assert_eq!(String::from_utf8_lossy(&r.stdout), want, "{}: output differs", p.display());
         for w in header(&p, "stderr") {
             assert!(String::from_utf8_lossy(&r.stderr).contains(&w), "{}: stderr lacks `{}`", p.display(), w);
+        }
+    }
+}
+
+#[test]
+fn warned_programs() {
+    for p in files("warn") {
+        let r = Command::new(gortc()).arg("check").arg(&p).output().unwrap();
+        let err = String::from_utf8_lossy(&r.stderr);
+        assert_eq!(r.status.code(), Some(0), "{}: a warning must not fail the build\n{}", p.display(), err);
+        for w in header(&p, "warning") {
+            assert!(err.contains(&format!("warning: {}", w)) || err.contains(&w), "{}: expected warning `{}` in\n{}", p.display(), w, err);
+        }
+        for w in header(&p, "no-warning") {
+            assert!(!err.contains(&w), "{}: unexpected warning `{}` in\n{}", p.display(), w, err);
         }
     }
 }

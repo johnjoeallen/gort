@@ -63,6 +63,9 @@ fn main() -> ExitCode {
             eprintln!("{}", i);
         }
     }
+    for w in &o.warnings {
+        eprintln!("{}:{}:{}: warning: {}", w.file, w.line, w.col, w.msg);
+    }
     if effects {
         for n in &o.effects {
             eprintln!("{}", n);
