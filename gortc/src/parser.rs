@@ -537,7 +537,7 @@ impl Parser {
             self.bump();
             let iter = self.no_struct_off(|p| p.expr())?;
             self.expect_sym(")")?;
-            let body = self.block()?;
+            let body = self.body_block()?;
             return Ok(mk(StmtKind::For { var, iter, body }));
         }
         // slice 2/3 stubs: `scope { }`, `mutate(x) { }` and `sync(x) { }` run their body in place
@@ -652,7 +652,7 @@ impl Parser {
 
     /// A statement ends at ';', before '}', or at a line break.
     fn end_stmt(&mut self) -> R<()> {
-        if self.eat_sym(";") || self.is_sym("}") || self.cur().nl || self.cur().tok == Tok::Eof {
+        if self.eat_sym(";") || self.is_sym("}") || self.is_kw("else") || self.cur().nl || self.cur().tok == Tok::Eof {
             Ok(())
         } else {
             let t = self.cur().clone();
@@ -1031,9 +1031,13 @@ impl Parser {
                 self.expect_sym(")")?;
                 Ok(mk(ExprKind::NewArray(ty, Box::new(len))))
             }
-            Tok::Ident(s) if s == "fn" && matches!(self.peek_at(1).tok, Tok::Sym("(")) => {
+            Tok::Ident(s) if s == "fn" && (matches!(self.peek_at(1).tok, Tok::Sym("(")) || (matches!(self.peek_at(1).tok, Tok::Sym("[")) && matches!(self.peek_at(3).tok, Tok::Sym("]")) && matches!(self.peek_at(4).tok, Tok::Sym("(")))) => {
                 let start = self.pos;
                 self.bump();
+                if self.eat_sym("[") {
+                    self.bump(); // the effect attribute: `nopark`, `yield`
+                    self.expect_sym("]")?;
+                }
                 self.expect_sym("(")?;
                 let mut params = Vec::new();
                 while !self.is_sym(")") {
