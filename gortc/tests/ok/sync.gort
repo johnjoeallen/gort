@@ -1,0 +1,40 @@
+package t
+struct Account {
+    balance: i64
+    log: Array<i64>
+    fn read(): i64 { return balance }
+    fn add(n: i64) { balance = balance + n }
+}
+struct Bank { acct: Ref<Account>, ops: i64 }
+fn deposit(a: Ref<Account>, n: i64) {
+    mutate(a) { a.balance = a.balance + n }
+}
+fn total(a: Ref<Account>): i64 {
+    sync(a) { return a.balance }
+}
+fn first(a: Ref<Account>, limit: i64): i64 {
+    var i = 0
+    while (true) {
+        mutate(a) {
+            if (a.balance >= limit) { return i }       // returns out of the block: the lock is released
+        }
+        i = i + 1
+        deposit(a, 10)
+    }
+    return -1
+}
+fn main() {
+    let a = new Account { balance: 5 }
+    deposit(a, 7)
+    println(total(a))
+    println(first(a, 40))
+    let bank = new Bank { acct: a, ops: 0 }
+    mutate(bank) {
+        bank.ops = bank.ops + 1
+        sync(bank.acct) { println(bank.acct.balance) }
+    }
+    println(bank.ops)
+    sync(a) { println(a.read()) }        // a reading method is fine under sync
+    mutate(a) { a.add(1) }
+    println(total(a))
+}

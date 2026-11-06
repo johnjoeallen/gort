@@ -111,6 +111,8 @@ pub enum StmtKind {
     Switch { subject: Expr, arms: Vec<Arm> },
     Throw(Expr),
     Try { body: Block, catches: Vec<Catch> },
+    /// `sync(x) { }` (read-only) and `mutate(x) { }` (exclusive): `x` is a `Ref<T>`
+    Sync { mutate: bool, target: Expr, body: Block },
 }
 
 #[derive(Debug, Clone)]

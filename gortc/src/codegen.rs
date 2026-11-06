@@ -918,6 +918,41 @@ impl<'a> FnGen<'a> {
                 self.dead = true;
             }
             TS::Block(b) => self.block(b),
+            TS::Sync(mutate, target, body) => {
+                // hold a count on the object and its lock for the whole body; both are scope drops, so return, break, continue and throw release them
+                let Ty::Ref(sid) = &target.ty else { unreachable!() };
+                let sn = self.prog.structs[*sid].name.clone();
+                let saved = self.dead;
+                self.dead = false;
+                self.line("{");
+                self.ind += 1;
+                self.scopes.push(Vec::new());
+                self.push_frame();
+                let v = self.expr(target);
+                let o = self.copy_value(v, &target.ty);
+                let r = self.tmp();
+                self.line(format!("G_{}* {} = {};", sn, r, o));
+                self.pop_frame();
+                self.scopes.last_mut().unwrap().push(format!("G_{}_release({});", sn, r));
+                let handled = self.try_stack.iter().any(|t| t.catches_null) || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
+                if handled {
+                    self.null_throw(format!("!{}", r));
+                } else {
+                    self.line(format!("gort_nn({});", r));
+                }
+                let (lock, unlock) = if *mutate { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
+                self.line(format!("{}({});", lock, r));
+                self.scopes.last_mut().unwrap().push(format!("{}({});", unlock, r));
+                self.block(body);
+                if !self.dead {
+                    let sc = self.scopes.len() - 1;
+                    self.emit_scope_drops_to(sc);
+                }
+                self.scopes.pop();
+                self.ind -= 1;
+                self.line("}");
+                self.dead = saved;
+            }
             TS::SetGlobal(g, init) => {
                 self.line("{");
                 self.ind += 1;

@@ -1,0 +1,6 @@
+// error: a mutate block must not park: `wait` may park
+package t
+struct S { n: i64 }
+extern parks fn wait()
+fn f(s: Ref<S>) { mutate(s) { wait() } }
+fn main() { f(new S { n: 0 }) }

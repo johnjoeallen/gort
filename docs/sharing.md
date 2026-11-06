@@ -2,7 +2,7 @@
 
 One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` or `mutate` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `gort/redis/db.gort`.
 
-Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Nothing here is implemented; the C beside the `.gort` is hand-written.
+Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Partly implemented in `gortc`: explicit `sync`/`mutate` blocks with the lock, R4 (mode) and the no-parking rule. Not implemented: R1 and R2 (deciding where a block is required), R5 (publishing) and the shared flag; the C beside the `.gort` is hand-written.
 
 ## The rules
 

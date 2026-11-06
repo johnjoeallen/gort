@@ -12,10 +12,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sched.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { size_t strong; size_t weak; } gort_ctl;
+typedef struct { size_t strong; uint32_t weak; uint32_t lock; } gort_ctl;   /* `lock`: the sync/mutate word, 0 free, bit 31 writer, else the reader count */
 #define GORT_CTL(p) (((gort_ctl *)(p)) - 1)
 
 /* live heap objects (counted objects, heap strings, arrays); main() checks that it is zero at exit */
@@ -35,6 +36,32 @@ static inline size_t gort_chk(size_t i, size_t len) {
 }
 
 /* ---- counted objects ---- */
+/* ---- sync / mutate: a reader-writer spin lock in the object header. A block never parks (the compiler checks), so a holder runs to the
+ * end of the block and the lock is only ever contended by another worker. Waiting for too long means a block locked the same object twice. ---- */
+#define GORT_WRBIT 0x80000000u
+static void gort_lock_wait(unsigned *spins) {
+    if (++*spins > 100000000u) gort_trap("lock wait too long (sync/mutate on an object that is already locked by this vthread?)");
+    if ((*spins & 1023) == 0) sched_yield();
+}
+static inline void gort_rd_lock(void *p) {
+    uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
+    for (;;) {
+        uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+        if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        gort_lock_wait(&spins);
+    }
+}
+static inline void gort_rd_unlock(void *p) { __atomic_fetch_sub(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE); }
+static inline void gort_wr_lock(void *p) {
+    uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
+    for (;;) {
+        uint32_t v = 0;
+        if (__atomic_compare_exchange_n(l, &v, GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        gort_lock_wait(&spins);
+    }
+}
+static inline void gort_wr_unlock(void *p) { __atomic_store_n(&GORT_CTL(p)->lock, 0, __ATOMIC_RELEASE); }
+
 static inline void *gort_new(size_t size) {
     gort_ctl *c = (gort_ctl *)calloc(1, sizeof(gort_ctl) + size);
     if (!c) gort_trap("out of memory");

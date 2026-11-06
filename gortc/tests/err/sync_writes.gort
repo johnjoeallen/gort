@@ -1,0 +1,5 @@
+// error: this sync block writes through its object: it needs mutate, have sync
+package t
+struct S { n: i64 }
+fn f(s: Ref<S>) { sync(s) { s.n = 1 } }
+fn main() { f(new S { n: 0 }) }

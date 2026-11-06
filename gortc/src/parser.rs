@@ -541,17 +541,19 @@ impl Parser {
             let body = self.body_block()?;
             return Ok(mk(StmtKind::For { var, iter, body }));
         }
-        // slice 2/3 stubs: `scope { }`, `mutate(x) { }` and `sync(x) { }` run their body in place
+        // `scope { }` is still a stub (runs in place); `mutate(x) { }` and `sync(x) { }` take the object's lock
         if self.is_kw("scope") {
             self.bump();
             return Ok(mk(StmtKind::Block(self.block()?)));
         }
         if self.is_kw("mutate") || self.is_kw("sync") {
+            let mutate = self.is_kw("mutate");
             self.bump();
             self.expect_sym("(")?;
-            self.no_struct_off(|p| p.expr())?;
+            let target = self.no_struct_off(|p| p.expr())?;
             self.expect_sym(")")?;
-            return Ok(mk(StmtKind::Block(self.block()?)));
+            let body = self.block()?;
+            return Ok(mk(StmtKind::Sync { mutate, target, body }));
         }
         for kw in ["defer"] {
             if self.is_kw(kw) {
