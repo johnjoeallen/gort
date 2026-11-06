@@ -1,0 +1,9 @@
+package t
+fn add(a: i64, b: i64): i64 { return a + b }
+fn[nopark] twice(a: i64): i64 { return add(a, a) }
+fn[nopark] pick(a: i64): i64 {
+    var n = 0
+    while (n < a) { n = twice(n + 1) }
+    return n
+}
+fn main() { println(pick(5)); println(twice(4)) }

@@ -264,9 +264,10 @@ impl Parser {
 
     fn fn_decl(&mut self, in_struct: bool) -> R<FnDecl> {
         let kw = self.expect_kw("fn")?;
-        // `fn[yield]`, `fn[nopark]`: an effect attribute; slice 2 gives it meaning
+        // `fn[yield]`, `fn[nopark]`: an effect attribute (`nopark` is checked against the inferred effect)
+        let mut attr = None;
         if self.eat_sym("[") {
-            self.ident()?;
+            attr = Some(self.ident()?.0);
             self.expect_sym("]")?;
         }
         let (mut name, _) = self.ident()?;
@@ -306,7 +307,7 @@ impl Parser {
             let t = self.cur().clone();
             return self.err(&t, format!("expected '{{', found {}", Self::describe(&t)));
         };
-        Ok(FnDecl { name, owner, is_static: false, params, ret, throws, body, is_extern: false, parks: false, line: kw.line, col: kw.col })
+        Ok(FnDecl { name, owner, is_static: false, params, ret, throws, body, is_extern: false, parks: false, attr, line: kw.line, col: kw.col })
     }
 
     // ---------------- types ----------------

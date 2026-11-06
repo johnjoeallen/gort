@@ -1,0 +1,4 @@
+// error: `f` is marked nopark but may park: it calls a function value, whose target is unknown
+package t
+fn[nopark] f(g: fn()) { g() }
+fn main() { f(fn() {}) }

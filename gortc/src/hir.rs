@@ -307,7 +307,12 @@ pub struct FnInfo {
     /// exception structs the function may throw (ANY_EXC for `Exception`)
     pub throws: Vec<usize>,
     pub is_extern: bool,
+    /// declared: an `extern` function that may wait (`parks fn`)
     pub parks: bool,
+    /// `fn[nopark]`: asserted not to park (checked)
+    pub nopark: bool,
+    /// inferred: this function, or something it calls, may park
+    pub may_park: bool,
     /// the last parameter takes any number of arguments, collected into an array
     pub variadic: bool,
     /// per parameter: a `Ref<T>` the function only reads through (never stores, returns or throws), so the caller lends it

@@ -331,6 +331,7 @@ impl<'a> Sema<'a> {
             self.tmap = HashMap::new();
         }
         self.compute_borrows();
+        self.compute_effects();
         // main: no parameters, or one config struct whose fields (numbers, bool, String) are set from `--name=value`
         if let Some(&m) = self.fn_ids.get("main") {
             let (line, ret, ptys) = {
@@ -626,6 +627,69 @@ impl<'a> Sema<'a> {
     /// read through (`p.x`, `p.f()`), compared, or passed on to another borrowing parameter. Storing it, returning it,
     /// throwing it or capturing it would let it outlive the call, and a value lent to such a parameter is an error.
     /// A function used as a value is called by someone who does not know its parameters, so it borrows nothing.
+    /// Which functions may park (wait): an `extern` declared `parks`, a call through a function value (its target is unknown), or a call to
+    /// a function that may. A fixpoint over the call graph. Then `fn[nopark]` and `cleanup()` are checked against it.
+    fn compute_effects(&mut self) {
+        let n = self.prog.fns.len();
+        // why[i]: the call that makes fn i park, for the message
+        let mut why: Vec<Option<String>> = vec![None; n];
+        let mut may: Vec<bool> = self.prog.fns.iter().map(|f| f.is_extern && f.parks).collect();
+        for i in 0..n {
+            if may[i] {
+                why[i] = Some("it is declared `parks`".into());
+            }
+        }
+        loop {
+            let mut changed = false;
+            for i in 0..n {
+                if may[i] {
+                    continue;
+                }
+                let Some(body) = &self.prog.fns[i].body else { continue };
+                let mut found: Option<String> = None;
+                visit_block(body, &mut |e| {
+                    visit_expr(e, &mut |x| {
+                        if found.is_some() {
+                            return;
+                        }
+                        match &x.kind {
+                            EK::Call(f, _) | EK::Method(f, _, _) if may[*f] => found = Some(format!("it calls `{}`", self.prog.fns[*f].name)),
+                            EK::CallInd(..) => found = Some("it calls a function value, whose target is unknown".into()),
+                            _ => {}
+                        }
+                    })
+                });
+                if let Some(w) = found {
+                    may[i] = true;
+                    why[i] = Some(w);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for i in 0..n {
+            self.prog.fns[i].may_park = may[i];
+        }
+        for i in 0..n {
+            let f = &self.prog.fns[i];
+            if f.nopark && may[i] && !f.is_extern {
+                let msg = format!("`{}` is marked nopark but may park: {}", f.name, why[i].clone().unwrap_or_default());
+                self.error(f.line, 1, msg);
+            }
+        }
+        for si in 0..self.prog.structs.len() {
+            if let Some(c) = self.prog.structs[si].cleanup {
+                if may[c] && !self.prog.fns[c].is_extern {
+                    let f = &self.prog.fns[c];
+                    let msg = format!("cleanup() of `{}` may park: {}", self.prog.structs[si].name, why[c].clone().unwrap_or_default());
+                    self.error(f.line, 1, msg);
+                }
+            }
+        }
+    }
+
     fn compute_borrows(&mut self) {
         let n = self.prog.fns.len();
         let mut taken = vec![false; n];
@@ -730,6 +794,8 @@ impl<'a> Sema<'a> {
             throws: Vec::new(),
             is_extern: false,
             parks: false,
+            nopark: false,
+            may_park: false,
             variadic: false,
             borrowed: Vec::new(),
             vars: cx.vars,
@@ -777,6 +843,8 @@ impl<'a> Sema<'a> {
             throws,
             is_extern: fd.is_extern,
             parks: fd.parks,
+            nopark: fd.attr.as_deref() == Some("nopark"),
+            may_park: fd.parks,
             variadic: fd.params.last().map(|p| p.variadic).unwrap_or(false),
             borrowed: Vec::new(),
             vars: Vec::new(),
@@ -2438,6 +2506,7 @@ impl<'a> Sema<'a> {
             body: Some(l.body.clone()),
             is_extern: false,
             parks: false,
+            attr: None,
             line: e.line,
             col: e.col,
         };

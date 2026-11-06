@@ -3,7 +3,7 @@ use std::process::{Command, ExitCode};
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
+        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --effects       list the functions that may park\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
     );
     ExitCode::from(2)
 }
@@ -13,7 +13,7 @@ fn main() -> ExitCode {
     let Some(cmd) = args.next() else { return usage() };
     let mut files: Vec<String> = Vec::new();
     let mut out: Option<PathBuf> = None;
-    let (mut notes, mut sanitize, mut keep_c, mut instances) = (false, false, false, false);
+    let (mut notes, mut sanitize, mut keep_c, mut instances, mut effects) = (false, false, false, false, false);
     let mut rest_args: Vec<String> = Vec::new();
     let mut links: Vec<String> = Vec::new();
     let mut after_dd = false;
@@ -27,6 +27,7 @@ fn main() -> ExitCode {
             "-o" => out = args.next().map(PathBuf::from),
             "--notes" => notes = true,
             "--instances" => instances = true,
+            "--effects" => effects = true,
             "--sanitize" => sanitize = true,
             "--keep-c" => keep_c = true,
             "--link" => links.extend(args.next()),
@@ -60,6 +61,11 @@ fn main() -> ExitCode {
     if instances {
         for i in &o.instances {
             eprintln!("{}", i);
+        }
+    }
+    if effects {
+        for n in &o.effects {
+            eprintln!("{}", n);
         }
     }
     if notes {

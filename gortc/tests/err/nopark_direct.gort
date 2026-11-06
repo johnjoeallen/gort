@@ -1,0 +1,5 @@
+// error: `f` is marked nopark but may park: it calls `wait`
+package t
+extern parks fn wait()
+fn[nopark] f() { wait() }
+fn main() { f() }

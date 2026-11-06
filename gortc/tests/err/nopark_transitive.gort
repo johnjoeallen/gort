@@ -1,0 +1,7 @@
+// error: `outer` is marked nopark but may park: it calls `middle`
+package t
+extern parks fn wait()
+fn inner() { wait() }
+fn middle() { inner() }
+fn[nopark] outer() { middle() }
+fn main() { outer() }

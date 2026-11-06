@@ -173,6 +173,8 @@ pub struct FnDecl {
     pub is_extern: bool,
     /// `parks`: may wait (the runtime's effect, stated because there is no body to analyse)
     pub parks: bool,
+    /// `fn[nopark]` / `fn[yield]`: the effect attribute, if written
+    pub attr: Option<String>,
     pub line: u32,
     pub col: u32,
 }

@@ -61,7 +61,7 @@ extern struct Conn {
     fn readableWakeup(): Wakeup                          // a wait source for waitAny
     fn hasUnread(): bool                                 // does the socket still hold input nobody has read? (ioctl FIONREAD)
     fn cleanup()                                         // closes the socket if it is still open (lingerClose has taken it over, or not)
-    fn lingerClose(time: Duration, maxBytes: u64)        // CONSUMES the connection and does not park: half-closes the write side (the client sees the
+    parks fn lingerClose(time: Duration, maxBytes: u64)        // CONSUMES the connection and parks the caller while it drains: half-closes the write side (the client sees the
                                                          // response and a clean end), then the runtime reads and discards input until the client closes,
                                                          // `time` passes or `maxBytes` have been discarded, and then closes it. server.c: start_linger /
                                                          // linger_resume; its timeout is cancellable

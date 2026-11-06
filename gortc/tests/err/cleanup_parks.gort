@@ -1,0 +1,8 @@
+// error: cleanup() of `Res` may park: it calls `wait`
+package t
+extern parks fn wait()
+struct Res {
+    n: i64
+    fn cleanup() { wait() }
+}
+fn main() { let r = Res { n: 1 } }
