@@ -248,7 +248,7 @@ pub enum TS {
     Throw(usize, Vec<(usize, TExpr)>),
     Try(TBlock, Vec<TCatch>),
     /// `sync(x) { }` (false) / `mutate(x) { }` (true): `x` is a `Ref` to a counted object whose lock is held for the body
-    Sync(bool, TExpr, TBlock),
+    Sync(bool, Vec<TExpr>, TBlock),
 }
 
 #[derive(Clone, Debug)]

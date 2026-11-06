@@ -1,0 +1,22 @@
+package t
+struct Db { n: i64, name: String }
+fn make(): Ref<Db> {
+    let d = new Db { n: 0, name: "db" }
+    d.n = 1                       // local while it is being built
+    return d
+}
+fn viaMake(): Ref<Db> { return make() }                 // a fresh call's result is fresh
+fn pick(flag: bool): Ref<Db> {
+    if (flag) return new Db { n: 10, name: "a" }
+    let d = make()
+    d.n = d.n + 1
+    return d
+}
+fn main() {
+    let db = viaMake()
+    db.n = db.n + 4               // nobody else has it yet: no block
+    println(db.n)
+    let p = pick(false)
+    p.n += 1
+    println(p.n)
+}

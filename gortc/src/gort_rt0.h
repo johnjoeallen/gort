@@ -96,6 +96,16 @@ static inline void gort_wr_lock(void *p) {
     }
     gort_held_push(p, m == 1 ? GORT_H_UP : GORT_H_WRITE);
 }
+/* several objects in one block: lock them in address order, so two threads naming the same objects in different orders cannot deadlock */
+static inline void gort_lock_group(void **a, size_t n, int w) {
+    for (size_t i = 1; i < n; i++) { void *k = a[i]; size_t j = i; while (j > 0 && (uintptr_t)a[j - 1] > (uintptr_t)k) { a[j] = a[j - 1]; j--; } a[j] = k; }
+    for (size_t i = 0; i < n; i++) { if (w) gort_wr_lock(a[i]); else gort_rd_lock(a[i]); }
+}
+static void gort_wr_unlock(void *p);
+static void gort_rd_unlock(void *p);
+static inline void gort_unlock_group(void **a, size_t n, int w) {
+    for (size_t i = n; i-- > 0;) { if (w) gort_wr_unlock(a[i]); else gort_rd_unlock(a[i]); }
+}
 static inline void gort_wr_unlock(void *p) {
     unsigned char k = gort_held_pop(p);
     if (k == GORT_H_WRITE) __atomic_store_n(&GORT_CTL(p)->lock, 0, __ATOMIC_RELEASE);

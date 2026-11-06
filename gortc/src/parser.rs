@@ -550,10 +550,13 @@ impl Parser {
             let mutate = self.is_kw("mutate");
             self.bump();
             self.expect_sym("(")?;
-            let target = self.no_struct_off(|p| p.expr())?;
+            let mut targets = vec![self.no_struct_off(|p| p.expr())?];
+            while self.eat_sym(",") {
+                targets.push(self.no_struct_off(|p| p.expr())?);
+            }
             self.expect_sym(")")?;
             let body = self.block()?;
-            return Ok(mk(StmtKind::Sync { mutate, target, body }));
+            return Ok(mk(StmtKind::Sync { mutate, targets, body }));
         }
         for kw in ["defer"] {
             if self.is_kw(kw) {

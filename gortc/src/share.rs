@@ -39,16 +39,18 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
-    let run = |needs: &Vec<Vec<u8>>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>) {
+    let run = |needs: &Vec<Vec<u8>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>) {
         let mut out: Vec<Finding> = Vec::new();
         let mut hits: Vec<(FnId, usize, u8)> = Vec::new();
+        let mut fresh_out: Vec<bool> = vec![false; prog.fns.len()];
         for (fid, f) in prog.fns.iter().enumerate() {
             let Some(body) = &f.body else { continue };
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, needs, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), out: Vec::new(), hits: Vec::new() };
             cx.block(body);
+            fresh_out[fid] = matches!(f.ret, Ty::Ref(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
             if report {
                 let mut seen: HashSet<(u32, String)> = HashSet::new();
@@ -59,10 +61,25 @@ pub fn check(prog: &Program) -> Vec<Finding> {
                 }
             }
         }
-        (out, hits)
+        (out, hits, fresh_out)
     };
+    // fresh results first: a function is fresh if every return gives back a new object nothing else refers to (or a fresh call's result)
+    let mut fresh: Vec<bool> = vec![false; prog.fns.len()];
     loop {
-        let (_, hits) = run(&needs, false);
+        let (_, _, f2) = run(&needs, &fresh, false);
+        let mut changed = false;
+        for i in 0..fresh.len() {
+            if f2[i] && !fresh[i] {
+                fresh[i] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    loop {
+        let (_, hits, _) = run(&needs, &fresh, false);
         let mut changed = false;
         for (f, k, l) in hits {
             if needs[f][k] < l {
@@ -74,7 +91,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             break;
         }
     }
-    run(&needs, true).0
+    run(&needs, &fresh, true).0
 }
 
 /// Fields written outside construction: `(struct, field index)`.
@@ -141,6 +158,10 @@ struct Cx<'a> {
     fid: FnId,
     mutable: &'a HashSet<(usize, usize)>,
     needs: &'a [Vec<u8>],
+    /// functions whose result is a new object nothing else refers to
+    fresh: &'a [bool],
+    /// every `return` so far returned a fresh value (None: no return seen yet)
+    ret_fresh: Option<bool>,
     borrowed: &'a [Vec<bool>],
     /// the enclosing sync / mutate blocks: (is mutate, target)
     open: Vec<(bool, TExpr)>,
@@ -218,12 +239,24 @@ impl<'a> Cx<'a> {
         }
     }
 
+    /// Is `e` a new object that nothing else refers to? A `new`, the result of a fresh function, or a local that has not escaped.
+    fn is_fresh_value(&self, e: &TExpr) -> bool {
+        match &e.kind {
+            EK::NewObj(..) => true,
+            EK::Call(f, _) | EK::Method(f, _, _) => self.fresh[*f],
+            EK::Var(id) | EK::ObjRef(id) => self.locals.get(id) == Some(&false),
+            EK::BoxVal(i) | EK::Borrow(i) => self.is_fresh_value(i),
+            _ => false,
+        }
+    }
+
     fn stmt(&mut self, s: &TStmt) {
         match &s.kind {
             TS::Let(id, e) => {
                 self.expr(e, s.line, Need::Read);
+                let fresh = self.is_fresh_value(e);
                 self.escape_in(&[e]);
-                if matches!(e.kind, EK::NewObj(..)) {
+                if fresh {
                     self.locals.insert(*id, false);
                 }
             }
@@ -235,7 +268,13 @@ impl<'a> Cx<'a> {
                 self.escape_in(&es);
                 self.locals.insert(*id, false);
             }
-            TS::Expr(e) | TS::SetGlobal(_, e) | TS::Return(Some(e)) => {
+            TS::Return(Some(e)) => {
+                self.expr(e, s.line, Need::Read);
+                let fr = self.is_fresh_value(e);
+                self.ret_fresh = Some(self.ret_fresh.unwrap_or(true) && fr);
+                self.escape_in(&[e]);
+            }
+            TS::Expr(e) | TS::SetGlobal(_, e) => {
                 self.expr(e, s.line, Need::Read);
                 self.escape_in(&[e]);
             }
@@ -283,11 +322,15 @@ impl<'a> Cx<'a> {
                     self.block(&c.body);
                 }
             }
-            TS::Sync(m, t, b) => {
-                self.expr(t, s.line, Need::Read);          // naming an object to lock it does not let it escape
-                self.open.push((*m, t.clone()));
+            TS::Sync(m, ts, b) => {
+                for t in ts {
+                    self.expr(t, s.line, Need::Read);      // naming an object to lock it does not let it escape
+                    self.open.push((*m, t.clone()));
+                }
                 self.block(b);
-                self.open.pop();
+                for _ in ts {
+                    self.open.pop();
+                }
             }
             TS::Return(None) | TS::Break | TS::Continue | TS::BreakL(..) => {}
         }

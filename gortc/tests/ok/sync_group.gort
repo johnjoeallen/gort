@@ -1,0 +1,26 @@
+package t
+exception Short { need: i64 }
+struct Acct { n: i64 }
+fn move(from: Ref<Acct>, to: Ref<Acct>, amount: i64) throws Short {
+    mutate(from, to) {                                  // both locked, in one fixed order, whichever way round they are named
+        if (from.n < amount) throw Short(amount)        // both released on the way out
+        from.n = from.n - amount
+        to.n = to.n + amount
+    }
+}
+fn total(a: Ref<Acct>, b: Ref<Acct>): i64 {
+    sync(a, b) { return a.n + b.n }                      // returns out of the block: both released
+}
+fn main() {
+    let a = new Acct { n: 100 }
+    let b = new Acct { n: 5 }
+    let keep = new Acct { n: 0 }
+    try { move(a, b, 30) } catch (e: Short) { println("short") }
+    try { move(b, a, 500) } catch (e: Short) { println("short " + str(e.need)) }
+    try { move(b, a, 5) } catch (e: Short) { println("short") }
+    println(total(a, b))
+    println(total(b, a))
+    mutate(a, a) { a.n = a.n + 1 }                       // the same object twice: the second is re-entrant
+    mutate(a, b, keep) { keep.n = a.n + b.n }
+    sync(keep) { println(keep.n) }
+}
