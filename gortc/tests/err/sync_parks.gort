@@ -1,4 +1,4 @@
-// error: a mutate block must not park: `wait` may park
+// error: a sync block must not park: `wait` may park
 package t
 struct S { n: i64 }
 extern parks fn wait()
