@@ -1,0 +1,23 @@
+package t
+struct File { n: i64 }
+enum Sink {
+    Memory(Array<u8>)
+    Spool(File?)
+}
+struct Holder { sink: Sink }
+fn touch(s: Ref<Sink>) {
+    switch (s) {
+        Spool(f) -> {
+            if (f == null) f = new File { n: 7 }
+        }
+        Memory(_) -> {}
+    }
+}
+fn main() {
+    let s = new Holder { sink: Sink.Spool(null) }
+    touch(s.sink)
+    switch (s.sink) {
+        Spool(f) -> { println(f.n) }
+        Memory(_) -> { println(0) }
+    }
+}

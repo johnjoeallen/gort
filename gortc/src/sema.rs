@@ -1066,6 +1066,7 @@ impl<'a> Sema<'a> {
                 converted_line: 0,
                 is_obj: false,
                 line: decl.line,
+                alias: None,
             });
             cx.scopes[0].insert(p.name.clone(), id);
             params.push(id);
@@ -1103,12 +1104,49 @@ impl<'a> Sema<'a> {
 
     fn lower_block_in_current_scope(&mut self, cx: &mut FnCtx, b: &ast::Block) -> TBlock {
         let mut stmts = Vec::new();
-        for s in &b.stmts {
+        for (i, s) in b.stmts.iter().enumerate() {
+            // `var i = 0`: the integer type comes from what the variable is later combined with
+            let hinted;
+            let s = match &s.kind {
+                StmtKind::Let { name, mutable, ty: None, init } if matches!(init.kind, ExprKind::Int(_)) => match self.int_hint(cx, name, &b.stmts[i + 1..]) {
+                    Some(t) => {
+                        let te = ast::TypeExpr { name: t.name().to_string(), args: vec![], optional: false, fixed: None, line: s.line, col: s.col };
+                        hinted = ast::Stmt { kind: StmtKind::Let { name: name.clone(), mutable: *mutable, ty: Some(te), init: init.clone() }, line: s.line, col: s.col };
+                        &hinted
+                    }
+                    None => s,
+                },
+                _ => s,
+            };
             if let Some(t) = self.lower_stmt(cx, s) {
                 stmts.push(t);
             }
         }
         TBlock { stmts }
+    }
+
+    /// The first integer type that `name` is compared, combined or assigned with in `rest`, when the other side can be typed here.
+    fn int_hint(&mut self, cx: &mut FnCtx, name: &str, rest: &[ast::Stmt]) -> Option<IntTy> {
+        let mut cands: Vec<Option<&Expr>> = Vec::new();
+        for s in rest {
+            hint_stmt(s, name, &mut cands);
+        }
+        for e in cands {
+            let Some(e) = e else {
+                // `return x`: the function's return type
+                if let Ty::Int(it) = cx.ret {
+                    return Some(it);
+                }
+                continue;
+            };
+            let n = self.diags.len();
+            let t = self.lower_expr(cx, e).ty;
+            self.diags.truncate(n);
+            if let Ty::Int(it) = t {
+                return Some(it);
+            }
+        }
+        None
     }
 
     fn new_var(&mut self, cx: &mut FnCtx, name: &str, ty: Ty, mutable: bool, is_obj: bool, at: (u32, u32)) -> Option<VarId> {
@@ -1117,7 +1155,7 @@ impl<'a> Sema<'a> {
             return None;
         }
         let id = cx.vars.len();
-        cx.vars.push(VarInfo { name: name.to_string(), ty, mutable, converted: false, converted_line: 0, is_obj, line: at.0 });
+        cx.vars.push(VarInfo { name: name.to_string(), ty, mutable, converted: false, converted_line: 0, is_obj, line: at.0, alias: None });
         cx.scopes.last_mut().unwrap().insert(name.to_string(), id);
         Some(id)
     }
@@ -1419,7 +1457,13 @@ impl<'a> Sema<'a> {
         let mut covered = vec![false; nvariants];
         let mut default_body: Option<TBlock> = None;
         let mut guarded: Vec<(TExpr, TBlock)> = Vec::new();
-        let var = |ty: &Ty| typed(EK::Var(tmp), ty.clone(), line);
+        // a subject that is a plain place (a variable, `self`, a field, a handle's target) is switched on in place:
+        // no copy, and a binding that the arm assigns to or calls a method on names the payload itself
+        let place = if enum_sid.is_some() && pure_place(&subj) { Some(subj.clone()) } else { None };
+        let var = |ty: &Ty| match &place {
+            Some(p) => p.clone(),
+            None => typed(EK::Var(tmp), ty.clone(), line),
+        };
         for arm in arms {
             cx.scopes.push(HashMap::new());
             let mut conds: Vec<TExpr> = Vec::new();
@@ -1485,10 +1529,15 @@ impl<'a> Sema<'a> {
             let mut pre: Vec<TStmt> = Vec::new();
             for (name, f, fty, at) in binds {
                 let sid = enum_sid.unwrap();
+                let in_place = place.is_some() && block_mutates(&arm.body, &name);
                 if let Some(id) = self.new_var(cx, &name, fty.clone(), false, false, at) {
                     let fe = typed(EK::Field(Box::new(var(&sty)), f), fty, line);
                     let _ = sid;
-                    pre.push(TStmt { kind: TS::Let(id, fe), line });
+                    if in_place {
+                        cx.vars[id].alias = Some(fe);
+                    } else {
+                        pre.push(TStmt { kind: TS::Let(id, fe), line });
+                    }
                 }
             }
             let mut body = self.lower_block_in_current_scope(cx, &arm.body);
@@ -1528,7 +1577,7 @@ impl<'a> Sema<'a> {
                 Some(e) => TBlock { stmts: vec![TStmt { kind: TS::If(cond, body, Some(e)), line }] },
             });
         }
-        let mut stmts = vec![TStmt { kind: TS::Let(tmp, subj), line }];
+        let mut stmts = if place.is_some() { vec![] } else { vec![TStmt { kind: TS::Let(tmp, subj), line }] };
         if let Some(chain) = acc {
             stmts.push(TStmt { kind: TS::Block(chain), line });
         }
@@ -1897,7 +1946,7 @@ impl<'a> Sema<'a> {
                 let l = self.coerce(cx, l, &Ty::Int(IntTy::Usize), (len.line, len.col));
                 typed(EK::NewArr(el.clone(), Box::new(l)), Ty::Arr(Box::new(el)), line)
             }
-            ExprKind::Lambda(l) => match self.expected.clone() {
+            ExprKind::Lambda(l) => match self.exp_here.clone() {
                 Some(t @ Ty::Fn(..)) => self.lower_lambda(cx, e, l, &t, false),
                 _ => {
                     self.error(e.line, e.col, "an anonymous function needs a function type to match; pass it where one is expected");
@@ -1909,7 +1958,7 @@ impl<'a> Sema<'a> {
                 error_expr(line)
             }
             ExprKind::ArrayLit(items) => {
-                let want = match self.expected.clone() {
+                let want = match self.exp_here.clone() {
                     Some(Ty::Arr(el)) => Some(*el),
                     _ => None,
                 };
@@ -2022,6 +2071,9 @@ impl<'a> Sema<'a> {
     fn lower_ident(&mut self, cx: &mut FnCtx, e: &Expr, name: &str) -> TExpr {
         let line = e.line;
         if let Some(id) = cx.lookup(name) {
+            if let Some(a) = &cx.vars[id].alias {
+                return TExpr { line, ..a.clone() };
+            }
             return typed(EK::Var(id), cx.vars[id].ty.clone(), line);
         }
         if name == "self" {
@@ -3010,5 +3062,164 @@ fn escapes(e: &TExpr, pid: VarId, ok_here: bool, borrowed: &[Vec<bool>]) -> bool
         EK::Call(fid, args) => args.iter().enumerate().any(|(i, a)| escapes(a, pid, is_p(a) && borrowed[*fid].get(i).copied().unwrap_or(false), borrowed)),
         EK::Method(fid, r, args) => escapes(r, pid, false, borrowed) || args.iter().enumerate().any(|(i, a)| escapes(a, pid, is_p(a) && borrowed[*fid].get(i).copied().unwrap_or(false), borrowed)),
         _ => children(e).into_iter().any(|c| escapes(c, pid, false, borrowed)),
+    }
+}
+
+/// Collects the expressions that `name` meets in an arithmetic, comparison or assignment, in source order.
+fn hint_stmt<'a>(s: &'a ast::Stmt, name: &str, out: &mut Vec<Option<&'a Expr>>) {
+    let blk = |b: &'a ast::Block, out: &mut Vec<Option<&'a Expr>>| {
+        for s in &b.stmts {
+            hint_stmt(s, name, out);
+        }
+    };
+    match &s.kind {
+        StmtKind::Let { init, .. } => hint_expr(init, name, out),
+        StmtKind::Assign { target, value, .. } => {
+            if matches!(&target.kind, ExprKind::Ident(n) if n == name) && simple(value) {
+                out.push(Some(value));
+            }
+            hint_expr(target, name, out);
+            hint_expr(value, name, out);
+        }
+        StmtKind::Expr(e) | StmtKind::Throw(e) => hint_expr(e, name, out),
+        StmtKind::Return(e) => {
+            if let Some(e) = e {
+                if matches!(&e.kind, ExprKind::Ident(n) if n == name) {
+                    out.push(None);
+                }
+                hint_expr(e, name, out)
+            }
+        }
+        StmtKind::If { cond, then, els } => {
+            hint_expr(cond, name, out);
+            blk(then, out);
+            if let Some(e) = els {
+                blk(e, out)
+            }
+        }
+        StmtKind::While { cond, body } => {
+            hint_expr(cond, name, out);
+            blk(body, out);
+        }
+        StmtKind::For { iter, body, .. } => {
+            hint_expr(iter, name, out);
+            blk(body, out);
+        }
+        StmtKind::Loop(b) | StmtKind::Block(b) => blk(b, out),
+        StmtKind::Labeled(_, s) => hint_stmt(s, name, out),
+        StmtKind::Switch { subject, arms } => {
+            hint_expr(subject, name, out);
+            for a in arms {
+                blk(&a.body, out);
+            }
+        }
+        StmtKind::Try { body, catches } => {
+            blk(body, out);
+            for c in catches {
+                blk(&c.body, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn hint_expr<'a>(e: &'a Expr, name: &str, out: &mut Vec<Option<&'a Expr>>) {
+    let is_x = |x: &Expr| matches!(&x.kind, ExprKind::Ident(n) if n == name);
+    match &e.kind {
+        ExprKind::Binary(op, a, b) => {
+            if !matches!(op, BinOp::And | BinOp::Or) {
+                if is_x(a) && simple(b) && !is_x(b) {
+                    out.push(Some(b));
+                }
+                if is_x(b) && simple(a) && !is_x(a) {
+                    out.push(Some(a));
+                }
+            }
+            hint_expr(a, name, out);
+            hint_expr(b, name, out);
+        }
+        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) => hint_expr(a, name, out),
+        ExprKind::Call(f, args) => {
+            hint_expr(f, name, out);
+            for a in args {
+                hint_expr(a, name, out);
+            }
+        }
+        ExprKind::Index(a, b) => {
+            hint_expr(a, name, out);
+            hint_expr(b, name, out);
+        }
+        ExprKind::Cond(a, b, c) => {
+            hint_expr(a, name, out);
+            hint_expr(b, name, out);
+            hint_expr(c, name, out);
+        }
+        _ => {}
+    }
+}
+
+/// An operand worth typing: names, fields and indexing only, so typing it has no side effects.
+fn simple(x: &Expr) -> bool {
+        match &x.kind {
+            ExprKind::Ident(_) => true,
+            ExprKind::Field(b, _) => simple(b),
+            ExprKind::Index(b, i) => simple(b) && simple(i),
+            ExprKind::Call(f, a) => a.is_empty() && simple(f),
+            ExprKind::Binary(_, a, b) => simple(a) && simple(b),
+            _ => false,
+        }
+    }
+
+/// A place that can be named again without side effects: a variable, `self`, a field of one, a handle's target.
+fn pure_place(e: &TExpr) -> bool {
+    match &e.kind {
+        EK::Var(_) | EK::SelfPlace | EK::ObjPlace(_) => true,
+        EK::Field(b, _) => pure_place(b),
+        EK::Deref(h) => matches!(h.kind, EK::Var(_) | EK::SelfPlace) || pure_place(h) && matches!(h.kind, EK::Field(..)),
+        _ => false,
+    }
+}
+
+/// Does the block assign to `name` (or a part of it) or call a method on it, so it must be the payload itself and not a copy?
+fn block_mutates(b: &ast::Block, name: &str) -> bool {
+    b.stmts.iter().any(|s| stmt_mutates(s, name))
+}
+
+fn root_is(e: &Expr, name: &str) -> bool {
+    match &e.kind {
+        ExprKind::Ident(n) => n == name,
+        ExprKind::Field(b, _) | ExprKind::Index(b, _) => root_is(b, name),
+        _ => false,
+    }
+}
+
+fn stmt_mutates(s: &ast::Stmt, name: &str) -> bool {
+    let blk = |b: &ast::Block| block_mutates(b, name);
+    let ex = |e: &Expr| expr_mutates(e, name);
+    match &s.kind {
+        StmtKind::Let { init, .. } => ex(init),
+        StmtKind::Assign { target, value, .. } => root_is(target, name) || ex(value),
+        StmtKind::Expr(e) | StmtKind::Throw(e) => ex(e),
+        StmtKind::Return(e) => e.as_ref().map_or(false, ex),
+        StmtKind::If { cond, then, els } => ex(cond) || blk(then) || els.as_ref().map_or(false, blk),
+        StmtKind::While { cond, body } => ex(cond) || blk(body),
+        StmtKind::For { iter, body, .. } => ex(iter) || blk(body),
+        StmtKind::Loop(b) | StmtKind::Block(b) => blk(b),
+        StmtKind::Labeled(_, s) => stmt_mutates(s, name),
+        StmtKind::Switch { subject, arms } => ex(subject) || arms.iter().any(|a| blk(&a.body)),
+        StmtKind::Try { body, catches } => blk(body) || catches.iter().any(|c| blk(&c.body)),
+        _ => false,
+    }
+}
+
+fn expr_mutates(e: &Expr, name: &str) -> bool {
+    let ex = |x: &Expr| expr_mutates(x, name);
+    match &e.kind {
+        // `name.m(..)`: the method may change what it is called on
+        ExprKind::Call(f, args) => matches!(&f.kind, ExprKind::Field(b, _) if root_is(b, name)) || ex(f) || args.iter().any(ex),
+        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) => ex(a),
+        ExprKind::Index(a, b) | ExprKind::Binary(_, a, b) => ex(a) || ex(b),
+        ExprKind::Cond(a, b, c) => ex(a) || ex(b) || ex(c),
+        _ => false,
     }
 }

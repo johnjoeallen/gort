@@ -1465,7 +1465,7 @@ impl<'a> FnGen<'a> {
     /// Rewrites a place so the unstable handle on its path (a field, element or global holding the owner) is read once into a
     /// counted temporary that lives to the end of the statement; the place is then reached through that temporary.
     fn pin_owner(&mut self, e: &TExpr) -> TExpr {
-        let mut pin = |g: &mut Self, h: &TExpr| -> TExpr {
+        let pin = |g: &mut Self, h: &TExpr| -> TExpr {
             let v = g.expr(h);
             let c = g.copy_value(v, &h.ty);
             if let Some(d) = drop_code(g.prog, &h.ty, &c) {

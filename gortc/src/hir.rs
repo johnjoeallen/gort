@@ -121,6 +121,8 @@ pub struct VarInfo {
     pub converted_line: u32,
     pub is_obj: bool,
     pub line: u32,
+    /// a switch binding that names the payload in place: uses of the name are this place
+    pub alias: Option<TExpr>,
 }
 
 #[derive(Clone, Debug)]
