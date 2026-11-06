@@ -1038,9 +1038,9 @@ impl<'a> FnGen<'a> {
                 match &a.ty {
                     Ty::Arr(el) => {
                         let cty = self.ct(el);
-                        Val::plain(format!("(((({}*)({})->data))[gort_chk((size_t)({}), ({})->len)])", cty, av.c, iv.c, av.c))
+                        Val::plain(format!("(((({}*)({})->data))[gort_chk((size_t)({}), ({})->cap)])", cty, av.c, iv.c, av.c))
                     }
-                    _ => Val::plain(format!("((uint8_t)({})->data[gort_chk((size_t)({}), ({})->len)])", av.c, iv.c, av.c)),
+                    _ => Val::plain(format!("((uint8_t)({})->data[gort_chk((size_t)({}), ({})->cap)])", av.c, iv.c, av.c)),
                 }
             }
             EK::Slice(a, lo, hi) => {
@@ -1248,6 +1248,22 @@ impl<'a> FnGen<'a> {
                     self.line(format!("gort_arr* {} = gort_arr_new(1, {}->len); memcpy({}->data, {}->data, {}->len);", t, a.c, t, a.c, a.c));
                     self.register_temp(&t, format!("gort_arr_release({});", t));
                     return Val { c: t.clone(), own: Some(t) };
+                }
+                if *name == "capacity" {
+                    return Val::plain(format!("(({})->cap)", a.c));
+                }
+                if *name == "appendArr" {
+                    let b = self.expr(&args[1]);
+                    self.line(format!("gort_arr_append({}, ({})->data, ({})->len);", a.c, b.c, b.c));
+                    return Val::plain("");
+                }
+                if *name == "appendOne" {
+                    let b = self.expr(&args[1]);
+                    let t = self.tmp();
+                    let cty = self.ct(&args[1].ty);
+                    self.line(format!("{} {} = {};", cty, t, b.c));
+                    self.line(format!("gort_arr_append({}, &{}, 1);", a.c, t));
+                    return Val::plain("");
                 }
                 if *name == "grow" {
                     self.line(format!("gort_arr_grow({});", a.c));

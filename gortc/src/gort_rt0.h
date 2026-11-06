@@ -85,7 +85,7 @@ static gort_str *gort_str_from_b(bool v) { return gort_str_make((const uint8_t *
 
 /* ---- Array<T> (slice 0: scalar elements, fixed length): the control block is separate from the element run ---- */
 /* a view (slice) has `parent`: the array whose run it shares; it counts the parent, never the run */
-typedef struct gort_arr { size_t strong; size_t len; void *data; struct gort_arr *parent; size_t esize; void (*edrop)(void *); } gort_arr;
+typedef struct gort_arr { size_t strong; size_t len; size_t cap; void *data; struct gort_arr *parent; size_t esize; void (*edrop)(void *); } gort_arr;
 
 static gort_arr *gort_arr_new(size_t esize, size_t len) {
     gort_arr *a = (gort_arr *)calloc(1, sizeof(gort_arr));
@@ -94,7 +94,7 @@ static gort_arr *gort_arr_new(size_t esize, size_t len) {
         a->data = calloc(len, esize);
         if (!a->data) gort_trap("out of memory");
     }
-    a->strong = 1; a->len = len; a->esize = esize;
+    a->strong = 1; a->len = len; a->cap = len; a->esize = esize;
     gort_live++;
     return a;
 }
@@ -109,32 +109,39 @@ static inline void gort_arr_release(gort_arr *a) {
     if (--a->strong == 0) {
         if (a->parent) gort_arr_release(a->parent);
         else {
-            if (a->edrop) for (size_t i = 0; i < a->len; i++) a->edrop((char *)a->data + i * a->esize);
+            if (a->edrop) for (size_t i = 0; i < a->cap; i++) a->edrop((char *)a->data + i * a->esize);
             free(a->data);
         }
         free(a); gort_live--;
     }
 }
 static gort_arr *gort_arr_slice(gort_arr *a, size_t esize, size_t lo, size_t hi) {
-    if (lo > hi || hi > a->len) gort_trap("slice out of range");
+    if (lo > hi || hi > a->cap) gort_trap("slice out of range");
     gort_arr *v = (gort_arr *)calloc(1, sizeof(gort_arr));
     if (!v) gort_trap("out of memory");
     gort_arr *root = a->parent ? a->parent : a;
-    v->strong = 1; v->len = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root);
+    v->strong = 1; v->len = v->cap = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root);
     gort_live++;
     return v;
 }
 /* growable arrays: the run is replaced by one twice as long (the first growth is to 256); nothing may be viewing it */
 static void gort_arr_grow(gort_arr *a) {
     if (a->parent || a->strong > 1) gort_trap("grow while the array is shared or viewed");
-    size_t n = a->len ? a->len * 2 : 256;
+    size_t n = a->cap ? a->cap * 2 : 256;
     void *d = realloc(a->data, n * a->esize);
     if (!d) gort_trap("out of memory");
-    memset((char *)d + a->len * a->esize, 0, (n - a->len) * a->esize);
-    a->data = d; a->len = n;
+    memset((char *)d + a->cap * a->esize, 0, (n - a->cap) * a->esize);
+    a->data = d; a->cap = n;
+}
+/* appends n scalar elements after the used length, growing the run as needed (not while shared or viewed) */
+static void gort_arr_append(gort_arr *a, const void *src, size_t n) {
+    if (a->parent || a->strong > 1) gort_trap("append while the array is shared or viewed");
+    while (a->len + n > a->cap) gort_arr_grow(a);
+    if (n) memcpy((char *)a->data + a->len * a->esize, src, n * a->esize);
+    a->len += n;
 }
 static void gort_arr_move(gort_arr *a, size_t lo, size_t hi, size_t to) {
-    if (lo > hi || hi > a->len || to > a->len - (hi - lo)) gort_trap("moveWithin out of range");
+    if (lo > hi || hi > a->cap || to > a->cap - (hi - lo)) gort_trap("moveWithin out of range");
     memmove((char *)a->data + to * a->esize, (char *)a->data + lo * a->esize, (hi - lo) * a->esize);
 }
 

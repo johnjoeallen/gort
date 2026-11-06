@@ -1069,7 +1069,7 @@ impl Parser {
                 self.expect_sym("(")?;
                 self.expect_sym(")")?;
                 let el = ty.args.into_iter().next().unwrap();
-                Ok(mk(ExprKind::NewArray(el, Box::new(mk(ExprKind::Int(256))))))
+                Ok(mk(ExprKind::NewArray(el, Box::new(mk(ExprKind::Int(0))))))
             }
             Tok::Ident(s) if !is_reserved(s) && s.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) && matches!(self.peek_at(1).tok, Tok::Sym("<")) && self.generic_qualifier() => {
                 let ty = self.type_expr()?;

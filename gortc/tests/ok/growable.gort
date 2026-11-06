@@ -3,6 +3,8 @@ struct Item { name: String, n: i64 }
 fn main() {
     let a = Array<u8>()
     println(a.capacity())
+    a.grow()
+    println(a.capacity())
     a[0] = 7
     a[1] = 8
     a[2] = 9

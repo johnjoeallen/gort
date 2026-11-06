@@ -2662,9 +2662,25 @@ impl<'a> Sema<'a> {
                     return b;
                 }
                 if matches!(b.ty, Ty::Str | Ty::Arr(_)) {
-                    // arrays are fixed-size for now, so the capacity is the length
-                    if (name == "length" || (name == "capacity" && matches!(b.ty, Ty::Arr(_)))) && args.is_empty() {
+                    // `length` is how many elements are in use; `capacity()` how many the run holds (indexing and slicing go up to it)
+                    if name == "length" && args.is_empty() {
                         return typed(EK::Len(Box::new(b)), Ty::Int(IntTy::Usize), line);
+                    }
+                    if name == "capacity" && matches!(b.ty, Ty::Arr(_)) && args.is_empty() {
+                        return typed(EK::RtCall("capacity", vec![b]), Ty::Int(IntTy::Usize), line);
+                    }
+                    if let (Ty::Arr(el), "append", 1) = (&b.ty, name.as_str(), args.len()) {
+                        let el = (**el).clone();
+                        if !matches!(el, Ty::Int(_) | Ty::Bool | Ty::F64) {
+                            self.error(callee.line, callee.col, "append works on arrays of numbers and booleans");
+                            return error_expr(line);
+                        }
+                        let a0 = self.lower_expecting(cx, &args[0], &b.ty);
+                        if a0.ty == b.ty {
+                            return typed(EK::RtCall("appendArr", vec![b, a0]), Ty::Unit, line);
+                        }
+                        let a0 = self.coerce(cx, a0, &el, (args[0].line, args[0].col));
+                        return typed(EK::RtCall("appendOne", vec![b, a0]), Ty::Unit, line);
                     }
                     // searching: String or Array<u8> receivers, a String or Array<u8> needle
                     let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)));

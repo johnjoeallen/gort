@@ -1,0 +1,17 @@
+package t
+fn main() {
+    var a = Array<u8>()
+    println(a.length)
+    println(a.capacity())
+    a.append(65)
+    let more: Array<u8> = [66, 67]
+    a.append(more)
+    println(a.length)
+    println(a.capacity())
+    let v = a[0..a.length]
+    println(v.length)
+    println(v[2])
+    var s: u8 = 0
+    for (x in a) { s += x }
+    println(s)
+}
