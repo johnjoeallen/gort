@@ -1,5 +1,5 @@
 // error: this object is listed under both writes and reads
 package t
 struct S { n: i64 }
-fn f(s: Ref<S>) { sync (writes s, reads s) { s.n = 1 } }
+fn f(s: Ref<S>) { sync (writes s; reads s) { s.n = 1 } }
 fn main() { f(new S { n: 0 }) }

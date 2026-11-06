@@ -1,5 +1,5 @@
 // warning: `sync (reads b)` is nested inside `sync (writes a)`, two different objects
-// warning: lock both in one block, `sync (reads b, writes a)`
+// warning: lock both in one block, `sync (reads b; writes a)`
 package t
 struct Acct { n: i64 }
 fn f(a: Ref<Acct>, b: Ref<Acct>): i64 {

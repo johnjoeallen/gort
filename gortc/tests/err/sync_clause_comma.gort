@@ -1,0 +1,5 @@
+// error: end a clause with `;` before the next one
+package t
+struct S { n: i64 }
+fn f(a: Ref<S>, b: Ref<S>) { sync (reads a, writes b) { b.n = a.n } }
+fn main() { f(new S { n: 0 }, new S { n: 0 }) }

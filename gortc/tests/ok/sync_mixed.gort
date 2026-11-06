@@ -3,7 +3,7 @@ exception Low { have: i64 }
 struct Rate { pct: i64 }
 struct Acct { n: i64 }
 fn applyRate(rate: Ref<Rate>, acct: Ref<Acct>, minimum: Ref<Acct>) throws Low {
-    sync (reads rate, minimum writes acct) {            // read two shared objects, change one
+    sync (reads rate, minimum; writes acct) {            // read two shared objects, change one
         if (acct.n < minimum.n) throw Low(acct.n)
         acct.n = acct.n + acct.n * rate.pct / 100
     }

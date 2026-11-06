@@ -247,7 +247,7 @@ pub enum TS {
     /// throw a new exception object of this exception struct
     Throw(usize, Vec<(usize, TExpr)>),
     Try(TBlock, Vec<TCatch>),
-    /// `sync (reads a, writes b) { }`: each target is a `Ref` to a counted object (mode true: written) whose lock is held for the body
+    /// `sync (reads a; writes b) { }`: each target is a `Ref` to a counted object (mode true: written) whose lock is held for the body
     Sync(Vec<(bool, TExpr)>, TBlock),
 }
 

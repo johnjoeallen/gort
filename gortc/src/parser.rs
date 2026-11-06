@@ -552,29 +552,33 @@ impl Parser {
         if self.is_kw("sync") {
             self.bump();
             self.expect_sym("(")?;
-            // `sync (reads a, b writes c)`: a clause word starts a list of one mode (the comma between clauses is optional)
+            // `sync (reads a, b; writes c)`: each clause is a word and a comma list of objects; `;` ends a clause
             let clause = |p: &Parser| -> Option<bool> {
                 match &p.cur().tok {
                     Tok::Ident(n) if (n == "reads" || n == "writes") && matches!(p.peek_at(1).tok, Tok::Ident(_)) => Some(n == "writes"),
                     _ => None,
                 }
             };
-            let mut write: Option<bool> = None;
             let mut targets: Vec<(bool, Expr)> = Vec::new();
             loop {
-                if let Some(w) = clause(self) {
-                    self.bump();
-                    write = Some(w);
-                }
-                let Some(w) = write else {
+                let Some(write) = clause(self) else {
                     let at = self.cur().clone();
-                    return self.err(&at, "list each object under reads or writes: `sync (reads x) { }` or `sync (writes x) { }`".to_string());
+                    return self.err(&at, "list each object under reads or writes: `sync (reads a, b; writes c) { }`".to_string());
                 };
-                targets.push((w, self.no_struct_off(|p| p.expr())?));
-                if self.eat_sym(",") || clause(self).is_some() {
-                    continue;
+                self.bump();
+                loop {
+                    targets.push((write, self.no_struct_off(|p| p.expr())?));
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                    if clause(self).is_some() {
+                        let at = self.cur().clone();
+                        return self.err(&at, "end a clause with `;` before the next one: `sync (reads a; writes b) { }`".to_string());
+                    }
                 }
-                break;
+                if !self.eat_sym(";") {
+                    break;
+                }
             }
             self.expect_sym(")")?;
             let body = self.block()?;

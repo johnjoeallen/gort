@@ -337,9 +337,9 @@ impl<'a> Cx<'a> {
             let group = if *om == *mode {
                 format!("sync ({} {}, {})", if *mode { "writes" } else { "reads" }, outer, inner)
             } else if *om {
-                format!("sync (reads {}, writes {})", inner, outer)
+                format!("sync (reads {}; writes {})", inner, outer)
             } else {
-                format!("sync (reads {}, writes {})", outer, inner)
+                format!("sync (reads {}; writes {})", outer, inner)
             };
             let msg = format!(
                 "`{}` is nested inside `{}`, two different objects: a thread that nests them the other way round deadlocks; lock both in one block, `{}`, so the order is the same no matter how they are written",
