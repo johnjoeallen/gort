@@ -17,6 +17,8 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R4. Modes.** A block lists each object under `reads` (read-only, shared with other readers) or `writes` (exclusive): `sync (reads a, b; writes c) { }`. All of them are locked together in a fixed order, so the order they are written in does not matter. Writing needs `writes`. A call made inside the block to a function whose summary writes the argument, when the argument is listed under `reads`, is an error: `needs writes store, but it is listed under reads`. This is checked even for an object that turns out never to be shared, so behaviour does not depend on sharing.
 
+**What a block covers.** A block on `a` covers `a`'s own fields and the values stored inline in it. It does not cover another object that `a` points to: `a.b.n` needs `sync (writes a.b)`, because `b` may also be held by some other object `x`, whose holder locks `x`, not `b`. A second handle on a local (`let d = c`) is not a new local: once `c` is published, `d` is shared too.
+
 **R5. Publishing.** A reference to a local object crosses a vthread boundary when it is passed to `spawn`, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is *shared*: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).
 
 **R6. Cost on an unshared object.** A `sync` block tests the flag once at entry. If it is clear, it does nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
