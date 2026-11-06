@@ -324,6 +324,8 @@ pub struct Program {
     pub fns: Vec<FnInfo>,
     pub strings: Vec<Vec<u8>>,
     pub main: Option<FnId>,
+    /// `main(cfg: Config)`: the config struct and the generated function that builds its defaults
+    pub main_cfg: Option<(usize, FnId)>,
     /// the built-in exception thrown by the use of a null optional
     pub null_exc: Option<usize>,
     pub globals: Vec<GlobalInfo>,

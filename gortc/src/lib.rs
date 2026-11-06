@@ -40,6 +40,22 @@ pub fn compile_with(files: &[(String, String)], require_main: bool) -> Result<Ou
     if !errs.is_empty() {
         return Err(errs);
     }
+    // `main(cfg: Config)`: a function that builds the defaults of Config, so the C entry point can start from them
+    let cfg_src = parsed.iter().find_map(|f| {
+        f.items.iter().find_map(|i| match i {
+            ast::Item::Fn(d) if d.name == "main" && d.owner.is_none() && d.params.len() == 1 && d.params[0].ty.args.is_empty() => {
+                Some((f.package.clone(), d.params[0].ty.name.clone()))
+            }
+            _ => None,
+        })
+    });
+    if let Some((pkg, ty)) = cfg_src {
+        let src = format!("package {}\nfn __main_cfg(): {} {{ return {} {{}} }}\n", pkg.unwrap_or_else(|| "main".into()), ty, ty);
+        match parser::parse_file("<main>", &src) {
+            Ok(f) => parsed.push(f),
+            Err(d) => return Err(vec![d]),
+        }
+    }
     let prog = sema::analyze(&parsed)?;
     if require_main && prog.main.is_none() {
         return Err(vec![Diag { file: files.first().map(|f| f.0.clone()).unwrap_or_default(), line: 1, col: 1, msg: "no `main` function".into() }]);

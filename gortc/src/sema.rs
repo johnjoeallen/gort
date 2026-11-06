@@ -331,12 +331,30 @@ impl<'a> Sema<'a> {
             self.tmap = HashMap::new();
         }
         self.compute_borrows();
-        // main
+        // main: no parameters, or one config struct whose fields (numbers, bool, String) are set from `--name=value`
         if let Some(&m) = self.fn_ids.get("main") {
-            let f = &self.prog.fns[m];
-            if !f.params.is_empty() && !f.param_tys.is_empty() || f.ret != Ty::Unit {
-                let line = f.line;
-                self.error(line, 1, "`main` takes no parameters and returns nothing");
+            let (line, ret, ptys) = {
+                let f = &self.prog.fns[m];
+                (f.line, f.ret.clone(), f.param_tys.clone())
+            };
+            let mut bad = ret != Ty::Unit;
+            match ptys.as_slice() {
+                [] => {}
+                [Ty::Struct(sid)] => {
+                    let si = &self.prog.structs[*sid];
+                    let flat = si.variants.is_empty() && !si.is_extern && si.fields.iter().all(|f| matches!(f.ty, Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Str));
+                    match (flat, self.fn_ids.get("__main_cfg")) {
+                        (true, Some(&c)) => self.prog.main_cfg = Some((*sid, c)),
+                        _ => {
+                            self.error(line, 1, "the config struct of `main` may only have number, bool and String fields");
+                            bad = false;
+                        }
+                    }
+                }
+                _ => bad = true,
+            }
+            if bad {
+                self.error(line, 1, "`main` takes no parameters (or one config struct) and returns nothing");
             }
             self.prog.main = Some(m);
         }

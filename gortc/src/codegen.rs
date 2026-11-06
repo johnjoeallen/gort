@@ -69,11 +69,41 @@ pub fn generate(prog: &Program) -> String {
             .filter_map(|g| drop_code(prog, &g.ty, &format!("gort_g_{}", g.name)))
             .map(|d| format!("    {}\n", d))
             .collect();
+        let (head, setup, call) = match prog.main_cfg {
+            None => ("void".to_string(), String::new(), format!("{}()", prog.fns[m].cname)),
+            Some((sid, cfgfn)) => {
+                let st = &prog.structs[sid];
+                let usage = format!(
+                    "usage: program {}\n",
+                    st.fields.iter().map(|f| format!("[--{}=<{}>]", f.name, prog.type_name(&f.ty))).collect::<Vec<_>>().join(" ")
+                );
+                let mut c = format!("    const char *usage = \"{}\";\n    G_{} cfg = {}();\n", usage.replace('\n', "\\n"), st.name, prog.fns[cfgfn].cname);
+                c.push_str("    for (int i = 1; i < argc; i++) {\n        const char *a = argv[i], *v = NULL;\n");
+                c.push_str("        if (!strcmp(a, \"--help\")) { fputs(usage, stdout); return 0; }\n");
+                c.push_str("        if (strncmp(a, \"--\", 2)) gort_arg_fail(a, strlen(a), \"expected --name=value\", usage);\n");
+                c.push_str("        a += 2; const char *eq = strchr(a, '='); size_t n = eq ? (size_t)(eq - a) : strlen(a); if (eq) v = eq + 1;\n");
+                for f in &st.fields {
+                    let fc = field_c(&f.name);
+                    let take = if f.ty == Ty::Bool { "" } else { "if (!v && i + 1 < argc && strncmp(argv[i + 1], \"--\", 2)) v = argv[++i]; " };
+                    let set = match &f.ty {
+                        Ty::Int(it) => format!(
+                            "cfg.{fc} = ({})gort_arg_int(a, n, v, {}, (int)(sizeof(cfg.{fc}) * 8), usage);",
+                            ctype(prog, &f.ty),
+                            if it.name().starts_with('i') { 1 } else { 0 }
+                        ),
+                        Ty::Bool => format!("cfg.{fc} = gort_arg_bool(a, n, v, usage);"),
+                        Ty::F64 => format!("cfg.{fc} = gort_arg_f64(a, n, v, usage);"),
+                        _ => format!("if (!v) gort_arg_fail(a, n, \"needs a value\", usage); {{ gort_str *o = cfg.{fc}; cfg.{fc} = gort_str_make((const uint8_t *)v, strlen(v)); gort_str_release(o); }}"),
+                    };
+                    c.push_str(&format!("        if (n == {} && !strncmp(a, \"{}\", n)) {{ {}{} }} else\n", f.name.len(), f.name, take, set));
+                }
+                c.push_str("        gort_arg_fail(a, n, \"unknown option\", usage);\n    }\n");
+                ("int argc, char **argv".to_string(), c, format!("{}(cfg)", prog.fns[m].cname))
+            }
+        };
         out.push_str(&format!(
-            "\nint main(void) {{\n{}    {}();\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
-            inits,
-            prog.fns[m].cname,
-            drops
+            "\nint main({}) {{\n{}{}    {};\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
+            head, inits, setup, call, drops
         ));
     }
     out

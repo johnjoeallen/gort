@@ -302,6 +302,7 @@ static void gort_print_b(bool v) { fputs(v ? "true" : "false", stdout); }
 static void gort_nl(void) { putchar('\n'); }
 /* ---- time: Duration and Instant are signed nanoseconds ---- */
 #include <time.h>
+#include <errno.h>
 static int64_t gort_now_ns(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec; }
 #endif
 
@@ -315,3 +316,34 @@ static void gort_exc_release(gort_exc_t* e) {
 /* optionals: a null handle, or a flag test that traps */
 static void* gort_nn(void* p) { if (!p) gort_trap("null value used"); return p; }
 static void gort_has(bool h) { if (!h) gort_trap("null value used"); }
+
+/* ---- command line: `main(cfg: Config)` fills the fields of cfg from --name=value or --name value ---- */
+static void gort_arg_fail(const char *a, size_t n, const char *msg, const char *usage) {
+    fprintf(stderr, "gort: --%.*s: %s\n%s", (int)n, a, msg, usage);
+    exit(2);
+}
+static unsigned long long gort_arg_int(const char *a, size_t n, const char *v, int is_signed, int bits, const char *usage) {
+    if (!v || !*v) gort_arg_fail(a, n, "needs a value", usage);
+    char *end; errno = 0;
+    if (is_signed) {
+        long long x = strtoll(v, &end, 10);
+        if (*end || errno || (bits < 64 && (x < -(1LL << (bits - 1)) || x >= (1LL << (bits - 1))))) gort_arg_fail(a, n, "not a number in range", usage);
+        return (unsigned long long)x;
+    }
+    if (*v == '-') gort_arg_fail(a, n, "not a number in range", usage);
+    unsigned long long x = strtoull(v, &end, 10);
+    if (*end || errno || (bits < 64 && x >= (1ULL << bits))) gort_arg_fail(a, n, "not a number in range", usage);
+    return x;
+}
+static double gort_arg_f64(const char *a, size_t n, const char *v, const char *usage) {
+    if (!v || !*v) gort_arg_fail(a, n, "needs a value", usage);
+    char *end; double x = strtod(v, &end);
+    if (*end) gort_arg_fail(a, n, "not a number", usage);
+    return x;
+}
+static bool gort_arg_bool(const char *a, size_t n, const char *v, const char *usage) {
+    if (!v || !strcmp(v, "true")) return true;
+    if (!strcmp(v, "false")) return false;
+    gort_arg_fail(a, n, "expected true or false", usage);
+    return false;
+}

@@ -1,0 +1,8 @@
+package t
+struct Config { port: u16 = 8080, workers: usize = 1, name: String = "gort", fast: bool, ratio: f64 = 0.5 }
+fn main(cfg: Config) {
+    println(cfg.port)
+    println(cfg.workers)
+    println(cfg.name)
+    println(cfg.fast)
+}

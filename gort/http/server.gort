@@ -228,10 +228,14 @@ fn serve(listener: Listener, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) 
     }
 }
 
-fn main(port: u16, workers: usize) {
+// What the program is started with: --port=8080 --workers=4 on the command line today, a config file later. Fields left out keep these defaults.
+struct Config { port: u16 = 8080, workers: usize = 1 }
+
+fn main(config: Config) {
+    let port = config.port
     let table = ResponseTable.build()
     let cfg = new ServerConfig()                                                                       // the defaults; the host can change any field
-    for (core in 0..workers) {
+    for (core in 0..config.workers) {
         spawnWorker(core, fn() {                                                                   // the worker's root: throws nothing
             try {
                 serve(Listener.bindReusePort(port), table, cfg)                                     // one listener, run queue, timer heap, arenas per core
