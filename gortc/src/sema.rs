@@ -707,8 +707,7 @@ impl<'a> Sema<'a> {
         for f in &self.prog.fns {
             let Some(body) = &f.body else { continue };
             let mut open: Vec<&TExpr> = Vec::new();
-            sync_walk(body, &mut open, &mut |mutate, targets: &[TExpr], b, _outer: &[&TExpr], line| {
-                let kw = if mutate { "mutate" } else { "sync" };
+            sync_walk(body, &mut open, &mut |targets: &[(bool, TExpr)], b, line| {
                 // 1. no parking
                 let mut found: Option<String> = None;
                 visit_block(b, &mut |e| {
@@ -724,11 +723,13 @@ impl<'a> Sema<'a> {
                     })
                 });
                 if let Some(w) = found {
-                    errs.push((line, format!("a {} block must not park: {}", kw, w)));
+                    errs.push((line, format!("a sync block must not park: {}", w)));
                 }
-                // 2. sync is read-only
-                if !mutate && targets.iter().any(|target| block_writes(b, target, &writes)) {
-                    errs.push((line, format!("this {} block writes through its object: it needs mutate, have sync", kw)));
+                // 2. an object listed under reads may not be written through
+                for (write, target) in targets {
+                    if !*write && block_writes(b, target, &writes) {
+                        errs.push((line, format!("this block writes through `{}`, which is listed under reads: it needs writes", place_name(&self.prog, f, target))));
+                    }
                 }
             });
         }
@@ -1496,21 +1497,29 @@ impl<'a> Sema<'a> {
                 let b = self.lower_block(cx, b);
                 mk(TS::Block(b))
             }
-            StmtKind::Sync { mutate, targets, body } => {
-                let kw = if *mutate { "mutate" } else { "sync" };
-                let mut vs: Vec<TExpr> = Vec::new();
+            StmtKind::Sync { targets, body } => {
+                let mut vs: Vec<(bool, TExpr)> = Vec::new();
                 let mut ok = true;
-                for target in targets {
+                for (write, target) in targets {
+                    let kw = if *write { "writes" } else { "reads" };
                     let v = self.lower_expr(cx, target);
                     let v = self.decay(cx, v, (target.line, target.col));
                     match &v.ty {
                         Ty::Error => ok = false,
                         Ty::Ref(sid) if self.prog.structs[*sid].is_extern => {
                             let n = self.prog.structs[*sid].name.clone();
-                            self.error(target.line, target.col, format!("`{}` is an extern type: it synchronises itself and needs no {} block", n, kw));
+                            self.error(target.line, target.col, format!("`{}` is an extern type: it synchronises itself and needs no sync block", n));
                             ok = false;
                         }
-                        Ty::Ref(_) => vs.push(v),
+                        Ty::Ref(_) => {
+                            // the same object under both reads and writes is a mistake, not a request for the stronger lock
+                            if let Some((w0, _)) = vs.iter().find(|(w0, t0)| *w0 != *write && same_place(t0, &v)) {
+                                let (a, b) = if *w0 { ("writes", "reads") } else { ("reads", "writes") };
+                                self.error(target.line, target.col, format!("this object is listed under both {} and {}", a, b));
+                                ok = false;
+                            }
+                            vs.push((*write, v));
+                        }
                         other => {
                             let n = self.prog.type_name(other);
                             self.error(target.line, target.col, format!("{} needs a Ref<T> to lock, found {}", kw, n));
@@ -1519,7 +1528,7 @@ impl<'a> Sema<'a> {
                     }
                 }
                 let b = self.lower_block(cx, body);
-                if ok { mk(TS::Sync(*mutate, vs, b)) } else { mk(TS::Block(b)) }
+                if ok { mk(TS::Sync(vs, b)) } else { mk(TS::Block(b)) }
             }
             StmtKind::Switch { subject, arms } => self.lower_switch(cx, s, subject, arms),
             StmtKind::Throw(e) => {
@@ -3168,7 +3177,7 @@ fn stmt_returns(s: &TStmt) -> bool {
     match &s.kind {
         TS::Return(_) => true,
         TS::If(_, t, Some(e)) => block_returns(t) && block_returns(e),
-        TS::Block(b) | TS::Sync(_, _, b) => block_returns(b),
+        TS::Block(b) | TS::Sync(_, b) => block_returns(b),
         TS::Throw(..) => true,
         TS::Try(b, cs) => block_returns(b) && cs.iter().all(|c| block_returns(&c.body)),
         TS::Loop(b) => !block_breaks(b),
@@ -3182,7 +3191,7 @@ fn block_breaks(b: &TBlock) -> bool {
         TS::Break | TS::BreakL(..) => true,
         TS::Labeled(i) => block_breaks(&TBlock { stmts: vec![(**i).clone()], ..Default::default() }),
         TS::If(_, t, e) => block_breaks(t) || e.as_ref().map(block_breaks).unwrap_or(false),
-        TS::Block(b) | TS::Sync(_, _, b) => block_breaks(b),
+        TS::Block(b) | TS::Sync(_, b) => block_breaks(b),
         TS::Try(b, cs) => block_breaks(b) || cs.iter().any(|c| block_breaks(&c.body)),
         _ => false, // a break inside a nested loop belongs to that loop
     })
@@ -3217,6 +3226,24 @@ pub(crate) fn param_writes(prog: &Program) -> Vec<Vec<bool>> {
     w
 }
 
+
+/// How a place is written in the source, for messages.
+pub(crate) fn place_name(prog: &Program, f: &FnInfo, e: &TExpr) -> String {
+    match &e.kind {
+        EK::Var(v) | EK::ObjRef(v) | EK::ObjPlace(v) => f.vars[*v].name.clone(),
+        EK::Field(b, i) => {
+            let bn = place_name(prog, f, b);
+            match &b.ty {
+                Ty::Struct(s) | Ty::Ref(s) | Ty::Obj(s) => format!("{}.{}", bn, prog.structs[*s].fields[*i].name),
+                _ => bn,
+            }
+        }
+        EK::Deref(b) | EK::Unwrap(b) | EK::Index(b, _) | EK::Borrow(b) | EK::BoxVal(b) => place_name(prog, f, b),
+        EK::Global(g) => prog.globals[*g].name.clone(),
+        EK::SelfPlace => "self".into(),
+        _ => "the object".into(),
+    }
+}
 
 /// Are `a` and `b` the same place (the same variable, or the same field of the same place)?
 pub(crate) fn same_place(a: &TExpr, b: &TExpr) -> bool {
@@ -3293,7 +3320,7 @@ pub(crate) fn walk_stmt(s: &TStmt, f: &mut dyn FnMut(&TStmt)) {
                 walk_stmts(e, f);
             }
         }
-        TS::While(_, b) | TS::Loop(b) | TS::Block(b) | TS::Sync(_, _, b) => walk_stmts(b, f),
+        TS::While(_, b) | TS::Loop(b) | TS::Block(b) | TS::Sync(_, b) => walk_stmts(b, f),
         TS::Labeled(i) => walk_stmt(i, f),
         TS::Try(b, cs) => {
             walk_stmts(b, f);
@@ -3305,22 +3332,18 @@ pub(crate) fn walk_stmt(s: &TStmt, f: &mut dyn FnMut(&TStmt)) {
     }
 }
 
-/// Calls `f(mutate, target, body, enclosing targets, line)` for every sync/mutate block, outer ones first.
-fn sync_walk<'a>(b: &'a TBlock, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut(bool, &[TExpr], &TBlock, &[&TExpr], u32)) {
+/// Calls `f(targets, body, line)` for every sync block, outer ones first.
+fn sync_walk<'a>(b: &'a TBlock, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut(&[(bool, TExpr)], &TBlock, u32)) {
     for s in &b.stmts {
         sync_walk_stmt(s, open, f);
     }
 }
 
-fn sync_walk_stmt<'a>(s: &'a TStmt, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut(bool, &[TExpr], &TBlock, &[&TExpr], u32)) {
+fn sync_walk_stmt<'a>(s: &'a TStmt, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut(&[(bool, TExpr)], &TBlock, u32)) {
     match &s.kind {
-        TS::Sync(m, ts, b) => {
-            f(*m, ts, b, open, s.line);
-            open.extend(ts.iter());
+        TS::Sync(ts, b) => {
+            f(ts, b, s.line);
             sync_walk(b, open, f);
-            for _ in ts {
-                open.pop();
-            }
         }
         TS::If(_, t, e) => {
             sync_walk(t, open, f);
@@ -3371,9 +3394,9 @@ pub(crate) fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
             visit_block(b, f);
         }
         TS::Loop(b) | TS::Block(b) => visit_block(b, f),
-        TS::Sync(_, ts, b) => {
+        TS::Sync(ts, b) => {
             // naming an object to lock it only reads through it; it does not let the handle escape
-            for t in ts {
+            for (_, t) in ts {
                 f(&TExpr { kind: EK::Deref(Box::new(t.clone())), ty: Ty::Unit, line: t.line, lit: false });
             }
             visit_block(b, f);

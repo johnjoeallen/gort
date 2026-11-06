@@ -550,13 +550,34 @@ impl Parser {
             let mutate = self.is_kw("mutate");
             self.bump();
             self.expect_sym("(")?;
-            let mut targets = vec![self.no_struct_off(|p| p.expr())?];
-            while self.eat_sym(",") {
-                targets.push(self.no_struct_off(|p| p.expr())?);
+            // `sync (reads a, b writes c)`: a clause word starts a list of one mode; a bare item is read for `sync`, written for `mutate`
+            let clause = |p: &Parser| -> Option<bool> {
+                match &p.cur().tok {
+                    Tok::Ident(n) if (n == "reads" || n == "writes") && matches!(p.peek_at(1).tok, Tok::Ident(_)) => Some(n == "writes"),
+                    _ => None,
+                }
+            };
+            let mut write = mutate;
+            let mut targets: Vec<(bool, Expr)> = Vec::new();
+            loop {
+                if !mutate {
+                    if let Some(w) = clause(self) {
+                        self.bump();
+                        write = w;
+                    }
+                }
+                targets.push((write, self.no_struct_off(|p| p.expr())?));
+                if self.eat_sym(",") {
+                    continue;
+                }
+                if !mutate && clause(self).is_some() {
+                    continue;
+                }
+                break;
             }
             self.expect_sym(")")?;
             let body = self.block()?;
-            return Ok(mk(StmtKind::Sync { mutate, targets, body }));
+            return Ok(mk(StmtKind::Sync { targets, body }));
         }
         for kw in ["defer"] {
             if self.is_kw(kw) {

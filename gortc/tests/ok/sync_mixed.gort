@@ -1,0 +1,23 @@
+package t
+exception Low { have: i64 }
+struct Rate { pct: i64 }
+struct Acct { n: i64 }
+fn applyRate(rate: Ref<Rate>, acct: Ref<Acct>, minimum: Ref<Acct>) throws Low {
+    sync (reads rate, minimum writes acct) {            // read two shared objects, change one
+        if (acct.n < minimum.n) throw Low(acct.n)
+        acct.n = acct.n + acct.n * rate.pct / 100
+    }
+}
+fn peek(a: Ref<Acct>, b: Ref<Acct>): i64 {
+    sync (a, reads b) { return a.n + b.n }              // a bare item reads; commas between clauses are optional
+}
+fn main() {
+    let rate = new Rate { pct: 10 }
+    let acct = new Acct { n: 200 }
+    let floor = new Acct { n: 50 }
+    try { applyRate(rate, acct, floor) } catch (e: Low) { println("low") }
+    sync (reads acct) { println(acct.n) }
+    mutate(floor) { floor.n = 500 }
+    try { applyRate(rate, acct, floor) } catch (e: Low) { println("low " + str(e.have)) }
+    println(peek(acct, floor))
+}

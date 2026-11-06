@@ -918,7 +918,7 @@ impl<'a> FnGen<'a> {
                 self.dead = true;
             }
             TS::Block(b) => self.block(b),
-            TS::Sync(mutate, targets, body) => {
+            TS::Sync(targets, body) => {
                 // hold a count on each object and the locks for the whole body; both are scope drops, so return, break, continue and throw release
                 // them. With several objects the locks are taken in one canonical order (by address) no matter what order they were written in.
                 let saved = self.dead;
@@ -927,7 +927,7 @@ impl<'a> FnGen<'a> {
                 self.ind += 1;
                 self.scopes.push(Vec::new());
                 let mut rs: Vec<String> = Vec::new();
-                for target in targets {
+                for (_, target) in targets {
                     let Ty::Ref(sid) = &target.ty else { unreachable!() };
                     let sn = self.prog.structs[*sid].name.clone();
                     self.push_frame();
@@ -946,14 +946,16 @@ impl<'a> FnGen<'a> {
                     rs.push(r);
                 }
                 if rs.len() == 1 {
-                    let (lock, unlock) = if *mutate { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
+                    let (lock, unlock) = if targets[0].0 { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
                     self.line(format!("{}({});", lock, rs[0]));
                     self.scopes.last_mut().unwrap().push(format!("{}({});", unlock, rs[0]));
                 } else {
                     let g = self.tmp();
+                    let m = self.tmp();
                     self.line(format!("void* {}[{}] = {{ {} }};", g, rs.len(), rs.iter().map(|r| format!("(void*){}", r)).collect::<Vec<_>>().join(", ")));
-                    self.line(format!("gort_lock_group({}, {}, {});", g, rs.len(), if *mutate { 1 } else { 0 }));
-                    self.scopes.last_mut().unwrap().push(format!("gort_unlock_group({}, {}, {});", g, rs.len(), if *mutate { 1 } else { 0 }));
+                    self.line(format!("unsigned char {}[{}] = {{ {} }};", m, rs.len(), targets.iter().map(|(w, _)| if *w { "1" } else { "0" }).collect::<Vec<_>>().join(", ")));
+                    self.line(format!("gort_lock_group({}, {}, {});", g, m, rs.len()));
+                    self.scopes.last_mut().unwrap().push(format!("gort_unlock_group({}, {}, {});", g, m, rs.len()));
                 }
                 self.block(body);
                 if !self.dead {

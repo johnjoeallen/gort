@@ -1,0 +1,10 @@
+// error: this block writes through `b`, which is listed under reads: it needs writes
+package t
+struct S { n: i64 }
+fn f(a: Ref<S>, b: Ref<S>) {
+    sync (reads b, writes a) {
+        a.n = b.n          // fine: a is written, b only read
+        b.n = 0            // not fine: b is listed under reads
+    }
+}
+fn main() { f(new S { n: 0 }, new S { n: 0 }) }

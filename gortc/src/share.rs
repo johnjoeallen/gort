@@ -15,7 +15,7 @@
 //!   incoming reference).
 
 use crate::hir::*;
-use crate::sema::{escapes, param_writes, same_place, visit_block, visit_expr, walk_stmts};
+use crate::sema::{escapes, param_writes, place_name, same_place, visit_block, visit_expr, walk_stmts};
 use std::collections::{HashMap, HashSet};
 
 pub struct Finding {
@@ -180,20 +180,7 @@ impl<'a> Cx<'a> {
     }
 
     fn name_of(&self, e: &TExpr) -> String {
-        match &e.kind {
-            EK::Var(v) | EK::ObjRef(v) | EK::ObjPlace(v) => self.f().vars[*v].name.clone(),
-            EK::Field(b, i) => {
-                let bn = self.name_of(b);
-                match sid_of(&b.ty) {
-                    Some(s) => format!("{}.{}", bn, self.prog.structs[s].fields[*i].name),
-                    None => bn,
-                }
-            }
-            EK::Deref(b) | EK::Unwrap(b) | EK::Index(b, _) | EK::Borrow(b) | EK::BoxVal(b) => self.name_of(b),
-            EK::Global(g) => self.prog.globals[*g].name.clone(),
-            EK::SelfPlace => "self".into(),
-            _ => "the object".into(),
-        }
+        place_name(self.prog, self.f(), e)
     }
 
     // ---- statements, in order ----
@@ -324,9 +311,9 @@ impl<'a> Cx<'a> {
                     self.block(&c.body);
                 }
             }
-            TS::Sync(m, ts, b) => {
-                self.warn_nested(*m, ts, s.line);
-                for t in ts {
+            TS::Sync(ts, b) => {
+                self.warn_nested(ts, s.line);
+                for (m, t) in ts {
                     self.expr(t, s.line, Need::Read);      // naming an object to lock it does not let it escape
                     self.open.push((*m, t.clone()));
                 }
@@ -341,14 +328,22 @@ impl<'a> Cx<'a> {
 
     /// A block nested inside another block on a different object: two threads that nest the same two objects in opposite orders deadlock.
     /// One block naming both locks them in a fixed order, no matter how they are written.
-    fn warn_nested(&mut self, mutate: bool, targets: &[TExpr], line: u32) {
-        for t in targets {
+    fn warn_nested(&mut self, targets: &[(bool, TExpr)], line: u32) {
+        for (mode, t) in targets {
             let Some((om, o)) = self.open.iter().find(|(_, o)| !same_place(o, t)) else { continue };
             let (inner, outer) = (self.name_of(t), self.name_of(o));
-            let kw = |m: bool| if m { "mutate" } else { "sync" };
+            let one = |m: bool, n: &str| if m { format!("mutate({})", n) } else { format!("sync({})", n) };
+            // the grouped form: one keyword when the modes agree, reads / writes clauses when they differ
+            let group = if *om == *mode {
+                format!("{}({}, {})", if *mode { "mutate" } else { "sync" }, outer, inner)
+            } else if *om {
+                format!("sync (reads {}, writes {})", inner, outer)
+            } else {
+                format!("sync (reads {}, writes {})", outer, inner)
+            };
             let msg = format!(
-                "`{}({})` is nested inside `{}({})`, two different objects: a thread that nests them the other way round deadlocks; lock both in one block, `{}({}, {})`, so the order is the same no matter how they are written",
-                kw(mutate), inner, kw(*om), outer, kw(mutate || *om), outer, inner
+                "`{}` is nested inside `{}`, two different objects: a thread that nests them the other way round deadlocks; lock both in one block, `{}`, so the order is the same no matter how they are written",
+                one(*mode, &inner), one(*om, &outer), group
             );
             self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: true });
             return;
@@ -448,8 +443,8 @@ impl<'a> Cx<'a> {
             return;
         }
         let lvl = self.needs[fid].get(slot).copied().unwrap_or(0);
-        if lvl == 0 {
-            return;
+        if lvl == 0 || self.is_fresh_value(a) {
+            return;                               // nothing needed, or a new object nobody else has
         }
         let what = format!("passing it to `{}`, which {} through it,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads mutable fields" });
         let need = if lvl == 2 { Need::Write } else { Need::Read };

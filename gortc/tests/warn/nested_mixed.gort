@@ -1,0 +1,8 @@
+// warning: `sync(b)` is nested inside `mutate(a)`, two different objects
+// warning: lock both in one block, `sync (reads b, writes a)`
+package t
+struct Acct { n: i64 }
+fn f(a: Ref<Acct>, b: Ref<Acct>): i64 {
+    mutate(a) { sync(b) { return a.n + b.n } }
+}
+fn main() { println(f(new Acct { n: 1 }, new Acct { n: 2 })) }

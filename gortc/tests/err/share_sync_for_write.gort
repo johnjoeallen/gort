@@ -1,4 +1,4 @@
-// error: this sync block writes through its object: it needs mutate, have sync
+// error: this block writes through `h.s`, which is listed under reads: it needs writes
 // error: writing `S.n` needs mutate(h.s), have sync(h.s)
 package t
 struct S { n: i64 }
