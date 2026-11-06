@@ -144,26 +144,32 @@ void gort_x_spawnWorker(size_t core, void *f, void *env) {
     w->core = core; w->body = (void (*)(void *))f; w->env = env;
     if (pthread_create(&w->th, NULL, worker_main, w) != 0) { perror("pthread_create"); exit(2); }
 }
-/* `spawn call` becomes spawnTask(fn() { call }): one thread per task, joined at exit through the same list */
+/* `spawn call` becomes spawnTask(fn() { call }): one detached thread per task; the exit hook waits for the running count to reach zero */
 static pthread_mutex_t task_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t *tasks; static size_t ntasks, captasks;
+static pthread_cond_t task_done = PTHREAD_COND_INITIALIZER;
+static size_t running;
 struct task { void (*body)(void *); void *env; };
 static void *task_main(void *p) {
     struct task t = *(struct task *)p; free(p);
     t.body(t.env);
+    pthread_mutex_lock(&task_lock);
+    if (--running == 0) pthread_cond_broadcast(&task_done);
+    pthread_mutex_unlock(&task_lock);
     return NULL;
 }
 void gort_x_spawnTask(void *f, void *env) {
     struct task *t = malloc(sizeof *t);
     t->body = (void (*)(void *))f; t->env = env;
-    pthread_t th;
-    if (pthread_create(&th, NULL, task_main, t) != 0) { perror("pthread_create"); exit(2); }
-    pthread_mutex_lock(&task_lock);
-    if (ntasks == captasks) { captasks = captasks ? captasks * 2 : 64; tasks = realloc(tasks, captasks * sizeof *tasks); }
-    tasks[ntasks++] = th;
-    pthread_mutex_unlock(&task_lock);
+    pthread_mutex_lock(&task_lock); running++; pthread_mutex_unlock(&task_lock);
+    pthread_t th; pthread_attr_t at;
+    pthread_attr_init(&at); pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    int rc = pthread_create(&th, &at, task_main, t);
+    pthread_attr_destroy(&at);
+    if (rc != 0) { perror("pthread_create"); exit(2); }
 }
 void gort_rt_exit_hook(void) {
     for (size_t i = 0; i < nworkers; i++) pthread_join(workers[i].th, NULL);
-    for (size_t i = 0; i < ntasks; i++) pthread_join(tasks[i], NULL);
+    pthread_mutex_lock(&task_lock);
+    while (running) pthread_cond_wait(&task_done, &task_lock);
+    pthread_mutex_unlock(&task_lock);
 }
