@@ -1,0 +1,20 @@
+package t
+struct Node { n: i64 }
+struct S { next: Ref<Node> }
+fn read(s: Ref<S>): i64 throws NullValue { return s.next.n }
+fn main() {
+    let s = new S {}
+    println(s.next == null)
+    try {
+        println(read(s))
+    } catch (e: NullValue) {
+        println(-1)
+    }
+    s.next = new Node { n: 5 }
+    println(s.next != null)
+    try {
+        println(read(s))
+    } catch (e: NullValue) {
+        println(-2)
+    }
+}

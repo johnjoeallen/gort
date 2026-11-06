@@ -2856,9 +2856,9 @@ impl<'a> Sema<'a> {
         }
         if matches!(op, BinOp::Eq | BinOp::Ne) && (a.ty == Ty::Null || b.ty == Ty::Null) {
             let other = if a.ty == Ty::Null { b } else { a };
-            if !matches!(other.ty, Ty::Opt(_)) {
+            if !matches!(other.ty, Ty::Opt(_) | Ty::Ref(_)) {
                 let n = self.prog.type_name(&other.ty);
-                self.error(e.line, e.col, format!("{} is never null; only an optional can be compared with `null`", n));
+                self.error(e.line, e.col, format!("{} is never null; only an optional or a `Ref` can be compared with `null`", n));
                 return error_expr(line);
             }
             let t = typed(EK::IsNull(Box::new(other)), Ty::Bool, line);

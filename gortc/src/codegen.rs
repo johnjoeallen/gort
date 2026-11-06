@@ -1021,7 +1021,23 @@ impl<'a> FnGen<'a> {
             }
             EK::Deref(r) => {
                 let rv = self.expr(r);
-                Val::plain(format!("(*{})", rv.c))
+                // a handle may be null: using it is a NullValue exception where the function can throw one, else a trap
+                if matches!(r.ty, Ty::Ref(_)) && !matches!(r.kind, EK::CName(_)) {
+                    let h = self.hold(Val { c: rv.c, own: None }, &r.ty);
+                    let handled = self.try_stack.iter().any(|t| t.catches_null)
+                        || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
+                    if handled {
+                        self.null_throw(format!("!{}", h.c));
+                        Val::plain(format!("(*{})", h.c))
+                    } else {
+                        {
+                        let cty = self.ct(&r.ty);
+                        Val::plain(format!("(*({})gort_nn({}))", cty, h.c))
+                    }
+                    }
+                } else {
+                    Val::plain(format!("(*{})", rv.c))
+                }
             }
             EK::ObjRef(id) => Val::plain(self.var_c[*id].clone()),
             EK::ObjPlace(id) => {
@@ -1380,7 +1396,7 @@ impl<'a> FnGen<'a> {
             }
             EK::IsNull(x) => {
                 let xv = self.expr(x);
-                if e.ty == Ty::Bool && matches!(&x.ty, Ty::Opt(i) if i.is_handle()) {
+                if e.ty == Ty::Bool && (matches!(&x.ty, Ty::Ref(_)) || matches!(&x.ty, Ty::Opt(i) if i.is_handle())) {
                     Val::plain(format!("(({}) == NULL)", xv.c))
                 } else {
                     Val::plain(format!("(!({}).has)", xv.c))
@@ -1395,22 +1411,7 @@ impl<'a> FnGen<'a> {
                 let handle = e.ty.is_handle();
                 if handled {
                     // a null value is a NullValue exception, taken by the nearest `try` that catches it or by the caller
-                    self.line(if handle { format!("if (!{}) {{", h.c) } else { format!("if (!{}.has) {{", h.c) });
-                    self.ind += 1;
-                    let sid = null_exc.unwrap();
-                    let sn = self.prog.structs[sid].name.clone();
-                    let t = self.tmp();
-                    self.line(format!("G_{0}* {1} = (G_{0}*)gort_new(sizeof(G_{0}));", sn, t));
-                    self.line(format!(
-                        "gort_exc.obj = {}; gort_exc.id = {}; gort_exc.name = \"{}\"; gort_exc.rel = (void (*)(void*))G_{}_release;",
-                        t,
-                        sid + 1,
-                        sn,
-                        sn
-                    ));
-                    self.throw_exit();
-                    self.ind -= 1;
-                    self.line("}");
+                    self.null_throw(if handle { format!("!{}", h.c) } else { format!("!{}.has", h.c) });
                     if handle {
                         let cty = self.ct(&e.ty);
                         Val::plain(format!("(({}){})", cty, h.c))
@@ -1496,6 +1497,26 @@ impl<'a> FnGen<'a> {
             _ => return e.clone(),
         };
         TExpr { kind, ..e.clone() }
+    }
+
+    /// Emits "if (cond) throw NullValue": the exception object is built and the nearest handler or the caller takes it.
+    fn null_throw(&mut self, cond: String) {
+        let sid = self.prog.null_exc.unwrap();
+        let sn = self.prog.structs[sid].name.clone();
+        self.line(format!("if ({}) {{", cond));
+        self.ind += 1;
+        let t = self.tmp();
+        self.line(format!("G_{0}* {1} = (G_{0}*)gort_new(sizeof(G_{0}));", sn, t));
+        self.line(format!(
+            "gort_exc.obj = {}; gort_exc.id = {}; gort_exc.name = \"{}\"; gort_exc.rel = (void (*)(void*))G_{}_release;",
+            t,
+            sid + 1,
+            sn,
+            sn
+        ));
+        self.throw_exit();
+        self.ind -= 1;
+        self.line("}");
     }
 
     /// Freeze a value into a temporary so a later operand with side effects cannot change it.
