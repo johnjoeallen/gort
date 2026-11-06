@@ -1,0 +1,4 @@
+// error: top-level `let`
+package main
+let limit: i64 = 1
+fn main() { limit = 2 }

@@ -1,0 +1,37 @@
+package t
+struct Node { v: i64 }
+struct Pair { name: String, n: i64 }
+enum Msg {
+    Text(String)
+    Bytes(Array<u8>)
+    Handle(Ref<Node>)
+    Both(Pair, i64?)
+    Maybe(String?)
+    Empty
+}
+fn describe(m: Msg): i64 {
+    switch (m) {
+        Text(s) -> { println(s); return s.length as i64 }
+        Bytes(b) -> { return b.length as i64 }
+        Handle(h) -> { return h.v }
+        Both(p, k) -> { println(p.name); return k == null ? -1 : p.n }
+        Maybe(s) -> { return s == null ? 0 : 1 }
+        Empty -> { return 0 }
+    }
+}
+fn main() {
+    let node = new Node { v: 42 }
+    let a = Msg.Text("hello")
+    let b = a
+    println(describe(a))
+    println(describe(b))
+    println(describe(Msg.Bytes(new u8[7])))
+    println(describe(Msg.Handle(node)))
+    println(describe(Msg.Both(Pair { name: "pp", n: 9 }, 3)))
+    println(describe(Msg.Both(Pair { name: "qq", n: 9 }, null)))
+    println(describe(Msg.Maybe("x")))
+    println(describe(Msg.Maybe(null)))
+    println(describe(Msg.Empty))
+    let list = [Msg.Text("in array"), Msg.Empty]
+    for (m in list) { println(describe(m)) }
+}

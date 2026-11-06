@@ -1,0 +1,29 @@
+package t
+struct User { name: String, age: i64 }
+fn main() {
+    let m = new Map<i64, User> {}
+    for (i in 0..100) { m.insert(i as i64, User { name: "u" + str(i), age: i as i64 * 2 }) }
+    println(m.count)
+    let u = m.get(42)
+    println(u == null ? "none" : u.name)
+    m.remove(42)
+    println(m.get(42) == null ? "gone" : "still")
+    println(m.count)
+    m.insert(7, User { name: "seven", age: 1 })
+    println(m.get(7).name)
+    println(m.has(8))
+    let s = new Map<String, i64> {}
+    s.insert("a", 1)
+    s.insert("b", 2)
+    s.insert("a", 3)
+    println(s.count)
+    println(s.get("a"))
+    println(s.has("zz"))
+    second()
+}
+struct Reg { rows: Ref<Map<i64, User>>, next: i64 = 1 }
+fn second() {
+    let r = new Reg {}
+    r.rows.insert(r.next, User { name: "r", age: 1 })
+    println(r.rows.count)
+}

@@ -1,0 +1,17 @@
+package t
+struct Pos { x: i64 }
+struct Node { pos: Pos }
+struct Holder { child: Ref<Node> }
+fn bump(p: Ref<Pos>) { p.x += 1 }
+// the callee replaces the field the lent place lives in, then reads the place: the old node must still be alive
+fn swap(h: Ref<Holder>, p: Ref<Pos>) {
+    h.child = new Node { pos: Pos { x: 50 } }
+    println(p.x)
+}
+fn main() {
+    let h = new Holder { child: new Node { pos: Pos { x: 1 } } }
+    bump(h.child.pos)
+    println(h.child.pos.x)
+    swap(h, h.child.pos)
+    println(h.child.pos.x)
+}

@@ -1,0 +1,5 @@
+// error: needs operands of the same type, found i64 and u8
+package t
+fn main() { let a: i64 = 1
+  let b: u8 = 2
+  println(a + b) }

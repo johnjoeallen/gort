@@ -1,0 +1,18 @@
+package t
+struct P { x: i64, name: String, z: i64? }
+enum F { Fixed(i64), Chunked, Named(String) }
+fn main() {
+    println(P { x: 1, name: "a", z: null } == P { x: 1, name: "a", z: null })
+    println(P { x: 1, name: "a", z: 2 } == P { x: 1, name: "a", z: null })
+    println(P { x: 1, name: "a", z: 2 } != P { x: 1, name: "b", z: 2 })
+    println(F.Fixed(0) == F.Fixed(0))
+    println(F.Fixed(0) == F.Fixed(1))
+    println(F.Chunked == F.Fixed(0))
+    println(F.Named("q") == F.Named("q"))
+    let a: u8 = 3
+    let b: u64 = 10
+    println(a + b)
+    let n: usize = 5
+    println(n < b)
+    println("code " + 404 + " " + true)
+}

@@ -1,0 +1,4 @@
+// error: `f` takes 2 argument(s), found 1
+package t
+fn f(a: i64, b: i64) { }
+fn main() { f(1) }

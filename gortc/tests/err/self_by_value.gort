@@ -1,0 +1,4 @@
+// error: contains itself by value
+package t
+struct Node { next: Node }
+fn main() { }

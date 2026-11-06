@@ -1,0 +1,49 @@
+1 temporaries die at the end of the statement
+1
+  ~a
+2 a field of a returned value
+b
+  ~b
+3 && skips a right side that allocates
+  yes(evaluated)
+  ~evaluated
+both
+4 mutation through a Ref parameter
+3
+5 an obj variable passed as a value is copied, not converted
+7
+6 stored into a field: converted, shared
+  ~d
+replaced d
+7 defaults that allocate
+default-tag12
+8 recursion with strings
+54321
+9 nested loops with early return
+  ~inner-0
+  ~inner-1
+  ~find-0
+  ~inner-0
+  ~inner-1
+  ~inner-2
+  ~find-1
+  ~inner-0
+  ~inner-1
+  ~inner-2
+  ~inner-3
+  ~find-2
+  ~inner-0
+  ~inner-1
+  ~inner-2
+  ~inner-3
+  ~inner-4
+  ~find-3
+304
+10 shadowing
+inner
+1
+end
+  ~default-tag
+  ~default-tag
+  ~e
+  ~c

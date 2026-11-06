@@ -1,0 +1,85 @@
+package main
+
+enum Kind { Simple, Bulk, Integer, Null }
+
+enum Shape {
+    Circle(r: f64)
+    Rect(w: i64, h: i64)
+    Empty
+
+    fn name(): String {
+        switch (self) {
+            Circle(_) -> { return "circle" }
+            Rect(_, _) -> { return "rect" }
+            Empty -> { return "empty" }
+        }
+    }
+
+    fn area(): i64 {
+        switch (self) {
+            Rect(w, h) -> { return w * h }
+            Circle(r) -> { return (r * r * 3.0) as i64 }
+            default -> { return 0 }
+        }
+    }
+
+    static fn square(n: i64): Shape {
+        return Shape.Rect(n, n)
+    }
+}
+
+fn isBytes(k: Kind): bool {
+    switch (k) {
+        Simple, Bulk -> { return true }
+        Integer, Null -> { return false }
+    }
+}
+
+fn classify(c: u8): i64 {
+    switch (c) {
+        '+' -> { return 1 }
+        ':', '$' -> { return 2 }
+        default -> { return 0 }
+    }
+}
+
+fn main() {
+    let shapes = Shape.Circle(2.0)
+    println(shapes.name() + " " + str(shapes.area()))
+    let r = Shape.square(4)
+    println(r.name() + " " + str(r.area()))
+    println(Shape.Empty.name())
+    println(str(isBytes(Kind.Bulk)) + " " + str(isBytes(Kind.Null)))
+    println(str(classify('+')) + str(classify('$')) + str(classify('x')))
+    var total = 0
+    var i = 0
+    while i < 3 {
+        switch (i) {
+            0 -> { total += 10 }
+            1 -> { total += 20 }
+            default -> { total += 1 }
+        }
+        i++
+    }
+    println(str(total))
+    checkInput()
+}
+
+struct Req { start: usize, end: usize }
+enum Input {
+    Head(Req)
+    Idle
+    Size(usize)
+    fn describe(): i64 {
+        switch (self) {
+            Head(r) -> { return (r.end - r.start) as i64 }
+            Idle -> { return -1 }
+            Size(n) -> { return n as i64 }
+        }
+    }
+}
+fn checkInput() {
+    println(str(Input.Head(Req { start: 3, end: 10 }).describe()))
+    println(str(Input.Idle.describe()))
+    println(str(Input.Size(5).describe()))
+}

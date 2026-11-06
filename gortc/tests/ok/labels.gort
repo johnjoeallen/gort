@@ -1,0 +1,17 @@
+package t
+fn main() {
+    var n = 0
+    outer: for (i in 0..5) {
+        for (j in 0..5) {
+            if (j == 3) continue outer
+            if (i == 3) break outer
+            n += 1
+        }
+    }
+    println(n)
+    var k = 0
+    scan: while (true) {
+        loop { k += 1; if (k > 4) break scan }
+    }
+    println(k)
+}

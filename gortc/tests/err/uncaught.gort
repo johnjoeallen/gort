@@ -1,0 +1,5 @@
+// error: may be thrown here
+package main
+exception Bad
+fn f() throws Bad { throw Bad() }
+fn main() { f() }

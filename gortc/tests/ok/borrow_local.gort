@@ -1,0 +1,12 @@
+package t
+struct Pos { x: i64 }
+struct Node { pos: Pos }
+fn bump(p: Ref<Pos>) { p.x += 1 }
+fn main() {
+    let n = new Node { pos: Pos { x: 1 } }
+    bump(n.pos)
+    println(n.pos.x)
+    var local = Pos { x: 5 }
+    bump(local)
+    println(local.x)
+}

@@ -1,0 +1,92 @@
+package ownership
+
+// Res has a cleanup(): the order of the cleanups shows exactly when each count reaches zero.
+struct Res {
+    name: String
+    fn cleanup() { println("cleanup " + name) }
+}
+
+struct Holder {
+    first: Ref<Res>
+    second: Ref<Res>
+}
+
+struct Point { x: i64, y: i64 }
+
+struct Line { a: Point, b: Point }          // inline values, no separate allocation
+
+fn make(name: String): Ref<Res> {
+    return new Res { name: name }
+}
+
+fn use(r: Ref<Res>) {
+    println("use " + r.name)
+}
+
+fn pass_through(r: Ref<Res>): Ref<Res> { return r }
+
+fn early(flag: bool) {
+    let a = new Res { name: "early-a" }     // never converted to a Ref: scope-owned
+    if flag {
+        println("returning early")
+        return
+    }
+    let b = new Res { name: "early-b" }
+    println("end of early")
+}
+
+fn loop_exits() {
+    var i = 0
+    while i < 3 {
+        let r = new Res { name: "loop-" + str(i) }
+        i++
+        if i == 1 { continue }
+        if i == 3 { break }
+        println("body " + r.name)
+    }
+    println("after loop")
+}
+
+fn main() {
+    println("-- scope-owned: freed at scope exit, reverse order")
+    {
+        let a = new Res { name: "a" }
+        let b = new Res { name: "b" }
+        println("in scope " + a.name + b.name)
+    }
+    println("-- counted: used as a Ref, freed with the last holder")
+    {
+        let c = new Res { name: "c" }
+        use(c)                                  // converted to Ref<Res>: counted
+        let d = c                               // another holder
+        println("holders ok")
+    }
+    println("-- a Ref kept in a struct outlives the local")
+    var h = Holder { first: make("h1"), second: make("h2") }
+    {
+        let tmp = make("h3")
+        h.second = tmp                          // replaces h2: it is released here
+        println("replaced")
+    }
+    println("-- returned Ref")
+    let k = pass_through(make("k"))
+    use(k)
+    println("-- early returns and loop exits release locals")
+    early(true)
+    early(false)
+    loop_exits()
+    println("-- value semantics")
+    var p = Point { x: 1, y: 2 }
+    let q = p
+    p.x = 99
+    println(q.x)
+    var ln = Line { a: Point { x: 1, y: 2 }, b: Point { x: 3, y: 4 } }
+    let ln2 = ln
+    ln.b.y = 40
+    println(ln2.b.y + ln.b.y)
+    println("-- shared by two holders")
+    let shared = make("shared")
+    var h2 = Holder { first: shared, second: shared }
+    h2.first = make("other")                    // shared is still held by second and by the local
+    println("done")
+}

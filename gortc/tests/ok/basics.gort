@@ -1,0 +1,42 @@
+package basics
+
+const LIMIT: i64 = 5
+
+struct Point {
+    x: i64
+    y: i64 = 0
+
+    fn sum(): i64 { return x + y }
+    fn move(dx: i64, dy: i64) {
+        self.x += dx
+        self.y += dy
+    }
+}
+
+fn fib(n: i64): i64 {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn main() {
+    println("hello gort")
+    var p = Point { x: 1, y: 2 }
+    p.move(10, 20)
+    println(p.sum())
+    var i = 0
+    var total = 0
+    while i < LIMIT {
+        total += i * i
+        i++
+    }
+    println(total)
+    println(fib(15))
+    let s = "n=" + str(total)
+    println(s)
+    println(s.length())
+    let a = new u8[4]
+    a[2] = 7
+    println(a[2] + a[1])
+    println(a.length)
+    if s == "n=30" && !(total > 100) { println("ok") } else { println("bad") }
+}

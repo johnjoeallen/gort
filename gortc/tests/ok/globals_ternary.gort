@@ -1,0 +1,29 @@
+package main
+
+struct Table { name: String, n: i64 }
+exception Boom
+
+let limit: i64 = 10
+let table: Ref<Table> = make("users")
+let label = "global " + "text"
+let bytes = new u8[3]
+
+struct Table2 { x: i64 }
+
+fn make(n: String): Ref<Table> { return new Table { name: n, n: limit } }
+
+fn pick(c: bool, a: String, b: String): String { return c ? a : b }
+
+fn maybe(c: bool): String? { return c ? "yes" : null }
+
+fn firstOr(a: Array<u8>, d: u8): u8 { return a.length > 0 ? a[0] : d }
+
+fn main() {
+    println(table.name + " " + str(table.n) + " " + label + " " + str(limit * 2))
+    println(pick(true, "a", "b") + pick(false, "a", "b"))
+    println(str(maybe(true) == null) + str(maybe(false) == null))
+    println(str(firstOr(bytes, 9)) + str(firstOr(bytes[..0], 9)))
+    let n = limit > 5 ? limit - 5 : 0
+    println(str(n))
+    println(str(n > 100 ? 1 : n > 3 ? 2 : 3))
+}

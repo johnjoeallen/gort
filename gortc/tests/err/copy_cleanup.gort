@@ -1,0 +1,6 @@
+// error: cannot copy a value of type Res
+package t
+struct Res { id: i64
+  fn cleanup() { println("bye") } }
+fn main() { let a = Res { id: 1 }
+  let b = a }

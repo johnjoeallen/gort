@@ -1,0 +1,13 @@
+package t
+fn span(r: Range): usize { return r.length() }
+fn main() {
+    let a = 2..7
+    let b = Range(3, 4)
+    println(span(a))
+    println(b.lo)
+    println(a.contains(6))
+    println(b.isEmpty())
+    let s = new u8[10]
+    let v = s[1..4]
+    println(v.length)
+}

@@ -1,0 +1,5 @@
+// error: does not match its declaration
+package t
+struct S { fn go(a: i64) }
+fn S::go(a: bool) { }
+fn main() { }

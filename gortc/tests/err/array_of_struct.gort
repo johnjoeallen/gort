@@ -1,0 +1,4 @@
+// error: an array element must be
+package t
+struct P { x: i64 }
+fn main() { let a = new Ref<P>[3] }

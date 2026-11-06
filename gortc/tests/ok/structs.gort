@@ -1,0 +1,73 @@
+package structs
+
+struct Counter {
+    count: i64 = 0
+    step: i64 = 1
+    fn bump()                          // declared here, implemented below (the C++ layout)
+    fn value(): i64 { return count }   // implemented here (the Java layout)
+    static fn starting(n: i64): Counter { return Counter { count: n } }
+}
+
+fn Counter::bump() { self.count += step }
+
+// A value that holds handles: copying it takes counts, dropping the copy releases them.
+struct Labelled {
+    label: String
+    data: Array<i64>
+    owner: Ref<Counter>
+}
+
+fn describe(l: Labelled): String {          // a parameter is a copy the callee owns
+    return l.label + ":" + str(l.data.length) + ":" + str(l.owner.value())
+}
+
+fn build(name: String, n: usize, c: Ref<Counter>): Labelled {
+    return Labelled { label: name, data: new i64[n], owner: c }
+}
+
+struct Stack {
+    items: Array<i64>
+    top: usize = 0
+    fn push(v: i64) { items[top] = v; top++ }
+    fn pop(): i64 { top--; return items[top] }
+    fn isEmpty(): bool { return top == 0 }
+}
+
+fn main() {
+    let c = new Counter { }
+    c.bump()
+    c.bump()
+    println(c.value())
+    let k = Counter.starting(40)
+    var m = k
+    m.bump()
+    println(k.value() + m.value())
+
+    let l = build("lab", 3, c)
+    let l2 = l                               // copy: label, data and owner each gain a count
+    l2.data[1] = 5
+    println(describe(l))
+    println(describe(l2))
+    println(l.data[1])                       // the array is shared by the copies (a handle)
+
+    var s = Stack { items: new i64[8] }
+    var i: i64 = 0
+    while i < 5 { s.push(i * 10); i++ }
+    var sum = 0
+    while !s.isEmpty() { sum += s.pop() }
+    println(sum)
+
+    var text = ""
+    var j = 0
+    while j < 4 { text = text + str(j) + ","; j++ }
+    println(text)
+    let z = (7 - 2) * 3 / 2 % 4
+    println(z)
+    let big: u64 = 18446744073709551615
+    println(big)
+    let neg = -5
+    println(neg * 3)
+    println(2.5 * 4.0)
+    println(10 as f64 / 4 as f64)
+    println(300 as u8)
+}

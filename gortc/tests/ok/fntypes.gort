@@ -1,0 +1,27 @@
+package t
+exception Bad { code: i64 }
+fn dbl(x: i64): i64 { return x * 2 }
+fn pick(x: i64): i64 throws Bad {
+    if (x < 0) throw Bad(x)
+    return x + 100
+}
+enum H {
+    Plain(fn(i64): i64)
+    Risky(fn[nopark](i64): i64 throws Exception)
+}
+fn apply(f: fn(i64): i64, v: i64): i64 { return f(v) }
+fn run(h: H, v: i64): i64 {
+    switch (h) {
+        Plain(f) -> { return f(v) }
+        Risky(g) -> {
+            try { return g(v) } catch (e: Exception) { return -1 }
+        }
+    }
+}
+fn main() {
+    println(apply(dbl, 21))
+    println(run(H.Plain(dbl), 4))
+    println(run(H.Risky(dbl), 5))
+    println(run(H.Risky(pick), 5))
+    println(run(H.Risky(pick), -5))
+}

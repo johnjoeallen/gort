@@ -1,0 +1,23 @@
+package t
+struct Addr { city: String, zip: u16? }
+struct User { id: i64, name: String, admin: bool, score: f64, addr: Addr, nick: String? }
+fn show(text: String) {
+    let b = text.toBytes()
+    try {
+        let u = json.parse<User>(b, JsonLimits { maxDepth: 8, maxStringBytes: 64 })
+        println(u.name)
+        println(u.id)
+        println(u.addr.city)
+        println(u.addr.zip == null ? "no zip" : "zip")
+        println(u.nick == null ? "no nick" : "nick")
+    } catch (e: JsonError) {
+        println(e.message)
+    }
+}
+fn main() {
+    show("{\"id\": 7, \"name\": \"Al\\u00e9\", \"admin\": true, \"score\": 1.5e2, \"extra\": [1,{\"a\":null}], \"addr\": {\"city\": \"Gort\", \"zip\": 12}, \"nick\": null}")
+    show("{\"id\": 7, \"name\": \"Bo\", \"admin\": false, \"score\": 2, \"addr\": {\"city\": \"X\"}}")
+    show("{\"id\": 7, \"name\": \"Bo\", \"admin\": false, \"score\": 2}")
+    show("{\"id\": 99999999999999999999, \"name\": \"Bo\"}")
+    show("{\"id\": 1, \"name\": \"Bo\", \"admin\": 1}")
+}

@@ -1,0 +1,6 @@
+// error: never null
+package main
+fn main() {
+    let x: i64 = 3
+    if (x == null) println("no")
+}

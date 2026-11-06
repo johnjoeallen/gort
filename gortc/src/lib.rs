@@ -1,0 +1,58 @@
+//! gortc: slice 0 of the Gort compiler. A subset front end (lexer, parser, sema) and a C emitter.
+
+pub mod ast;
+pub mod codegen;
+pub mod diag;
+pub mod hir;
+pub mod lexer;
+pub mod parser;
+pub mod sema;
+
+use diag::Diag;
+
+pub struct Output {
+    pub c: String,
+    pub notes: Vec<String>,
+    /// the generic instances of the program, one per line (`--instances`)
+    pub instances: Vec<String>,
+}
+
+/// Compiles the files of one package (name, source) to a single C translation unit.
+pub fn compile(files: &[(String, String)]) -> Result<Output, Vec<Diag>> {
+    compile_with(files, true)
+}
+
+/// `require_main: false` checks a library: no `main` is needed, and none is emitted.
+pub fn compile_with(files: &[(String, String)], require_main: bool) -> Result<Output, Vec<Diag>> {
+    let mut parsed = Vec::new();
+    let mut errs = Vec::new();
+    // the prelude: types every program has
+    match parser::parse_file("<prelude>", PRELUDE) {
+        Ok(f) => parsed.push(f),
+        Err(d) => return Err(vec![d]),
+    }
+    for (name, src) in files {
+        match parser::parse_file(name, src) {
+            Ok(f) => parsed.push(f),
+            Err(d) => errs.push(d),
+        }
+    }
+    if !errs.is_empty() {
+        return Err(errs);
+    }
+    let prog = sema::analyze(&parsed)?;
+    if require_main && prog.main.is_none() {
+        return Err(vec![Diag { file: files.first().map(|f| f.0.clone()).unwrap_or_default(), line: 1, col: 1, msg: "no `main` function".into() }]);
+    }
+    let c = codegen::generate(&prog);
+    let instances = prog
+        .instances
+        .iter()
+        .map(|i| format!("{}{}  =>  G_{}", i.shown, if i.is_extern { " [extern]" } else { "" }, prog.structs[i.sid].name))
+        .collect();
+    Ok(Output { c, notes: prog.notes, instances })
+}
+
+/// Built-in types written in Gort (src/prelude.gort): `Range`, `Map`, `JsonLimits`, `JsonError`.
+const PRELUDE: &str = include_str!("prelude.gort");
+

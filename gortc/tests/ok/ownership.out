@@ -1,0 +1,34 @@
+-- scope-owned: freed at scope exit, reverse order
+in scope ab
+cleanup b
+cleanup a
+-- counted: used as a Ref, freed with the last holder
+use c
+holders ok
+cleanup c
+-- a Ref kept in a struct outlives the local
+cleanup h2
+replaced
+-- returned Ref
+use k
+-- early returns and loop exits release locals
+returning early
+cleanup early-a
+end of early
+cleanup early-b
+cleanup early-a
+cleanup loop-0
+body loop-1
+cleanup loop-1
+cleanup loop-2
+after loop
+-- value semantics
+1
+44
+-- shared by two holders
+done
+cleanup other
+cleanup shared
+cleanup k
+cleanup h3
+cleanup h1

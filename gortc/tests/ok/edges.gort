@@ -1,0 +1,77 @@
+package edges
+
+struct Tag {
+    name: String
+    fn cleanup() { println("  ~" + name) }
+}
+struct Box { tag: Ref<Tag>, n: i64 }
+struct Pt { x: i64, y: i64 }
+struct Cfg {
+    inner: Ref<Tag> = new Tag { name: "default-tag" }      // a default that allocates, run per literal
+    level: i64 = 3
+}
+
+fn tag(s: String): Ref<Tag> { return new Tag { name: s } }
+fn name_of(t: Ref<Tag>): String { return t.name }
+fn mk(s: String, n: i64): Box { return Box { tag: tag(s), n: n } }
+fn bump(b: Ref<Box>) { b.n += 1 }
+fn sum(p: Pt): i64 { return p.x + p.y }
+fn yes(s: String): bool { println("  yes(" + s + ")"); return true }
+fn rec(n: i64): String {
+    if n == 0 { return "" }
+    return str(n) + rec(n - 1)
+}
+fn find(limit: i64): i64 {
+    var i = 0
+    while i < 10 {
+        let t = tag("find-" + str(i))
+        var j = 0
+        while j < 10 {
+            let u = tag("inner-" + str(j))
+            if i * j == limit { return i * 100 + j }
+            if j > i { break }
+            j++
+        }
+        i++
+    }
+    return -1
+}
+
+fn main() {
+    println("1 temporaries die at the end of the statement")
+    println(name_of(tag("a")).length())
+    println("2 a field of a returned value")
+    println(mk("b", 1).tag.name)
+    println("3 && skips a right side that allocates")
+    if false && yes(name_of(tag("never"))) { println("no") }
+    if true && yes(name_of(tag("evaluated"))) { println("both") }
+    println("4 mutation through a Ref parameter")
+    let bx = new Box { tag: tag("c"), n: 1 }
+    bump(bx)
+    bump(bx)
+    println(bx.n)
+    println("5 an obj variable passed as a value is copied, not converted")
+    let pt = new Pt { x: 3, y: 4 }
+    println(sum(pt))
+    println("6 stored into a field: converted, shared")
+    var keep = Box { tag: tag("d"), n: 0 }
+    let t2 = new Tag { name: "e" }
+    keep.tag = t2
+    println("replaced d")
+    println("7 defaults that allocate")
+    let c1 = Cfg { }
+    let c2 = Cfg { level: 9 }
+    println(c1.inner.name + str(c1.level + c2.level))
+    println("8 recursion with strings")
+    println(rec(5))
+    println("9 nested loops with early return")
+    println(find(12))
+    println("10 shadowing")
+    let v = 1
+    {
+        let v = "inner"
+        println(v)
+    }
+    println(v)
+    println("end")
+}

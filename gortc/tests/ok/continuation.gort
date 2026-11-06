@@ -1,0 +1,14 @@
+package main
+
+fn main() {
+    let a = "x" + "y"
+           + "z"
+    let n = 1
+          + 2
+          * 3
+    println(a + str(n))
+    var m = 5
+    m = m
+    -1
+    println(str(m))
+}

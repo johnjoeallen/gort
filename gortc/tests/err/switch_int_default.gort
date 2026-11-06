@@ -1,0 +1,9 @@
+// error: needs a `default` arm
+package main
+fn f(k: i64): i64 {
+    switch (k) {
+        1 -> { return 1 }
+    }
+    return 0
+}
+fn main() {}

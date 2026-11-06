@@ -14,7 +14,7 @@ Gort is a design for a small, statically typed language for network servers and 
 *Gort is also a small town in County Galway, in the west of Ireland. The name comes from the Irish word for a field.*
 
 > [!NOTE]
-> **Status.** Exploratory. There is no compiler yet. The `.gort` files in the repository are Gort as it would be written, and the C beside them is what a compiler would emit, written by hand and kept honest by tests and benchmarks.
+> **Status.** Exploratory. The compiler has only started: `gortc/` compiles a small subset (the memory model, no parking yet). The `.gort` files in the repository are Gort as it would be written, and the C beside them is what a compiler would emit, written by hand and kept honest by tests and benchmarks.
 
 ## What this is
 

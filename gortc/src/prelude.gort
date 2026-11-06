@@ -1,0 +1,83 @@
+package gort
+// The prelude: types every program has, written in Gort and compiled with it (gortc/src/lib.rs includes this file).
+// Map uses the built-in hash(x) (gortc/src/gort_rt0.h: gort_hash_u, gort_hash_str).
+struct Range {
+    lo: usize
+    hi: usize
+    fn length(): usize { return hi - lo }
+    fn isEmpty(): bool { return hi <= lo }
+    fn contains(i: usize): bool { return i >= lo && i < hi }
+}
+struct JsonLimits {
+    maxDepth: i64 = 64
+    maxStringBytes: i64 = 1048576
+}
+exception JsonError { message: String }
+struct Map<K, V> {
+    keys: Array<K?> = K?[](8)
+    vals: Array<V?> = V?[](8)
+    dead: Array<bool> = new bool[8]
+    count: usize = 0
+    filled: usize = 0
+    fn slot(k: K): usize {
+        let n = keys.length
+        var i = (hash(k) as usize) % n
+        var firstDead = n
+        var left = n
+        while (left > 0) {
+            if (keys[i] == null) return firstDead < n ? firstDead : i
+            if (dead[i]) {
+                if (firstDead == n) firstDead = i
+            } else if (keys[i] == k) return i
+            i = (i + 1) % n
+            left -= 1
+        }
+        return firstDead
+    }
+    fn has(k: K): bool {
+        let i = slot(k)
+        return keys[i] != null && !dead[i]
+    }
+    fn get(k: K): V? {
+        let i = slot(k)
+        if (keys[i] != null && !dead[i]) return vals[i]
+        return null
+    }
+    fn put(k: K, v: V) {
+        let i = slot(k)
+        if (keys[i] != null && !dead[i]) {
+            vals[i] = v
+            return
+        }
+        if (keys[i] == null) filled += 1
+        keys[i] = k
+        vals[i] = v
+        dead[i] = false
+        count += 1
+    }
+    fn insert(k: K, v: V) {
+        if ((filled + 1) * 4 > keys.length * 3) rehash(keys.length * 2)
+        put(k, v)
+    }
+    fn remove(k: K) {
+        let i = slot(k)
+        if (keys[i] != null && !dead[i]) {
+            dead[i] = true
+            vals[i] = null
+            count -= 1
+        }
+    }
+    fn rehash(m: usize) {
+        let oldK = keys
+        let oldV = vals
+        let oldD = dead
+        self.keys = K?[](m)
+        self.vals = V?[](m)
+        self.dead = new bool[m]
+        self.count = 0
+        self.filled = 0
+        for (j in 0..oldK.length) {
+            if (oldK[j] != null && !oldD[j]) put(oldK[j], oldV[j])
+        }
+    }
+}

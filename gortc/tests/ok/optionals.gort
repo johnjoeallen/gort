@@ -1,0 +1,76 @@
+package main
+
+struct Node { val: i64, next: Ref<Node>? = null, label: String? = null }
+struct Pt { x: i64, y: i64 }
+struct Holder { p: Pt?, n: u64? = null, s: String? = null }
+
+fn find(n: i64): i64? {
+    if (n > 3) return null
+    return n * 10
+}
+
+fn name(n: i64): String? {
+    if (n == 0) return null
+    return "n" + str(n)
+}
+
+fn pt(n: i64): Pt? {
+    if (n < 0) return null
+    return Pt { x: n, y: n + 1 }
+}
+
+fn len(s: String?): i64 {
+    if (s == null) return -1
+    return s.length as i64
+}
+
+fn main() {
+    println(str(find(2) == null) + " " + str(find(5) == null))
+    var v: i64? = find(3)
+    if (v != null) println(str(v + 1))
+    v = null
+    println(str(v == null))
+    println(str(len(name(0))) + " " + str(len(name(12))))
+    let a = new Node { val: 1 }
+    Ref<Node> tail = new Node { val: 2, label: "tail" }
+    Ref<Node> head = new Node { val: 1, next: tail, label: "head" }
+    println(str(head.next.val))
+    println(head.next.label)
+    println(str(tail.next == null))
+    let h = Holder { p: pt(4), s: "x" + "y" }
+    println(str(h.p.x) + str(h.p.y) + h.s)
+    let h2 = h
+    println(str(h2.p == null) + str(pt(-1) == null))
+    var count: u64? = 5
+    count = 7
+    println(str(count))
+    println(str(1))
+    checkNull()
+}
+
+// a null value is a NullValue exception where the code handles it
+fn caught(n: Ref<Node>): i64 {
+    try {
+        return n.next.val
+    } catch (e: NullValue) {
+        return -7
+    }
+}
+fn declared(n: Ref<Node>, c: u64?): u64 throws NullValue {
+    return c + n.next.val as u64
+}
+fn checkNull() {
+    let leaf = new Node { val: 1 }
+    Ref<Node> top = new Node { val: 5, next: leaf }
+    println(str(caught(leaf)) + " " + str(caught(top)))
+    try {
+        println(str(declared(top, null)))
+    } catch (e: Exception) {
+        println("declared: caught")
+    }
+    try {
+        println(str(declared(top, 4)))
+    } catch (e: NullValue) {
+        println("unexpected")
+    }
+}

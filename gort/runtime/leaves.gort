@@ -73,11 +73,7 @@ extern struct Listener {
 
 // ---------- memory and files ----------
 
-extern impl Array<u8> {                                       // the runtime's growable array: starts in the smallest size class, owns nothing until used
-    fn capacity(): usize                                 // the current class size
-    fn grow()                                            // moves the contents to the next size class and frees the old block
-    fn moveWithin(range, to)                             // memmove inside the array
-}
+// Array<u8> is a language element: capacity(), grow() and moveWithin(range, to) are its built-in functions, not declared here.
 
 struct OutBuf { data: Array<u8[OUTSZ]> }                        // pool-allocated; never a local, so never inside a frame. (Moved here from http/types.gort:
                                                          // it is the runtime's, and the HTTP and Redis libraries both use it.)

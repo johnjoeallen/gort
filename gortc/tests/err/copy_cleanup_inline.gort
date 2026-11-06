@@ -1,0 +1,8 @@
+// error: cannot copy a value of type Outer
+package t
+struct Res { id: i64
+  fn cleanup() { println("bye") } }
+struct Outer { r: Res }
+fn take(o: Outer) { }
+fn main() { let o = Outer { r: Res { id: 1 } }
+  take(o) }

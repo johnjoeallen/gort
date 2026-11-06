@@ -37,7 +37,7 @@ struct Reader {
             let req = findCompleteRequest()
             if (req != null) return req
             if (!makeRoom()) throw TooLarge()   // compacts or grows; false at the limit
-            let n = conn.recv(buf[end..buf.capacity])   // EAGAIN: park until readable
+            let n = conn.recv(buf[end..buf.capacity()])   // EAGAIN: park until readable
             if (n == 0) return null
             self.end += n
         }
@@ -51,7 +51,7 @@ struct Reader {
         if (buf == null && !conn.readableHint()) return Input.Idle                                 // idle: allocate nothing
         if (buf == null) { self.buf = Array<u8>(); self.start = 0; self.end = 0 }
         if (!makeRoom()) throw TooLarge()
-        let n = conn.tryRecv(buf[end..buf.capacity])   // never parks
+        let n = conn.tryRecv(buf[end..buf.capacity()])   // never parks
         if (n == null) return Input.Idle                     // nothing to read right now
         if (n == 0) return Input.Closed                      // EOF is a state here, not an error: in-flight work still finishes
         self.end += n
@@ -81,14 +81,14 @@ struct Reader {
     // is already at maxHead. Three cases: room at the tail; compact (the unconsumed bytes slide to the front); grow to the next
     // size class (the runtime copies the bytes). Offsets stay valid in all three.
     fn makeRoom(): bool {
-        if (end < buf.capacity) return true
+        if (end < buf.capacity()) return true
         if (start > 0) {
             buf.moveWithin(start..end, 0)
             self.end -= start
             self.start = 0
             return true
         }
-        if (buf.capacity >= maxHead) return false
+        if (buf.capacity() >= maxHead) return false
         buf.grow()
         return true
     }
@@ -127,10 +127,10 @@ struct Reader {
         if (start == end && headExpects100Continue(head)) conn.trySend("HTTP/1.1 100 Continue\r\n\r\n")   // best effort; the client is waiting
         var decoder = BodyDecoder.of(framing, limit)
         var slice = yieldBytes
-        while (buf.capacity < 8192) buf.grow()   // stream through a bigger buffer
+        while (buf.capacity() < 8192) buf.grow()   // stream through a bigger buffer
         while (!decoder.done) {
             if (start == end) {
-                let n = conn.recv(buf[0..buf.capacity])   // parks while the client sends
+                let n = conn.recv(buf[0..buf.capacity()])   // parks while the client sends
                 if (n == 0) throw IoError()                                    // the client closed in the middle of the body
                 self.start = 0
                 self.end = n

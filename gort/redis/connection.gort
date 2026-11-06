@@ -32,7 +32,7 @@ struct Reader {
                 if (!conn.readableHint()) return Input.Idle        // idle: allocate nothing
                 self.buf = Array<u8>(); self.start = 0; self.end = 0
             }
-            let n = conn.tryRecv(buf[end..buf.capacity])           // never parks
+            let n = conn.tryRecv(buf[end..buf.capacity()])           // never parks
             if (n == null) {
                 if (end == start) self.buf = null              // a spurious wake read nothing: do not sit on the buffer while idle
                 return Input.Idle
@@ -61,10 +61,10 @@ struct Reader {
     // Room for `needed` bytes counted from `start`: compact, then grow class by class. false: that is over maxFrame.
     fn makeRoom(needed: usize): bool {
         if (needed > lim.maxFrame) return false
-        if (start > 0 && (end == buf.capacity || needed > buf.capacity)) {
+        if (start > 0 && (end == buf.capacity() || needed > buf.capacity())) {
             buf.moveWithin(start..end, 0); self.end -= start; self.start = 0
         }
-        while (buf.capacity < needed) buf.grow()
+        while (buf.capacity() < needed) buf.grow()
         return true
     }
 }

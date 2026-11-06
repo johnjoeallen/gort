@@ -1,0 +1,13 @@
+package t
+struct Node { v: i64 }
+struct Holder { child: Ref<Node> }
+// reads n after replacing the field it came from: the caller must have kept it alive
+fn replaceThenRead(h: Ref<Holder>, n: Ref<Node>): i64 {
+    h.child = new Node { v: 99 }
+    return n.v
+}
+fn main() {
+    let h = new Holder { child: new Node { v: 7 } }
+    println(replaceThenRead(h, h.child))
+    println(h.child.v)
+}

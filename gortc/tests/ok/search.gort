@@ -1,0 +1,18 @@
+package t
+fn main() {
+    let text = "GET / HTTP/1.1\r\nHost: x\r\n\r\n".toBytes()
+    let i = text.find("\r\n\r\n")
+    println(i == null ? -1 : i as i64)
+    println(text.contains("Host"))
+    println(text.contains("nope"))
+    println(text[0..3].startsWith("GET"))
+    println("abcdef".contains("cd"))
+    println("abcdef".find("zz") == null)
+    let dst = new u8[3]
+    dst.copyFrom(text[4..7])
+    println(dst[0])
+    let a: usize = 9
+    println(min(a, 4))
+    println(max(a, 4))
+    println(min(3, 8))
+}

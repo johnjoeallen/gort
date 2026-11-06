@@ -1,0 +1,31 @@
+package main
+
+struct Node { v: i64 }
+struct Slot<T> {
+    items: Array<T?>
+    static fn make(n: usize): Slot<T> { return Slot<T> { items: T?[](n) } }
+    fn put(i: usize, v: T) { self.items[i] = v }
+    fn has(i: usize): bool { return items[i] != null }
+    fn take(i: usize): T {
+        let v = items[i]
+        self.items[i] = null
+        return v
+    }
+}
+
+fn main() {
+    let names = String?[](3)
+    names[1] = "one" + "!"
+    println(str(names[0] == null) + str(names[1] == null))
+    println(names[1])
+    names[1] = "again"
+    let nodes = Ref<Node>?[](2)
+    nodes[0] = new Node { v: 5 }
+    nodes[1] = nodes[0]                   // both slots count the same object
+    println(str(nodes[1].v))
+    let s = Slot<String>.make(4)
+    s.put(2, "two")
+    println(str(s.has(1)) + str(s.has(2)) + s.take(2) + str(s.has(2)))
+    let view = nodes[0..1]
+    println(str(view[0].v))
+}

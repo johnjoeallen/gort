@@ -1,0 +1,36 @@
+package main
+
+fn sum(a: Array<u8>): i64 {
+    var t: i64 = 0
+    var i: usize = 0
+    while i < a.length {
+        t += a[i] as i64
+        i++
+    }
+    return t
+}
+
+fn fill(a: Array<u8>, v: u8) {
+    var i: usize = 0
+    while i < a.length {
+        a[i] = v
+        i++
+    }
+}
+
+fn tail(a: Array<u8>, n: usize): Array<u8> {
+    return a[n..]
+}
+
+fn main() {
+    let buf = new u8[8]
+    fill(buf[2..5], 7)                        // writes through the view
+    println(str(sum(buf)))                    // 21
+    let mid = buf[1..6]
+    println(str(mid.length) + " " + str(mid[1]))   // 5 7
+    let inner = mid[3..]                      // a view of a view
+    println(str(inner.length) + " " + str(inner[0]) + " " + str(inner[1]))  // 2 7 0
+    let t = tail(buf, 6)
+    fill(buf, 1)                              // the views see it, and keep the run alive
+    println(str(sum(t)) + " " + str(sum(buf[..3])) + " " + str(sum(buf[..])))   // 2 3 8
+}

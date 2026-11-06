@@ -1,6 +1,6 @@
 # Architecture: compilation, suspension and modules
 
-This section extends [`gort-design.md`](https://github.com/johnjoeallen/gort/blob/main/gort-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. There is still no compiler: the C in `c/` is hand-written to look like compiler output.
+This section extends [`gort-design.md`](https://github.com/johnjoeallen/gort/blob/main/gort-design.md) (sections 5, 6 and 14). It is a design update, not an implementation plan for the compiler to start tomorrow. The compiler has only begun: slice 0 (`gortc/`, see [the compiler](compiler.md)) covers a subset and the memory model, with no parking yet, so the C in `c/` is still hand-written to look like compiler output.
 
 | Page | Covers |
 |---|---|
@@ -10,6 +10,7 @@ This section extends [`gort-design.md`](https://github.com/johnjoeallen/gort/blo
 | [Dynamic dispatch and external code](dispatch-and-ffi.md) | Interfaces, function values, generics, C interop, blocking foreign calls, callbacks, dynamic loading |
 | [Evaluation plan](benchmarks.md) | How Gort is compared with Go and Java virtual threads, and with Rust async as a reference ceiling |
 | [Open decisions](open-decisions.md) | Unresolved questions, alternatives, recommended direction |
+| [The compiler](compiler.md) | What is built (slice 0), the choices made, the next slices |
 | [Changes and contradictions](changes.md) | What this update changed in the existing design, and what it contradicted |
 
 ## Objective

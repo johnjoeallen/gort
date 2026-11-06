@@ -1,0 +1,4 @@
+// error: `x` is not mutable
+package t
+fn main() { let x = 1
+  x = 2 }

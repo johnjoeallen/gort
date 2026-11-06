@@ -1,0 +1,33 @@
+package main
+
+struct Pair<A, B> {
+    first: A
+    second: B
+
+    static fn of(a: A, b: B): Pair<A, B> { return Pair<A, B> { first: a, second: b } }
+    fn swap(): Pair<B, A> { return Pair<B, A>.of(second, first) }
+}
+
+struct Cell<T> {
+    value: T
+    count: i64 = 0
+    fn get(): T { return value }
+    fn set(v: T) { self.value = v; self.count += 1 }
+}
+
+struct Holder { name: String, cell: Cell<String> }
+
+fn main() {
+    let p = Pair<i64, String>.of(7, "seven")
+    let q = p.swap()
+    println(q.first + " " + str(q.second))
+    var c = Cell<i64> { value: 1 }
+    c.set(41)
+    c.set(c.get() + 1)
+    println(str(c.get()) + " " + str(c.count))
+    var h = Holder { name: "h", cell: Cell<String> { value: "x" } }
+    h.cell.set(h.cell.get() + "yz")
+    println(h.name + h.cell.get())
+    let r = new Cell<f64> { value: 2.5 }
+    println(str(r.get() * 2.0))
+}

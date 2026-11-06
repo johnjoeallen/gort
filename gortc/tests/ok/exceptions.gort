@@ -1,0 +1,64 @@
+package main
+
+exception NotFound { key: String }
+exception Bad
+exception Other { code: i64 }
+
+struct Box { name: String, n: i64 }
+
+fn find(k: String, n: i64): String throws NotFound {
+    if (n > 2) throw NotFound(k + "!")
+    return k + "?"
+}
+
+fn pair(a: String, b: String): String { return a + b }
+
+// a throw in the middle of an expression: the first argument copy and the temporaries must be released
+fn mid(n: i64): String throws NotFound {
+    return pair(find("a", 0), find("b", n))
+}
+
+fn mk(n: i64): Ref<Box> throws Bad, Other {
+    let b = new Box { name: "box" + str(n), n: n }
+    Ref<Box> r = b
+    if (n == 1) throw Bad()
+    if (n == 2) throw Other(42)
+    return r
+}
+
+fn viaMk(n: i64): i64 throws Bad, Other {
+    let keep = "kept"
+    let r = mk(n)
+    return r.n + keep.length as i64
+}
+
+fn main() {
+    try {
+        println(mid(0))
+        println(mid(5))
+        println("not reached")
+    } catch (e: NotFound) {
+        println("not found " + e.key)
+    }
+    var i = 0
+    while i < 4 {
+        try {
+            println(str(viaMk(i)))
+        } catch (e: Bad) {
+            println("bad")
+        } catch (e: Exception) {
+            println("some other exception")
+        }
+        i++
+    }
+    // propagation through a nested try that does not catch it
+    try {
+        try {
+            println(mid(9))
+        } catch (e: Bad) {
+            println("wrong")
+        }
+    } catch (e: NotFound) {
+        println("outer " + e.key)
+    }
+}

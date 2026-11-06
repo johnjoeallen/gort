@@ -1,0 +1,3 @@
+// error: expected bool, found i64
+package t
+fn main() { if 1 { } }

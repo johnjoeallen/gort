@@ -1,0 +1,20 @@
+package main
+
+struct Cfg {
+    maxHead: usize = 16.kb
+    maxBody: u64 = 1.mb
+    linger: Duration = 2.s
+}
+
+fn main() {
+    let c = Cfg {}
+    println(str(c.maxHead) + " " + str(c.maxBody))
+    let d = Duration.millis(1500) + 500.ms
+    println(str(d == c.linger) + str(d > 1.s) + str(d < 50us))
+    let t0 = Instant.now()
+    let t1 = Instant.now()
+    let spent = t1 - t0
+    println(str(spent < 5.s) + str(spent >= 0.s))
+    let double = d * 2
+    println(str(double == 4.s) + str(t0 + 1.s > t1))
+}

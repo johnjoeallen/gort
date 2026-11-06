@@ -1,0 +1,46 @@
+package main
+
+struct Ring<T> {
+    slots: Array<T?>
+    head: usize = 0
+    static fn withCapacity(n: usize): Ring<T> { return Ring { slots: T?[](n) } }
+    fn cap(): usize { return slots.length }
+}
+
+struct Wrap<T> {
+    v: T
+    static fn of(v: T): Wrap<T> { return Wrap { v: v } }
+}
+
+struct Task<T> {
+    done: bool
+    value: T
+    static fn completed(value: T): Task<T> { return Task { done: true, value: value } }
+}
+
+struct User {
+    ring: Ring<String>
+    w: Wrap<i64>
+    label: Wrap<String>
+}
+
+fn total(first: i64, rest: i64...): i64 {
+    var t = first
+    var i: usize = 0
+    while i < rest.length {
+        t += rest[i]
+        i++
+    }
+    return t
+}
+
+fn names(xs: String...): usize { return xs.length }
+
+fn main() {
+    let u = User { ring: Ring.withCapacity(3), w: Wrap.of(5), label: Wrap.of("lbl") }
+    println(str(u.ring.cap()) + " " + str(u.w.v) + " " + u.label.v)
+    let t = Task.completed(Wrap.of(2.5))
+    println(str(t.done) + " " + str(t.value.v))
+    println(str(total(1)) + " " + str(total(1, 2, 3, 4)))
+    println(str(names()) + str(names("a")) + str(names("a", "b" + "c", "d")))
+}

@@ -1,0 +1,5 @@
+// error: write `new` to allocate a counted object
+package t
+struct Point { x: i64 }
+fn main() { let p = Point { x: 1 }
+  let r: Ref<Point> = p }

@@ -1,0 +1,10 @@
+// error: `switch` does not cover Null
+package main
+enum Kind { Simple, Null }
+fn f(k: Kind): i64 {
+    switch (k) {
+        Simple -> { return 1 }
+    }
+    return 0
+}
+fn main() {}

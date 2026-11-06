@@ -1,0 +1,29 @@
+package t
+struct Counter { n: i64, label: String }
+enum Sink { Mem(String), Count(i64) }
+fn bump(c: Ref<Counter>) { c.n += 1 }
+fn twice(c: Ref<Counter>) { bump(c); bump(c) }
+fn show(c: Ref<Counter>): String { return c.label + str(c.n) }
+fn feed(s: Ref<Sink>, extra: String) {
+    switch (s) {
+        Mem(t) -> { s.Mem_0 = t + extra }
+        Count(k) -> { s.Count_0 = k + 1 }
+    }
+}
+fn plain(c: Ref<Counter>): String { return c.label + "!" }
+fn viaValue(f: fn(Ref<Counter>): String, c: Counter): String { return f(c) }
+fn main() {
+    var c = Counter { n: 5, label: "n=" }
+    twice(c)
+    println(show(c))
+    println(c.n)
+    let obj = new Counter { n: 1, label: "o=" }
+    twice(obj)
+    println(show(obj))
+    println(show(Counter { n: 9, label: "tmp=" }))
+    var s = Sink.Mem("a")
+    feed(s, "b")
+    feed(s, "c")
+    switch (s) { Mem(t) -> { println(t) } Count(k) -> { println(k) } }
+    println(viaValue(plain, c))
+}

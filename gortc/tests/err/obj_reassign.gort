@@ -1,0 +1,5 @@
+// error: cannot be reassigned
+package t
+struct P { x: i64 }
+fn main() { var a = new P { x: 1 }
+  a = new P { x: 2 } }

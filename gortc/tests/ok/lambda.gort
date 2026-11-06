@@ -1,0 +1,12 @@
+package t
+struct Cfg { n: i64 }
+extern fn runTwice(label: i64, root: fn())
+extern fn runWith(root: fn(i64): i64): i64
+fn plain() { println("plain") }
+fn main() {
+    let cfg = new Cfg { n: 5 }
+    let name = "gort"
+    runTwice(1, fn() { println(name); println(cfg.n) })
+    runTwice(2, plain)
+    println(runWith(fn(x: i64): i64 { return x + cfg.n }))
+}

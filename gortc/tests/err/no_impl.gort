@@ -1,0 +1,4 @@
+// error: `S::go` is declared but has no implementation
+package t
+struct S { fn go() }
+fn main() { }

@@ -1,0 +1,7 @@
+// expect-exit: 101
+// stderr: index out of bounds
+package t
+fn main() { let a = new u8[2]
+  println("before")
+  a[2] = 1
+  println("after") }

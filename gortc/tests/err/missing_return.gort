@@ -1,0 +1,4 @@
+// error: may end without returning a value
+package t
+fn f(a: i64): i64 { if a > 0 { return 1 } }
+fn main() { f(1) }

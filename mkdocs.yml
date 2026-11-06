@@ -49,6 +49,7 @@ nav:
       - Dispatch and external code: architecture/dispatch-and-ffi.md
       - Evaluation plan: architecture/benchmarks.md
       - Open decisions: architecture/open-decisions.md
+      - The compiler: architecture/compiler.md
       - Changes and contradictions: architecture/changes.md
   - Decisions: decisions.md
   - Open questions: open-questions.md

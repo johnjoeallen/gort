@@ -1,0 +1,3 @@
+// error: unknown name `nope`
+package t
+fn main() { println(nope) }

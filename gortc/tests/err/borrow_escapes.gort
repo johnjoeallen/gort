@@ -1,0 +1,10 @@
+// error: cannot lend a value to parameter 2 of `keep`
+package t
+struct Box { n: i64 }
+struct Holder { b: Ref<Box>? = null }
+fn keep(h: Ref<Holder>, b: Ref<Box>) { h.b = b }
+fn main() {
+    let h = new Holder {}
+    var x = Box { n: 1 }
+    keep(h, x)
+}

@@ -1,0 +1,14 @@
+[package]
+name = "gortc"
+version = "0.0.1"
+edition = "2021"
+description = "Gort compiler, slice 0: a subset front end that emits C"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gortc"
+path = "src/main.rs"
+
+[dependencies]
