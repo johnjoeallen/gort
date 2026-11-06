@@ -1,4 +1,4 @@
-// error: writing `Db.n` needs mutate(db): the object is not local and is mutable
+// error: writing `Db.n` needs `sync (writes db)`: the object is not local and is mutable
 package t
 struct Db { n: i64 }
 fn same(d: Ref<Db>): Ref<Db> { return d }               // returns something it was given: not fresh

@@ -9,7 +9,7 @@ fn applyRate(rate: Ref<Rate>, acct: Ref<Acct>, minimum: Ref<Acct>) throws Low {
     }
 }
 fn peek(a: Ref<Acct>, b: Ref<Acct>): i64 {
-    sync (a, reads b) { return a.n + b.n }              // a bare item reads; commas between clauses are optional
+    sync (reads a, b) { return a.n + b.n }             // one clause can list several objects
 }
 fn main() {
     let rate = new Rate { pct: 10 }
@@ -17,7 +17,7 @@ fn main() {
     let floor = new Acct { n: 50 }
     try { applyRate(rate, acct, floor) } catch (e: Low) { println("low") }
     sync (reads acct) { println(acct.n) }
-    mutate(floor) { floor.n = 500 }
+    sync (writes floor) { floor.n = 500 }
     try { applyRate(rate, acct, floor) } catch (e: Low) { println("low " + str(e.have)) }
     println(peek(acct, floor))
 }

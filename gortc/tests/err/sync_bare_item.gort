@@ -1,0 +1,5 @@
+// error: list each object under reads or writes
+package t
+struct S { n: i64 }
+fn f(s: Ref<S>) { sync (s) { println(s.n) } }
+fn main() { f(new S { n: 0 }) }

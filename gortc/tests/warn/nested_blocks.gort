@@ -1,11 +1,11 @@
-// warning: `mutate(b)` is nested inside `mutate(a)`, two different objects
-// warning: lock both in one block, `mutate(a, b)`, so the order is the same no matter how they are written
+// warning: `sync (writes b)` is nested inside `sync (writes a)`, two different objects
+// warning: lock both in one block, `sync (writes a, b)`, so the order is the same no matter how they are written
 package t
 struct Acct { n: i64 }
 fn move(a: Ref<Acct>, b: Ref<Acct>) {
-    mutate(a) {
+    sync (writes a) {
         a.n = a.n - 1
-        mutate(b) { b.n = b.n + 1 }
+        sync (writes b) { b.n = b.n + 1 }
     }
 }
 fn main() { move(new Acct { n: 1 }, new Acct { n: 0 }) }

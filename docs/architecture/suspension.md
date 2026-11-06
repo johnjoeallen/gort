@@ -174,7 +174,7 @@ fn hash(key: Array<u8>): u64 {
 
 fn lookup(cache: Ref<Cache>, key: Array<u8>): i64? {
     let h = hash(key);               // Never: fine
-    sync(cache) {                    // the body may call only Never functions
+    sync (reads cache) {                    // the body may call only Never functions
         return cache.entries.get(h); // get() is Never unless it is [yield] or parks
     }
 }
@@ -189,7 +189,7 @@ fn[nopark] spin(flag: Ref<Flag>) {
 }
 
 fn tight(cache: Ref<Cache>, r: Ref<Reader>) {
-    mutate(cache) {
+    sync (writes cache) {
         scanForever(r);              // warning (always on in a lock body): scanForever loops unbounded
     }                                //   tight -> scanForever
 }

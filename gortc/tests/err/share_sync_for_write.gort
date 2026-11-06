@@ -1,8 +1,8 @@
 // error: this block writes through `h.s`, which is listed under reads: it needs writes
-// error: writing `S.n` needs mutate(h.s), have sync(h.s)
+// error: writing `S.n` needs writes h.s, but it is listed under reads
 package t
 struct S { n: i64 }
 fn f(s: Ref<S>) { s.n = 1 }
 struct H { s: Ref<S> }
-fn g(h: Ref<H>) { sync(h.s) { h.s.n = 2 } }
+fn g(h: Ref<H>) { sync (reads h.s) { h.s.n = 2 } }
 fn main() {}

@@ -1,7 +1,7 @@
 package t
 struct Node { n: i64, next: Ref<Node>? }
 fn total(x: Ref<Node>): i64 {
-    sync(x) {
+    sync (reads x) {
         var t = x.n
         let nx = x.next
         if (nx != null) { t = t + total(nx) }       // another object each level: fine
@@ -9,7 +9,7 @@ fn total(x: Ref<Node>): i64 {
     }
 }
 fn depthSum(x: Ref<Node>, d: i64): i64 {
-    sync(x) {
+    sync (reads x) {
         if (d == 0) { return x.n }
         return x.n + depthSum(x, d - 1)             // the same object again, read under read: fine
     }

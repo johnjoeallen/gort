@@ -332,10 +332,10 @@ impl<'a> Cx<'a> {
         for (mode, t) in targets {
             let Some((om, o)) = self.open.iter().find(|(_, o)| !same_place(o, t)) else { continue };
             let (inner, outer) = (self.name_of(t), self.name_of(o));
-            let one = |m: bool, n: &str| if m { format!("mutate({})", n) } else { format!("sync({})", n) };
-            // the grouped form: one keyword when the modes agree, reads / writes clauses when they differ
+            let one = |m: bool, n: &str| format!("sync ({} {})", if m { "writes" } else { "reads" }, n);
+            // the grouped form: one clause when the modes agree, reads and writes clauses when they differ
             let group = if *om == *mode {
-                format!("{}({}, {})", if *mode { "mutate" } else { "sync" }, outer, inner)
+                format!("sync ({} {}, {})", if *mode { "writes" } else { "reads" }, outer, inner)
             } else if *om {
                 format!("sync (reads {}, writes {})", inner, outer)
             } else {
@@ -567,10 +567,10 @@ impl<'a> Cx<'a> {
             }
         }
         let owner = self.name_of(owner_expr.unwrap_or(p));
-        let kw = if want_mutate { "mutate" } else { "sync" };
+        let kw = if want_mutate { "writes" } else { "reads" };
         let msg = match weak {
-            Some(w) => format!("{} needs mutate({}), have sync({})", what, w, w),
-            None => format!("{} needs {}({}): the object is not local and is mutable", what, kw, owner),
+            Some(w) => format!("{} needs writes {}, but it is listed under reads", what, w),
+            None => format!("{} needs `sync ({} {})`: the object is not local and is mutable", what, kw, owner),
         };
         self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
     }

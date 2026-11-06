@@ -14,7 +14,7 @@ struct UserTable {
     state: Ref<UserState>                                            // write-once: set in make(), so reading `state` needs no block
     static fn make(): Ref<UserTable> { return new UserTable { state: new UserState {} } }
     fn insert(user: User): i64 {                                     // may park (lock entry); the block bodies cannot
-        mutate(state) {
+        sync (writes state) {
             let id = state.nextId
             state.nextId += 1
             state.rows.insert(id, user)
@@ -28,6 +28,6 @@ struct RowImporter {
     state: Ref<ImportState>
     static fn make(): Ref<RowImporter> { return new RowImporter { state: new ImportState {} } }
     fn add(row: Row) {                                               // called once per row from importRows, which is [yield]
-        mutate(state) { state.count += 1; /* the row is handed to the importer's sink here */ }
+        sync (writes state) { state.count += 1; /* the row is handed to the importer's sink here */ }
     }
 }

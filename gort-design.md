@@ -260,11 +260,11 @@ handler on a pinned worker is not helped. Measurements: `bench/results/http.md`.
 Two constructs control access to shared mutable objects:
 
 ```cpp
-sync(cache) {
+sync (reads cache) {
     // Concurrent read-only access.
 }
 
-mutate(cache) {
+sync (writes cache) {
     // Exclusive read/write access.
 }
 ```
@@ -279,7 +279,7 @@ Requested ordering policy: fair FIFO admission of access requests, batching cons
 
 **Waiting parks the vthread.** Entering `sync`/`mutate` is a parking operation: if the lock is held, the vthread joins the lock's FIFO queue and parks, and the worker runs other vthreads. Unlock wakes the next waiter(s) on whichever worker they belong to. An implementation may spin for a bounded time before parking, because hold times are short (the body cannot park); the contract is unchanged and only the cost differs. This matters: with FIFO fairness, one queued writer makes every following reader queue behind it, so a pure park lost 55% of throughput at a 10% write mix and 75% at 50% writes (4 workers, one lock), and 2000 rounds of spinning removed the loss (`bench/results/miniredis.md`). The body of the block still cannot park (compile error), so a holder never yields the lock to the scheduler, two vthreads on one worker never contend, and hold time is bounded by the code in the block. Because compiler-inserted slice checks are park points (6.1), the body may call only functions whose effect is `Never` (inferred, or asserted with `[nopark]`), and no slice check is inserted in it. Allowed and rejected calls, the reasons a body may not park, and the loop warning (an unbounded loop under a lock always warns) are in `docs/architecture/suspension.md`, sections 1.2 and 1.3. Consequences: a function containing `sync`/`mutate` is inferred to park (tooling shows it at the block); a `cleanup()` cannot enter one (cleanup never parks), so cleanup uses non-parking operations (atomic flags, `tryPush`) and leaves the locked work to a later, parking pass.
 
-**Multi-object blocks.** `mutate(a, b)` and `sync(a, b)` (any mix, e.g. `mutate(a) sync(b)` written as one head) acquire all their objects before the body runs or not at all, so mis-ordered blocks elsewhere (`mutate(b, a)`, `sync(b, a)`) cannot deadlock with them. The runtime tries the locks in a fixed global order: the address of each object's lock word, or `(arena id, slot index)` for an object in an arena whose storage can move. The order only has to be consistent among live locks being acquired together (the acquirer holds a `Ref` to each, so none can be freed or reused meanwhile), so no per-allocation sequence number exists. Arenas do not compact, and a chunk is released only when it is empty, so a live object's address never changes; an object has a lock word only once it is shared (7.3), and an object that is never shared pays nothing for it. If one is busy, it releases everything it took, parks on THAT lock's queue, and retries from the start when woken. Waiting on the blocker's queue replaces a timed backoff: there is no sleep, no spinning and no livelock, and a retrying acquirer keeps its original arrival ticket, so it is served ahead of later arrivals (no starvation by repeated losing races). Retrying is safe only because no body code has run yet. The same reason is why **nested** acquisition (`mutate(a) { mutate(b) { } }`) is a compile error when the inner object is not already in the outer head: a failed inner acquire could not undo what the outer body did. Same lock twice in one head or nested is also an error (no reentrancy). Upgrading read to write is not supported: release and acquire as `mutate`, and recheck.
+**Multi-object blocks.** `mutate(a, b)` and `sync(a, b)` (any mix, e.g. `mutate(a) sync(b)` written as one head) acquire all their objects before the body runs or not at all, so mis-ordered blocks elsewhere (`mutate(b, a)`, `sync(b, a)`) cannot deadlock with them. The runtime tries the locks in a fixed global order: the address of each object's lock word, or `(arena id, slot index)` for an object in an arena whose storage can move. The order only has to be consistent among live locks being acquired together (the acquirer holds a `Ref` to each, so none can be freed or reused meanwhile), so no per-allocation sequence number exists. Arenas do not compact, and a chunk is released only when it is empty, so a live object's address never changes; an object has a lock word only once it is shared (7.3), and an object that is never shared pays nothing for it. If one is busy, it releases everything it took, parks on THAT lock's queue, and retries from the start when woken. Waiting on the blocker's queue replaces a timed backoff: there is no sleep, no spinning and no livelock, and a retrying acquirer keeps its original arrival ticket, so it is served ahead of later arrivals (no starvation by repeated losing races). Retrying is safe only because no body code has run yet. The same reason is why **nested** acquisition (`sync (writes a) { sync (writes b) { } }`) is a compile error when the inner object is not already in the outer head: a failed inner acquire could not undo what the outer body did. Same lock twice in one head or nested is also an error (no reentrancy). Upgrading read to write is not supported: release and acquire as `mutate`, and recheck.
 
 ### 7.2 Encapsulation in libraries
 
@@ -290,13 +290,13 @@ Application code should not need to write synchronization blocks for each cache 
 package app
 
 fn cacheGet(cache: Ref<Cache>, key: i64): i64 {
-    sync(cache) {
+    sync (reads cache) {
         return cache.entries.get(key); // scalar copied before unlock; the block is required because cache is incoming and entries is mutable (7.3)
     }
 }
 
 fn cachePut(cache: Ref<Cache>, key: i64, value: i64) {
-    mutate(cache) {
+    sync (writes cache) {
         cache.entries.insert(key, value);
     }
 }

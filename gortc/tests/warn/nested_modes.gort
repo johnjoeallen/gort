@@ -1,8 +1,8 @@
-// warning: `sync(b)` is nested inside `sync(a)`, two different objects
-// warning: `sync(a, b)`
+// warning: `sync (reads b)` is nested inside `sync (reads a)`, two different objects
+// warning: `sync (reads a, b)`
 package t
 struct Acct { n: i64 }
 fn total(a: Ref<Acct>, b: Ref<Acct>): i64 {
-    sync(a) { sync(b) { return a.n + b.n } }
+    sync (reads a) { sync (reads b) { return a.n + b.n } }
 }
 fn main() { println(total(new Acct { n: 1 }, new Acct { n: 2 })) }

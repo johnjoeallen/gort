@@ -1,8 +1,8 @@
-// error: writing `Db.n` needs mutate(db): the object is not local and is mutable
+// error: writing `Db.n` needs `sync (writes db)`: the object is not local and is mutable
 package t
 struct Db { n: i64 }
 extern fn spawnTask(body: fn())
-fn bump(d: Ref<Db>) { mutate(d) { d.n = d.n + 1 } }
+fn bump(d: Ref<Db>) { sync (writes d) { d.n = d.n + 1 } }
 fn make(): Ref<Db> {
     let d = new Db { n: 0 }
     spawn bump(d)                 // published before it is returned: not fresh

@@ -2,5 +2,5 @@
 package t
 struct S { n: i64 }
 extern parks fn wait()
-fn f(s: Ref<S>) { mutate(s) { wait() } }
+fn f(s: Ref<S>) { sync (writes s) { wait() } }
 fn main() { f(new S { n: 0 }) }

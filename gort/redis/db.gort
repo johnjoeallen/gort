@@ -51,7 +51,7 @@ struct Db {
     fn[nopark] release(channel: Array<u8>, mb: Ref<Mailbox<Message>>) { reaper.tryPush(Reap { channel: Bytes.copyOf(channel), mailbox: mb }) }
 
     fn get(key: Array<u8>): Ref<Value>? {
-        sync(store) {
+        sync (reads store) {
             let e = store.entries.get(key)
             return e == null ? null : e.value            // copying a Ref is an atomic increment; it outlives the lock
         }
@@ -63,7 +63,7 @@ struct Db {
         let name = Bytes.copyOf(key)
         let when: Instant? = expire == null ? null : Instant.now() + expire
         var wake = false
-        mutate(store) {
+        sync (writes store) {
             let prev = store.entries.get(key)
             if (prev == null && store.entries.count >= lim.maxKeys) throw StoreFull("ERR max keys")
             if (when != null) {
@@ -80,7 +80,7 @@ struct Db {
     // Number of subscribers the message was offered to (the original returns the receiver count too, lagged or not).
     fn publish(channel: Array<u8>, message: Array<u8>): usize {
         let data = new Value { bytes: message.copy() }
-        sync(store) {
+        sync (reads store) {
             let t = store.topics.get(channel)
             if (t == null) return 0
             // this loop is over the subscribers of one channel, at most lim.maxSubs per connection: loops: long, so it warns only under --warn-loops=all
@@ -90,7 +90,7 @@ struct Db {
     }
 
     fn subscribe(channel: Array<u8>, mb: Ref<Mailbox<Message>>) throws StoreFull {
-        mutate(store) {
+        sync (writes store) {
             var t = store.topics.get(channel)
             if (t == null) {
                 if (store.topics.count >= lim.maxTopics) throw StoreFull("ERR max channels")
@@ -102,7 +102,7 @@ struct Db {
     }
 
     fn unsubscribe(channel: Array<u8>, mb: Ref<Mailbox<Message>>) {
-        mutate(store) {
+        sync (writes store) {
             let t = store.topics.get(channel)
             if (t == null) return
             t.subs.remove(mb)
@@ -116,7 +116,7 @@ struct Db {
         while (true) {
             var next: Instant? = null
             var full = false
-            mutate(store) {
+            sync (writes store) {
                 let now = Instant.now()
                 var n = 0
                 while (n < PURGE_BATCH) {                      // loops: bounded (a counter against a constant), so no warning under the lock

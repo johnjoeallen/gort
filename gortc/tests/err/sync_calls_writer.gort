@@ -2,5 +2,5 @@
 package t
 struct S { n: i64 }
 fn set(s: Ref<S>) { s.n = 5 }
-fn f(s: Ref<S>) { sync(s) { set(s) } }
+fn f(s: Ref<S>) { sync (reads s) { set(s) } }
 fn main() { f(new S { n: 0 }) }

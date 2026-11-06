@@ -7,15 +7,15 @@ struct Account {
 }
 struct Bank { acct: Ref<Account>, ops: i64 }
 fn deposit(a: Ref<Account>, n: i64) {
-    mutate(a) { a.balance = a.balance + n }
+    sync (writes a) { a.balance = a.balance + n }
 }
 fn total(a: Ref<Account>): i64 {
-    sync(a) { return a.balance }
+    sync (reads a) { return a.balance }
 }
 fn first(a: Ref<Account>, limit: i64): i64 {
     var i = 0
     while (true) {
-        mutate(a) {
+        sync (writes a) {
             if (a.balance >= limit) { return i }       // returns out of the block: the lock is released
         }
         i = i + 1
@@ -29,12 +29,12 @@ fn main() {
     println(total(a))
     println(first(a, 40))
     let bank = new Bank { acct: a, ops: 0 }
-    mutate(bank) {
+    sync (writes bank) {
         bank.ops = bank.ops + 1
-        sync(bank.acct) { println(bank.acct.balance) }
+        sync (reads bank.acct) { println(bank.acct.balance) }
     }
     println(bank.ops)
-    sync(a) { println(a.read()) }        // a reading method is fine under sync
-    mutate(a) { a.add(1) }
+    sync (reads a) { println(a.read()) }        // a reading method is fine under sync
+    sync (writes a) { a.add(1) }
     println(total(a))
 }

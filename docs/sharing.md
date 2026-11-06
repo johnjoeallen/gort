@@ -71,7 +71,7 @@ struct Db {
         // Reading `store` (the field of Db) needs no block: it is write-once.
         // Reading `store.entries` does: Store.entries is mutable (set and purgeExpired write it),
         // and the Store is incoming, so R1 requires a block naming the reference. sync is enough for a read (R4).
-        sync(store) {
+        sync (reads store) {
             let e = store.entries.get(key)
             return e == null ? null : e.value
         }
@@ -105,7 +105,7 @@ package redis
 
 fn size(db: Ref<Db>): usize {
     return db.store.entries.count         // error: store.entries is mutable and db is incoming
-}                                         //   fix: sync(db.store) { return db.store.entries.count }
+}                                         //   fix: sync (reads db.store) { return db.store.entries.count }
 ```
 
 ```cpp
@@ -113,7 +113,7 @@ fn size(db: Ref<Db>): usize {
 package redis
 
 fn trim(store: Ref<Store>) {
-    sync(store) {
+    sync (reads store) {
         store.entries.remove(oldest(store))   // error: entries.remove writes its receiver
     }                                         //   needs mutate(store), have sync(store)
 }
@@ -124,7 +124,7 @@ fn trim(store: Ref<Store>) {
 package redis
 
 fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
-    sync(store) {
+    sync (reads store) {
         return store.entries              // allowed: entries is a Ref<Map>, so this copies the Ref out and takes a count
     }
 }
@@ -132,7 +132,7 @@ fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
 fn countKeys(store: Ref<Store>): usize {
     let m = peekKeys(store)
     return m.count                        // error: m is incoming and Map is mutable: needs sync(m)
-}                                         //   fix: sync(m) { return m.count }  (or do the count inside sync(store), before the Ref leaves)
+}                                         //   fix: sync (reads m) { return m.count }  (or do the count inside sync(store), before the Ref leaves)
 ```
 
 The messages name the chain and the fix. A missing block on a reference that turns out never to be shared is still reported: that is the over-approximation in R2, and the cost is one extra block that does nothing at run time.
@@ -161,14 +161,14 @@ Before the `spawn`, `db` is local and could be inspected directly. After it, eve
 package redis
 
 fn expireAndCount(store: Ref<Store>): usize {
-    mutate(store) {
+    sync (writes store) {
         purgeBatch(store)                 // summary: purgeBatch writes param 0 -> mutate required: ok
         return store.entries.count
     }
 }
 
 fn statsOnly(store: Ref<Store>): usize {
-    sync(store) {
+    sync (reads store) {
         purgeBatch(store)                 // error: purgeBatch writes its argument; have sync(store)
         return store.entries.count
     }
@@ -199,41 +199,41 @@ fn local() {
 }
 
 fn step(w: Ref<World>) {
-    mutate(w.player) { w.player.move(1, 0) }     // the Ref is the owner
-    sync(w.player)   { log(w.player.len2()) }
+    sync (writes w.player) { w.player.move(1, 0) }     // the Ref is the owner
+    sync (reads w.player)   { log(w.player.len2()) }
 }
 
 fn drift(f: Ref<Field>, i: usize) {
-    mutate(f.pts) { f.pts[i].move(1, 1) }        // an element has no identity: the array is the owner
+    sync (writes f.pts) { f.pts[i].move(1, 1) }        // an element has no identity: the array is the owner
 }
 
 fn nudge(f: Ref<Fleet>, i: usize) {
     Ref<Point> p
-    sync(f.ships) { p = f.ships[i] }             // copy the handle out (takes a count), release the array lock
-    mutate(p)     { p.move(1, 0) }               // then lock the Point itself
+    sync (reads f.ships) { p = f.ships[i] }             // copy the handle out (takes a count), release the array lock
+    sync (writes p)     { p.move(1, 0) }               // then lock the Point itself
 }
 ```
 
 Errors the compiler reports:
 
 ```cpp
-sync(w.player) { w.player.move(1, 0) }   // error: Point.move writes its receiver; needs mutate(w.player), have sync
+sync (reads w.player) { w.player.move(1, 0) }   // error: Point.move writes its receiver; needs mutate(w.player), have sync
 w.player.move(1, 0)                      // error: Point is mutable and w.player is incoming; needs mutate(w.player)
-sync(f.ships) { f.ships[i].move(1, 0) }  // error: the array lock does not cover the Point behind the Ref
+sync (reads f.ships) { f.ships[i].move(1, 0) }  // error: the array lock does not cover the Point behind the Ref
 ```
 
 The last one assumes each object has its own lock (D18 item 11, Locking: open). Copy or in place is the developer's choice, and the compiler cannot tell which was meant:
 
 ```cpp
-sync(f.pts)   { let q = f.pts[i]; q.move(1, 1) }   // q is a copy: f.pts[i] is untouched
-mutate(f.pts) { f.pts[i].move(1, 1) }              // in place
+sync (reads f.pts)   { let q = f.pts[i]; q.move(1, 1) }   // q is a copy: f.pts[i] is untouched
+sync (writes f.pts) { f.pts[i].move(1, 1) }              // in place
 ```
 
 On a growable `Array<T[]>`, an element used as `self` is pinned for the call, so a callee that grows the same array is an error (a compile error when its summary shows it, otherwise a run-time "array pinned" exception):
 
 ```cpp
 struct Spawner { fn spawnMore(all: Array<Spawner[]>) { all.push(Spawner {}) } }
-mutate(all) { all[0].spawnMore(all) }    // error: all[0] is pinned for the call and spawnMore grows `all`
+sync (writes all) { all[0].spawnMore(all) }    // error: all[0] is pinned for the call and spawnMore grows `all`
 ```
 
 | | Developer writes | Compiler does |
@@ -322,7 +322,7 @@ A consumer of `db.smod` can run every check above with no source. An implementat
 ## Generated C for a block
 
 ```c
-// sync(store) { ... } where store is incoming
+// sync (reads store) { ... } where store is incoming
 bool sh = obj_is_shared(store);                  // one load of the control-block flag
 if (sh) { st_t s = rwlock_read_enter(t, &store->lock); /* may park; PARKED unwinds as usual */ }
 /* body: no parking inside, no slice checks */

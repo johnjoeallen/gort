@@ -15,12 +15,12 @@ import runtime
 
 // ---------- 1. cache + db read path ----------
 fn cacheGet(cache: Ref<Cache>, key: i64): User? {   //@P frame=40
-    sync(cache) {                                              // lock entry parks if contended  /*P*/
+    sync (reads cache) {                                              // lock entry parks if contended  /*P*/
         return cache.entries.get(key);                         /*N*/
     }
 }
 fn cachePut(cache: Ref<Cache>, key: i64, u: User) {           //@P frame=56
-    mutate(cache) {                                            /*P*/
+    sync (writes cache) {                                            /*P*/
         cache.entries.insert(key, u);                          /*N*/
     }
 }
@@ -112,12 +112,12 @@ fn health(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {             //@N
 }
 fn auth(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>, next: Handler) {//@P frame=80
     let tok = req.header("authorization");                     /*N*/
-    let ok = verifyToken(env.keys, tok);                      /*P*/  // takes sync(keys)
+    let ok = verifyToken(env.keys, tok);                      /*P*/  // takes sync (reads keys)
     if !ok { writeJson(conn, ERR_401); return; }              /*P*/
     next(conn, req, env);                                      /*I:P*/  // targets: getUser, report, health -> mixed
 }
 fn verifyToken(keys: Ref<KeySet>, tok: String): bool {      //@P frame=40
-    sync(keys) { return keys.verify(tok); }                    /*P*/ /*N*/
+    sync (reads keys) { return keys.verify(tok); }                    /*P*/ /*N*/
 }
 fn dispatch(conn: Ref<Conn>, req: Ref<Request>, env: Ref<Env>) {           //@P frame=72
     let h = env.routes.get(req.path);                          /*N*/
@@ -143,7 +143,7 @@ fn[nopark] checksum(buf: Ref<Bytes>): u32 { return c_crc32(buf.ptr(), buf.len())
 
 // ---------- 7. pub/sub fan-out ----------
 fn broadcast(subs: Ref<SubList>, msg: Msg) {                   //@P frame=56
-    sync(subs) {                                               /*P*/
+    sync (reads subs) {                                               /*P*/
         for s in subs.list.iter() {                            /*N*/  // loops: long (size of the list is not stated); warns only under --warn-loops=all
             s.outbox.tryPush(msg.clone());                    /*N*/ /*N*/
         }
@@ -158,19 +158,19 @@ fn subscriber(conn: Ref<Conn>, env: Ref<Env>) {                        //@P fram
 
 // ---------- 8. rejected by the checker ----------
 // fn bad(cache: Ref<Cache>, pool: Ref<Pool>, k: i64) {
-//     mutate(cache) {
+//     sync (writes cache) {
 //         let v = dbQuery(pool, SQL_USER, k);               // ERROR: parking call while holding lock
 //         cache.entries.insert(k, v);                       //   bad -> dbQuery -> pool.acquire (parks)
 //     }
 // }
 //
 // fn peek(cache: Ref<Cache>, k: i64): i64 {
-//     return cache.entries.get(k);                          // ERROR: cache is incoming and Cache.entries is mutable: needs sync(cache)
+//     return cache.entries.get(k);                          // ERROR: cache is incoming and Cache.entries is mutable: needs sync (reads cache)
 // }
 //
 // fn touch(cache: Ref<Cache>, k: i64) {
-//     sync(cache) {
-//         cache.entries.insert(k, 0);                       // ERROR: insert writes its receiver: needs mutate(cache), have sync(cache)
+//     sync (reads cache) {
+//         cache.entries.insert(k, 0);                       // ERROR: insert writes its receiver: needs writes cache, but it is listed under reads
 //     }
 // }
 //
@@ -179,7 +179,7 @@ fn subscriber(conn: Ref<Conn>, env: Ref<Env>) {                        //@P fram
 // }
 //
 // fn spin(cache: Ref<Cache>, flag: Ref<Flag>) {
-//     mutate(cache) {
+//     sync (writes cache) {
 //         while !flag.isSet() { }                           // WARNING (always on in a lock body): unbounded loop under a lock
 //     }
 // }

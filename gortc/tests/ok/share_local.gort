@@ -3,7 +3,7 @@ struct Cell { v: i64 }
 struct Pair { a: Ref<Cell>, b: Ref<Cell> }
 fn setV(c: Ref<Cell>, x: i64) { c.v = x }                 // a parameter: the caller holds whatever block is needed
 fn readV(c: Ref<Cell>): i64 { return c.v }
-fn locked(c: Ref<Cell>): i64 { sync(c) { return c.v } }   // or the callee takes its own: then callers need nothing
+fn locked(c: Ref<Cell>): i64 { sync (reads c) { return c.v } }   // or the callee takes its own: then callers need nothing
 fn main() {
     let c = new Cell { v: 1 }
     c.v = 2                                               // local so far: no block

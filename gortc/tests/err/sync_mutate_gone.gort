@@ -1,0 +1,5 @@
+// error: `mutate` is gone: lock an object for writing with `sync (writes x) { }`
+package t
+struct S { n: i64 }
+fn f(s: Ref<S>) { mutate(s) { s.n = 1 } }
+fn main() { f(new S { n: 0 }) }

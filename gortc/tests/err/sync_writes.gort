@@ -1,5 +1,5 @@
 // error: this block writes through `s`, which is listed under reads: it needs writes
 package t
 struct S { n: i64 }
-fn f(s: Ref<S>) { sync(s) { s.n = 1 } }
+fn f(s: Ref<S>) { sync (reads s) { s.n = 1 } }
 fn main() { f(new S { n: 0 }) }

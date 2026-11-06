@@ -19,7 +19,7 @@ struct Labelled {
 
 fn describe(l: Labelled): String {          // a parameter is a copy the callee owns
     var v = 0
-    sync(l.owner) { v = l.owner.value() }   // the Counter behind the handle is shared and mutable: read it under its block
+    sync (reads l.owner) { v = l.owner.value() }   // the Counter behind the handle is shared and mutable: read it under its block
     return l.label + ":" + str(l.data.length) + ":" + str(v)
 }
 

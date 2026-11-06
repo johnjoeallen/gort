@@ -1,7 +1,7 @@
-// error: reading `Store.n` needs sync(db.store): the object is not local and is mutable
+// error: reading `Store.n` needs `sync (reads db.store)`: the object is not local and is mutable
 package t
 struct Store { n: i64 }
-fn bump(s: Ref<Store>) { mutate(s) { s.n = s.n + 1 } }
+fn bump(s: Ref<Store>) { sync (writes s) { s.n = s.n + 1 } }
 struct Db { store: Ref<Store> }
 fn size(db: Ref<Db>): i64 { return db.store.n }
 fn main() { bump(new Store { n: 0 }) }

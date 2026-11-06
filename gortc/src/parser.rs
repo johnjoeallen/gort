@@ -546,31 +546,32 @@ impl Parser {
             self.bump();
             return Ok(mk(StmtKind::Block(self.block()?)));
         }
-        if self.is_kw("mutate") || self.is_kw("sync") {
-            let mutate = self.is_kw("mutate");
+        if self.is_kw("mutate") {
+            return self.err(&t, "`mutate` is gone: lock an object for writing with `sync (writes x) { }`".to_string());
+        }
+        if self.is_kw("sync") {
             self.bump();
             self.expect_sym("(")?;
-            // `sync (reads a, b writes c)`: a clause word starts a list of one mode; a bare item is read for `sync`, written for `mutate`
+            // `sync (reads a, b writes c)`: a clause word starts a list of one mode (the comma between clauses is optional)
             let clause = |p: &Parser| -> Option<bool> {
                 match &p.cur().tok {
                     Tok::Ident(n) if (n == "reads" || n == "writes") && matches!(p.peek_at(1).tok, Tok::Ident(_)) => Some(n == "writes"),
                     _ => None,
                 }
             };
-            let mut write = mutate;
+            let mut write: Option<bool> = None;
             let mut targets: Vec<(bool, Expr)> = Vec::new();
             loop {
-                if !mutate {
-                    if let Some(w) = clause(self) {
-                        self.bump();
-                        write = w;
-                    }
+                if let Some(w) = clause(self) {
+                    self.bump();
+                    write = Some(w);
                 }
-                targets.push((write, self.no_struct_off(|p| p.expr())?));
-                if self.eat_sym(",") {
-                    continue;
-                }
-                if !mutate && clause(self).is_some() {
+                let Some(w) = write else {
+                    let at = self.cur().clone();
+                    return self.err(&at, "list each object under reads or writes: `sync (reads x) { }` or `sync (writes x) { }`".to_string());
+                };
+                targets.push((w, self.no_struct_off(|p| p.expr())?));
+                if self.eat_sym(",") || clause(self).is_some() {
                     continue;
                 }
                 break;

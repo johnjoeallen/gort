@@ -4,5 +4,5 @@ struct S {
     n: i64
     fn inc() { n = n + 1 }
 }
-fn f(s: Ref<S>) { sync(s) { s.inc() } }
+fn f(s: Ref<S>) { sync (reads s) { s.inc() } }
 fn main() { f(new S { n: 0 }) }

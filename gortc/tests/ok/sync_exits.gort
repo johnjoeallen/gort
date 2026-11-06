@@ -2,7 +2,7 @@ package t
 exception Full { cap: i64 }
 struct Q { n: i64 }
 fn push(q: Ref<Q>, cap: i64) throws Full {
-    mutate(q) {
+    sync (writes q) {
         if (q.n >= cap) throw Full(cap)             // the lock is released on the way out
         q.n = q.n + 1
     }
@@ -21,13 +21,13 @@ fn main() {
     var k = 0
     while (k < 10) {
         k = k + 1
-        mutate(q) {
+        sync (writes q) {
             if (k % 2 == 0) { continue }            // continue and break leave the block too
             if (k > 6) { break }
             q.n = q.n + 10
         }
     }
-    sync(q) { println(q.n) }
-    mutate(q) { q.n = 0 }
+    sync (reads q) { println(q.n) }
+    sync (writes q) { q.n = 0 }
     println(k)
 }

@@ -1,4 +1,4 @@
-// error: passing it to `setN`, which writes through it, needs mutate(h.s): the object is not local and is mutable
+// error: passing it to `setN`, which writes through it, needs `sync (writes h.s)`: the object is not local and is mutable
 package t
 struct S { n: i64 }
 fn setN(s: Ref<S>) { s.n = 5 }
