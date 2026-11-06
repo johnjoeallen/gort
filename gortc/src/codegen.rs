@@ -131,6 +131,7 @@ pub fn manifest(prog: &Program) -> String {
 }
 
 thread_local! {
+    static EXTN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static EXTDEFS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
     static EQS: std::cell::RefCell<std::collections::BTreeSet<usize>> = const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
     static JSONS: std::cell::RefCell<std::collections::BTreeSet<usize>> = const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
@@ -1205,8 +1206,7 @@ impl<'a> FnGen<'a> {
             EK::Lambda(..) => unreachable!("a lambda with captures is only valid as an argument to a runtime function"),
             EK::ExternFn(inner) => {
                 let Ty::Fn(ps, r, th) = &inner.ty else { unreachable!() };
-                self.labels += 1;
-                let n = self.labels;
+                let n = EXTN.with(|c| { c.set(c.get() + 1); c.get() });
                 let pt: Vec<String> = ps.iter().map(|p| self.ct(p)).collect();
                 let rt = if *th { "int".to_string() } else { self.ct(r) };
                 let mut sig: Vec<String> = pt.iter().enumerate().map(|(i, t)| format!("{} a{}", t, i)).collect();

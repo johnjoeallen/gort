@@ -1,8 +1,7 @@
 /* rt/posix.c - a small POSIX runtime for the `extern` declarations of gort/runtime/leaves.gort (what http-mini needs).
  *
- * Sockets are blocking and each worker is one thread, so a connection is served start to finish before the next is accepted:
- * `spawn` is still a call in place (slice 2 gives it vthreads). Reference counts are plain, so run with --workers=1 until
- * slice 3 decides how shared objects are counted.
+ * Sockets are blocking; each worker is one thread and each `spawn`ed connection another:
+ * `spawn` starts an OS thread per task (not yet vthreads). Reference counts are atomic.
  *
  * Link it with the program:  gortc run --link rt/posix.c gort/runtime and gort/http-mini
  */
@@ -145,4 +144,26 @@ void gort_x_spawnWorker(size_t core, void *f, void *env) {
     w->core = core; w->body = (void (*)(void *))f; w->env = env;
     if (pthread_create(&w->th, NULL, worker_main, w) != 0) { perror("pthread_create"); exit(2); }
 }
-void gort_rt_exit_hook(void) { for (size_t i = 0; i < nworkers; i++) pthread_join(workers[i].th, NULL); }
+/* `spawn call` becomes spawnTask(fn() { call }): one thread per task, joined at exit through the same list */
+static pthread_mutex_t task_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t *tasks; static size_t ntasks, captasks;
+struct task { void (*body)(void *); void *env; };
+static void *task_main(void *p) {
+    struct task t = *(struct task *)p; free(p);
+    t.body(t.env);
+    return NULL;
+}
+void gort_x_spawnTask(void *f, void *env) {
+    struct task *t = malloc(sizeof *t);
+    t->body = (void (*)(void *))f; t->env = env;
+    pthread_t th;
+    if (pthread_create(&th, NULL, task_main, t) != 0) { perror("pthread_create"); exit(2); }
+    pthread_mutex_lock(&task_lock);
+    if (ntasks == captasks) { captasks = captasks ? captasks * 2 : 64; tasks = realloc(tasks, captasks * sizeof *tasks); }
+    tasks[ntasks++] = th;
+    pthread_mutex_unlock(&task_lock);
+}
+void gort_rt_exit_hook(void) {
+    for (size_t i = 0; i < nworkers; i++) pthread_join(workers[i].th, NULL);
+    for (size_t i = 0; i < ntasks; i++) pthread_join(tasks[i], NULL);
+}

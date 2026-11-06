@@ -16,5 +16,5 @@ curl -i http://127.0.0.1:8080/        # 200 hello
 curl -i http://127.0.0.1:8080/nope    # 404
 ```
 
-`gortc/rt/posix.c` is the C side of the `extern` declarations: blocking sockets, one thread per worker. `spawn` is still a call in place, so a
-connection is served to its end before the next is accepted, and reference counts are not atomic: use `--workers=1` until slice 3.
+`gortc/rt/posix.c` is the C side of the `extern` declarations: blocking sockets, one thread per worker, and `spawn call` is `spawnTask(fn() { call })`,
+one OS thread per connection (vthreads and parking are still to come). Reference counts are atomic, so `--workers=N` is fine.

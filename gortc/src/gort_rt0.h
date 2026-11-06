@@ -39,20 +39,20 @@ static inline void *gort_new(size_t size) {
     gort_ctl *c = (gort_ctl *)calloc(1, sizeof(gort_ctl) + size);
     if (!c) gort_trap("out of memory");
     c->strong = 1;
-    gort_live++;
+    __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return c + 1;
 }
-static inline void *gort_retain(void *p) { if (p) GORT_CTL(p)->strong++; return p; }
-static inline bool gort_release_last(void *p) { return --GORT_CTL(p)->strong == 0; }
-static inline void gort_free(void *p) { free(GORT_CTL(p)); gort_live--; }
+static inline void *gort_retain(void *p) { if (p) __atomic_fetch_add(&GORT_CTL(p)->strong, 1, __ATOMIC_RELAXED); return p; }
+static inline bool gort_release_last(void *p) { return __atomic_sub_fetch(&GORT_CTL(p)->strong, 1, __ATOMIC_ACQ_REL) == 0; }
+static inline void gort_free(void *p) { free(GORT_CTL(p)); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED); }
 
 /* ---- String: immutable bytes, counted. A literal is permanent: its count is never touched. ---- */
 typedef struct gort_str { size_t strong; size_t len; const uint8_t *data; bool perm; } gort_str;
 
-static inline gort_str *gort_str_retain(gort_str *s) { if (!s->perm) s->strong++; return s; }
+static inline gort_str *gort_str_retain(gort_str *s) { if (!s->perm) __atomic_fetch_add(&s->strong, 1, __ATOMIC_RELAXED); return s; }
 static inline void gort_str_release(gort_str *s) {
     if (s->perm) return;
-    if (--s->strong == 0) { free(s); gort_live--; }
+    if (__atomic_sub_fetch(&s->strong, 1, __ATOMIC_ACQ_REL) == 0) { free(s); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED); }
 }
 static gort_str *gort_str_make(const uint8_t *data, size_t len) {
     gort_str *s = (gort_str *)malloc(sizeof(gort_str) + len + 1);
@@ -61,7 +61,7 @@ static gort_str *gort_str_make(const uint8_t *data, size_t len) {
     if (len) memcpy(d, data, len);
     d[len] = 0;
     s->strong = 1; s->len = len; s->data = d; s->perm = false;
-    gort_live++;
+    __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return s;
 }
 static gort_str *gort_str_concat(const gort_str *a, const gort_str *b) {
@@ -72,7 +72,7 @@ static gort_str *gort_str_concat(const gort_str *a, const gort_str *b) {
     if (b->len) memcpy(d + a->len, b->data, b->len);
     d[a->len + b->len] = 0;
     s->strong = 1; s->len = a->len + b->len; s->data = d; s->perm = false;
-    gort_live++;
+    __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return s;
 }
 static inline bool gort_str_eq(const gort_str *a, const gort_str *b) {
@@ -95,7 +95,7 @@ static gort_arr *gort_arr_new(size_t esize, size_t len) {
         if (!a->data) gort_trap("out of memory");
     }
     a->strong = 1; a->len = len; a->cap = len; a->esize = esize;
-    gort_live++;
+    __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return a;
 }
 /* elements that hold counts (an array of optional handles): `edrop` releases one element */
@@ -104,15 +104,15 @@ static gort_arr *gort_arr_new_d(size_t esize, size_t len, void (*edrop)(void *))
     a->edrop = edrop;
     return a;
 }
-static inline gort_arr *gort_arr_retain(gort_arr *a) { a->strong++; return a; }
+static inline gort_arr *gort_arr_retain(gort_arr *a) { __atomic_fetch_add(&a->strong, 1, __ATOMIC_RELAXED); return a; }
 static inline void gort_arr_release(gort_arr *a) {
-    if (--a->strong == 0) {
+    if (__atomic_sub_fetch(&a->strong, 1, __ATOMIC_ACQ_REL) == 0) {
         if (a->parent) gort_arr_release(a->parent);
         else {
             if (a->edrop) for (size_t i = 0; i < a->cap; i++) a->edrop((char *)a->data + i * a->esize);
             free(a->data);
         }
-        free(a); gort_live--;
+        free(a); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED);
     }
 }
 static gort_arr *gort_arr_slice(gort_arr *a, size_t esize, size_t lo, size_t hi) {
@@ -121,7 +121,7 @@ static gort_arr *gort_arr_slice(gort_arr *a, size_t esize, size_t lo, size_t hi)
     if (!v) gort_trap("out of memory");
     gort_arr *root = a->parent ? a->parent : a;
     v->strong = 1; v->len = v->cap = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root);
-    gort_live++;
+    __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return v;
 }
 /* growable arrays: the run is replaced by one twice as long (the first growth is to 256); nothing may be viewing it */

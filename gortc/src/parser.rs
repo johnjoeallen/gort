@@ -763,10 +763,24 @@ impl Parser {
 
     fn unary(&mut self) -> R<Expr> {
         let t = self.cur().clone();
-        // slice 2 stub: `spawn f(x)` runs the call in place
+        // `spawn f(x)` is `spawnTask(fn() { f(x) })`: the runtime starts the call on its own thread
         if self.is_kw("spawn") {
+            let start = self.pos;
             self.bump();
-            return self.unary();
+            let call = self.unary()?;
+            let mut idents: Vec<String> = Vec::new();
+            for tk in &self.toks[start..self.pos] {
+                if let Tok::Ident(n) = &tk.tok {
+                    if !idents.contains(n) {
+                        idents.push(n.clone());
+                    }
+                }
+            }
+            let st = Stmt { kind: StmtKind::Expr(call), line: t.line, col: t.col };
+            let body = Block { stmts: vec![st], line: t.line };
+            let lam = Expr { kind: ExprKind::Lambda(Box::new(LambdaDecl { params: vec![], ret: None, body, idents })), line: t.line, col: t.col };
+            let f = Expr { kind: ExprKind::Ident("spawnTask".into()), line: t.line, col: t.col };
+            return Ok(Expr { kind: ExprKind::Call(Box::new(f), vec![lam]), line: t.line, col: t.col });
         }
         if self.eat_sym("-") {
             let e = self.unary()?;
