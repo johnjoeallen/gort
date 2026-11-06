@@ -1,0 +1,32 @@
+// four OS threads contend for one lock with holds long enough that spinning gives up: the waits block on a condition variable
+package t
+struct St { n: i64, bad: i64 }
+fn burn(k: i64): i64 {
+    var i = 0
+    var s = 0
+    while (i < k) { s = s + i % 7; i = i + 1 }
+    return s
+}
+fn w(st: Ref<St>) {
+    var i = 0
+    while (i < 60) {
+        sync (writes st) {
+            let before = st.n
+            let r = burn(40000)
+            if (st.n != before || r < 0) { st.bad = st.bad + 1 }
+            st.n = st.n + 1
+        }
+        i = i + 1
+    }
+}
+extern fn startThread(body: fn())
+extern fn joinAll()
+fn main() {
+    let st = new St { n: 0, bad: 0 }
+    startThread(fn() { w(st) })
+    startThread(fn() { w(st) })
+    startThread(fn() { w(st) })
+    startThread(fn() { w(st) })
+    joinAll()
+    sync (reads st) { println(st.n); println(st.bad) }
+}

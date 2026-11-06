@@ -1,0 +1,5 @@
+// error: `peek` is marked nopark but may park: it enters a sync block, which waits by parking
+package t
+struct S { n: i64 }
+fn[nopark] peek(s: Ref<S>): i64 { sync (reads s) { return s.n } }
+fn main() { println(peek(new S { n: 1 })) }

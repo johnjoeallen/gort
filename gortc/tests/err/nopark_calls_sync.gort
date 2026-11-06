@@ -1,0 +1,6 @@
+// error: `outer` is marked nopark but may park: it calls `peek`, which enters a sync block
+package t
+struct S { n: i64 }
+fn peek(s: Ref<S>): i64 { sync (reads s) { return s.n } }
+fn[nopark] outer(s: Ref<S>): i64 { return peek(s) }
+fn main() { println(outer(new S { n: 1 })) }

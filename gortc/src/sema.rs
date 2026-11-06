@@ -677,22 +677,69 @@ impl<'a> Sema<'a> {
                 break;
             }
         }
+        // A function that enters a `sync` block (or calls one that does) can wait for the lock, and the wait parks the vthread when it holds no
+        // other lock. That is not a park for the purpose of a `sync` body (a nested block, or a call that takes a lock the body may already hold,
+        // never parks: it blocks the thread instead), so it is tracked apart from `may`.
+        let mut locks: Vec<bool> = vec![false; n];
+        let mut lwhy: Vec<Option<String>> = vec![None; n];
         for i in 0..n {
-            self.prog.fns[i].may_park = may[i];
+            if let Some(b) = &self.prog.fns[i].body {
+                let mut has = false;
+                walk_stmts(b, &mut |s| {
+                    if matches!(s.kind, TS::Sync(..)) {
+                        has = true;
+                    }
+                });
+                if has {
+                    locks[i] = true;
+                    lwhy[i] = Some("it enters a sync block, which waits by parking".into());
+                }
+            }
+        }
+        loop {
+            let mut changed = false;
+            for i in 0..n {
+                if locks[i] {
+                    continue;
+                }
+                let Some(body) = &self.prog.fns[i].body else { continue };
+                let mut found: Option<String> = None;
+                visit_block(body, &mut |e| {
+                    visit_expr(e, &mut |x| {
+                        if let EK::Call(f, _) | EK::Method(f, _, _) = &x.kind {
+                            if locks[*f] && found.is_none() {
+                                found = Some(format!("it calls `{}`, which enters a sync block", self.prog.fns[*f].name));
+                            }
+                        }
+                    })
+                });
+                if let Some(w) = found {
+                    locks[i] = true;
+                    lwhy[i] = Some(w);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
         }
         for i in 0..n {
+            self.prog.fns[i].may_park = may[i] || locks[i];
+        }
+        let reason = |i: usize| -> String { why[i].clone().or_else(|| lwhy[i].clone()).unwrap_or_default() };
+        for i in 0..n {
             let f = &self.prog.fns[i];
-            if f.nopark && may[i] && !f.is_extern {
-                let msg = format!("`{}` is marked nopark but may park: {}", f.name, why[i].clone().unwrap_or_default());
+            if f.nopark && (may[i] || locks[i]) && !f.is_extern {
+                let msg = format!("`{}` is marked nopark but may park: {}", f.name, reason(i));
                 self.error(f.line, 1, msg);
             }
         }
         self.check_sync(&may);
         for si in 0..self.prog.structs.len() {
             if let Some(c) = self.prog.structs[si].cleanup {
-                if may[c] && !self.prog.fns[c].is_extern {
+                if (may[c] || locks[c]) && !self.prog.fns[c].is_extern {
                     let f = &self.prog.fns[c];
-                    let msg = format!("cleanup() of `{}` may park: {}", self.prog.structs[si].name, why[c].clone().unwrap_or_default());
+                    let msg = format!("cleanup() of `{}` may park: {}", self.prog.structs[si].name, reason(c));
                     self.error(f.line, 1, msg);
                 }
             }

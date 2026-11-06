@@ -1,0 +1,8 @@
+// error: cleanup() of `Res` may park: it enters a sync block, which waits by parking
+package t
+struct Shared { n: i64 }
+struct Res {
+    s: Ref<Shared>
+    fn cleanup() { sync (writes s) { s.n = 0 } }
+}
+fn main() { let r = Res { s: new Shared { n: 1 } } }

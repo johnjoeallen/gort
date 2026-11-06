@@ -10,6 +10,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/timerfd.h>
 #include <ucontext.h>
@@ -50,8 +51,15 @@ static G_Conn *conn_new(int fd) { struct rt_conn *c = gort_rt_new(sizeof *c); c-
 struct vt {
     ucontext_t ctx; void *stack; void (*body)(void *); void *env;
     struct vt *next; bool done, woken;
+    struct sched *home;          /* the worker this vthread lives on */
+    int pstate;                  /* lock parking: 0 running, 1 parked, 2 a wake arrived before the park */
+    struct vt *inext;            /* link in the home worker's inbox */
 };
-struct sched { int ep; struct vt *head, *tail, *cur; size_t nlive, nwait; ucontext_t home; };
+struct sched {
+    int ep; struct vt *head, *tail, *cur; size_t nlive, nwait; ucontext_t home;
+    /* vthreads woken from another thread (a lock handed over): they wait in the inbox until this worker drains it; the eventfd wakes epoll_wait */
+    pthread_mutex_t inbox_m; struct vt *inbox; int evfd; size_t nparked;
+};
 static __thread struct sched *S;
 #define STACK_SIZE (256 * 1024)
 
@@ -61,24 +69,65 @@ static void vt_new(void (*body)(void *), void *env) {
     struct vt *v = calloc(1, sizeof *v);
     v->stack = mmap(NULL, STACK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
     if (v->stack == MAP_FAILED) { perror("mmap"); exit(2); }
-    v->body = body; v->env = env;
+    v->body = body; v->env = env; v->home = S;
     getcontext(&v->ctx);
     v->ctx.uc_stack.ss_sp = v->stack; v->ctx.uc_stack.ss_size = STACK_SIZE; v->ctx.uc_link = &S->home;
     makecontext(&v->ctx, trampoline, 0);
     S->nlive++; ready(v);
 }
+static void drain_inbox(void) {
+    pthread_mutex_lock(&S->inbox_m);
+    struct vt *v = S->inbox; S->inbox = NULL;
+    pthread_mutex_unlock(&S->inbox_m);
+    while (v) { struct vt *n = v->inext; S->nparked--; ready(v); v = n; }   /* newest first: order among simultaneous wakes does not matter */
+}
 static void sched_run(void) {
     struct epoll_event evs[64];
-    while (S->nlive) {
+    for (;;) {
         struct vt *v;
+        drain_inbox();
         while ((v = S->head)) {
             S->head = v->next; if (!S->head) S->tail = NULL;
             S->cur = v; swapcontext(&S->home, &v->ctx); S->cur = NULL;
             if (v->done) { munmap(v->stack, STACK_SIZE); free(v); S->nlive--; }
+            drain_inbox();
         }
-        if (!S->nlive || !S->nwait) break;
+        if (!S->nlive) break;
+        if (S->head) continue;
+        if (!S->nwait && !S->nparked) break;
         int n = epoll_wait(S->ep, evs, 64, -1);
-        for (int i = 0; i < n; i++) { struct vt *w = evs[i].data.ptr; if (!w->woken) { w->woken = true; S->nwait--; ready(w); } }
+        for (int i = 0; i < n; i++) {
+            struct vt *w = evs[i].data.ptr;
+            if (!w) { uint64_t c; (void)!read(S->evfd, &c, sizeof c); continue; }       /* the inbox doorbell */
+            if (!w->woken) { w->woken = true; S->nwait--; ready(w); }
+        }
+    }
+}
+
+/* ---- parking on a lock (called by the generated program's sync blocks, gort_rt0.h) ---- */
+void *gort_rt_vt_self(void) { return S ? S->cur : NULL; }
+void gort_rt_vt_park(void *tok) {
+    struct vt *v = tok;
+    int exp = 0;
+    if (__atomic_compare_exchange_n(&v->pstate, &exp, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        S->nparked++;
+        swapcontext(&v->ctx, &S->home);                    /* the scheduler runs others until an unpark moves us from the inbox to the ready queue */
+    }
+    __atomic_store_n(&v->pstate, 0, __ATOMIC_RELEASE);     /* (state 2: the wake came first, so the park returns at once) */
+}
+void gort_rt_vt_unpark(void *tok) {
+    struct vt *v = tok;
+    for (;;) {
+        int s = __atomic_load_n(&v->pstate, __ATOMIC_ACQUIRE);
+        if (s == 2) return;
+        if (s == 0) { if (__atomic_compare_exchange_n(&v->pstate, &s, 2, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return; continue; }
+        if (!__atomic_compare_exchange_n(&v->pstate, &s, 0, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) continue;
+        struct sched *h = v->home;
+        pthread_mutex_lock(&h->inbox_m);
+        v->inext = h->inbox; h->inbox = v;
+        pthread_mutex_unlock(&h->inbox_m);
+        uint64_t one = 1; (void)!write(h->evfd, &one, sizeof one);
+        return;
     }
 }
 
@@ -204,10 +253,14 @@ static void *worker_main(void *p) {
     cpu_set_t set; CPU_ZERO(&set); CPU_SET(w->core % (size_t)sysconf(_SC_NPROCESSORS_ONLN), &set);
     pthread_setaffinity_np(pthread_self(), sizeof set, &set);   /* best effort */
     struct sched sc; memset(&sc, 0, sizeof sc); sc.ep = epoll_create1(0);
+    pthread_mutex_init(&sc.inbox_m, NULL);
+    sc.evfd = eventfd(0, EFD_NONBLOCK);
+    struct epoll_event bell = { .events = EPOLLIN, .data.ptr = NULL };
+    epoll_ctl(sc.ep, EPOLL_CTL_ADD, sc.evfd, &bell);
     S = &sc;
     vt_new(w->body, w->env);                                    /* the worker's root vthread */
     sched_run();
-    close(sc.ep); S = NULL;
+    close(sc.ep); close(sc.evfd); S = NULL;
     return NULL;
 }
 void gort_x_spawnWorker(size_t core, void *f, void *env) {

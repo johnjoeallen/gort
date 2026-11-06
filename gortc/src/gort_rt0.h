@@ -13,6 +13,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <sched.h>
+#include <pthread.h>
+#include <time.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,26 +39,44 @@ static inline size_t gort_chk(size_t i, size_t len) {
 }
 
 /* ---- counted objects ---- */
-/* ---- sync / mutate: a reader-writer spin lock in the object header, re-entrant within one call tree. A block never parks (the compiler
- * checks), so the OS thread that holds a lock is the only code running on it until the block ends: the thread is the identity of "this call
- * tree". Every block pushes an entry on a thread-local stack saying what it did, and the lock is released only when the entry that actually took
- * it is popped (the outermost block):
+/* ---- sync blocks: a reader-writer lock in the object header, re-entrant within one call tree, FIFO, and parking.
+ *
+ * Lock word: bit 31 a writer holds it, bit 30 somebody is queued, bits 0-29 the number of readers.
+ *
+ * A block never parks while it holds the lock (the compiler checks), so the OS thread that holds a lock is the only code running on it until
+ * the block ends: the thread is the identity of "this call tree". Every block pushes an entry on a thread-local stack saying what it did, and
+ * the lock is released only when the entry that actually took it is popped (the outermost block):
  *   not held yet                    -> take it (READ or WRITE), released on pop
- *   sync, already held (any mode)   -> nothing to do, nothing to release (NOOP)
- *   mutate, already held for mutate -> NOOP
- *   mutate, held for sync only      -> UPGRADE in place (waits until this thread is the only reader); pop drops back to a plain read
- * Two threads that both upgrade the same object wait for each other; the wait watchdog traps that, as it does two objects taken in opposite
- * orders. ---- */
+ *   a block, already held (any mode)-> nothing to do, nothing to release (NOOP)
+ *   writes, held for reads only     -> UPGRADE in place (waits until this thread is the only reader); pop drops back to a plain read
+ *
+ * Waiting. A busy lock is spun on briefly, then the acquirer queues FIFO (per lock, in a hashed table of buckets). A release with waiters queued
+ * WAKES the head of the queue (a writer alone, or the run of readers at the head); the woken waiter takes the lock itself when it runs, keeping its
+ * place in the queue if a newcomer got there first. The lock is never owned by a waiter that is not running. A vthread that holds no lock
+ * PARKS: the worker runs other vthreads until it is woken. A wait made while the thread already holds a lock (a nested block, the
+ * second object of a group) blocks the OS thread instead, since yielding would run other vthreads while this one still holds its locks; so does a
+ * wait made off a worker. Blocked waits give up after a while with a trap: that is two threads taking two objects in opposite orders, or two
+ * threads upgrading the same object. ---- */
 #define GORT_WRBIT 0x80000000u
+#define GORT_WAITBIT 0x40000000u
+#define GORT_CNTMASK 0x3fffffffu
 enum { GORT_H_READ, GORT_H_WRITE, GORT_H_NOOP, GORT_H_UP };
 typedef struct { void *obj; unsigned char kind; } gort_held;
 #define GORT_HELD_MAX 256
 static __thread gort_held gort_held_stk[GORT_HELD_MAX];
 static __thread unsigned gort_held_n;
-static void gort_lock_wait(unsigned *spins) {
-    if (++*spins > 100000000u) gort_trap("lock wait too long (another thread holds this object, two threads upgrade the same sync to a mutate, or two objects are locked in opposite orders)");
-    if ((*spins & 1023) == 0) sched_yield();
-}
+
+/* the runtime's side of parking (rt/posix.c); absent in a plain program, whose waits then block the thread */
+extern void *gort_rt_vt_self(void) __attribute__((weak));                  /* the vthread running now, or NULL off a worker */
+extern void gort_rt_vt_park(void *vt) __attribute__((weak));               /* return when gort_rt_vt_unpark(vt) has been called */
+extern void gort_rt_vt_unpark(void *vt) __attribute__((weak));             /* callable from any thread; a wake before the park is not lost */
+
+typedef struct gort_waiter { void *obj; int write; int signaled; void *vt; struct gort_waiter *next; pthread_cond_t cv; } gort_waiter;
+typedef struct { pthread_mutex_t m; gort_waiter *head, *tail; } gort_bucket;
+static gort_bucket gort_buckets[64];       /* all zero is a valid unlocked mutex on glibc */
+static size_t gort_stat_parked, gort_stat_blocked;
+static inline gort_bucket *gort_bucket_of(void *p) { return &gort_buckets[((uintptr_t)p >> 4) % 64]; }
+
 /* what this call tree holds on p: 0 nothing, 1 read, 2 write */
 static inline int gort_held_mode(void *p) {
     int m = 0;
@@ -64,38 +85,170 @@ static inline int gort_held_mode(void *p) {
     return m;
 }
 static inline void gort_held_push(void *p, unsigned char kind) {
-    if (gort_held_n == GORT_HELD_MAX) gort_trap("sync/mutate blocks nested too deeply");
+    if (gort_held_n == GORT_HELD_MAX) gort_trap("sync blocks nested too deeply");
     gort_held_stk[gort_held_n].obj = p; gort_held_stk[gort_held_n].kind = kind; gort_held_n++;
 }
 static inline unsigned char gort_held_pop(void *p) {
-    if (gort_held_n == 0 || gort_held_stk[gort_held_n - 1].obj != p) gort_trap("internal error: sync/mutate released out of order");
+    if (gort_held_n == 0 || gort_held_stk[gort_held_n - 1].obj != p) gort_trap("internal error: sync block released out of order");
     return gort_held_stk[--gort_held_n].kind;
 }
-static inline void gort_rd_lock(void *p) {
-    if (gort_held_mode(p)) { gort_held_push(p, GORT_H_NOOP); return; }
-    uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
+
+static bool gort_queued(gort_bucket *b, void *p) {
+    for (gort_waiter *x = b->head; x; x = x->next) if (x->obj == p) return true;
+    return false;
+}
+/* ---- the queue (bucket mutex held in all of these) ---- */
+/* Is x first in line for its lock? A writer: no other waiter for the object is ahead of it. A reader: no writer is ahead of it. */
+static bool gort_at_head(gort_bucket *b, gort_waiter *x) {
+    for (gort_waiter *w = b->head; w; w = w->next) {
+        if (w->obj != x->obj) continue;
+        if (w == x) return true;
+        if (w->write || x->write) return false;
+    }
+    return false;
+}
+static void gort_unqueue(gort_bucket *b, gort_waiter *x) {
+    gort_waiter **pp = &b->head, *prev = NULL;
+    while (*pp && *pp != x) { prev = *pp; pp = &(*pp)->next; }
+    if (*pp) { *pp = x->next; if (b->tail == x) b->tail = prev; }
+}
+/* A woken waiter takes the lock itself, if it is still free and it is first in line. It does NOT own the lock while it waits to be scheduled:
+ * a descheduled owner would stall every other worker. A newcomer may take a free lock first; the waiter then goes back to sleep and is woken
+ * again by the next release, still at the head of the queue. */
+static bool gort_try_take(gort_bucket *b, gort_waiter *x) {
+    void *p = x->obj;
+    uint32_t *l = &GORT_CTL(p)->lock;
+    if (!gort_at_head(b, x)) return false;
     for (;;) {
         uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
-        if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
-        gort_lock_wait(&spins);
+        if (x->write ? (v & (GORT_WRBIT | GORT_CNTMASK)) != 0 : (v & GORT_WRBIT) != 0) return false;
+        if (__atomic_compare_exchange_n(l, &v, x->write ? (v | GORT_WRBIT) : v + 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
     }
+    gort_unqueue(b, x);
+    bool more = false;
+    for (gort_waiter *w = b->head; w; w = w->next) if (w->obj == p) { more = true; break; }
+    if (!more) __atomic_fetch_and(l, ~GORT_WAITBIT, __ATOMIC_ACQ_REL);
+    return true;
+}
+static void gort_signal(gort_waiter *x) {
+    if (x->signaled) return;
+    x->signaled = 1;
+    if (x->vt) gort_rt_vt_unpark(x->vt); else pthread_cond_signal(&x->cv);
+}
+/* the lock was released with waiters queued: wake the head (a writer alone, or the run of readers at the head) */
+static void gort_wake_head(gort_bucket *b, void *p) {
+    gort_waiter *w = b->head;
+    while (w && w->obj != p) w = w->next;
+    if (!w) { __atomic_fetch_and(&GORT_CTL(p)->lock, ~GORT_WAITBIT, __ATOMIC_ACQ_REL); return; }
+    if (w->write) { gort_signal(w); return; }
+    for (; w; w = w->next) { if (w->obj != p) continue; if (w->write) break; gort_signal(w); }
+}
+
+/* Spin before queueing: hold times are short (a body cannot park), so a lock that is busy now is usually free within a few hundred cycles, and a
+ * park-and-wake costs system calls. */
+#ifndef GORT_SPIN
+#define GORT_SPIN 2000
+#endif
+static inline void gort_cpu_relax(void) {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ __volatile__("pause");
+#elif defined(__aarch64__)
+    __asm__ __volatile__("yield");
+#endif
+}
+static void gort_lock_slow(void *p, int w) {
+    gort_bucket *b = gort_bucket_of(p);
+    uint32_t *l = &GORT_CTL(p)->lock;
+    for (int i = 0; i < GORT_SPIN; i++) {
+        uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+        if ((w ? (v & (GORT_WRBIT | GORT_CNTMASK)) == 0 : (v & GORT_WRBIT) == 0) &&
+            __atomic_compare_exchange_n(l, &v, w ? (v | GORT_WRBIT) : v + 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        gort_cpu_relax();
+    }
+    gort_waiter x; x.obj = p; x.write = w; x.signaled = 0; x.next = NULL;
+    void *vt = (gort_held_n == 0 && gort_rt_vt_self) ? gort_rt_vt_self() : NULL;   /* park only while holding nothing */
+    x.vt = vt;
+    pthread_cond_init(&x.cv, NULL);
+    pthread_mutex_lock(&b->m);
+    if (b->tail) b->tail->next = &x; else b->head = &x;
+    b->tail = &x;
+    __atomic_fetch_or(l, GORT_WAITBIT, __ATOMIC_ACQ_REL);
+    bool counted = false;
+    struct timespec dl; clock_gettime(CLOCK_REALTIME, &dl); dl.tv_sec += 5;
+    while (!gort_try_take(b, &x)) {                        /* (also covers: it was released before the bit was set) */
+        x.signaled = 0;
+        if (vt) {
+            if (!counted) { __atomic_fetch_add(&gort_stat_parked, 1, __ATOMIC_RELAXED); counted = true; }
+            pthread_mutex_unlock(&b->m);
+            while (!__atomic_load_n(&x.signaled, __ATOMIC_ACQUIRE)) gort_rt_vt_park(vt);
+            pthread_mutex_lock(&b->m);
+        } else {
+            if (!counted) { __atomic_fetch_add(&gort_stat_blocked, 1, __ATOMIC_RELAXED); counted = true; }
+            if (pthread_cond_timedwait(&x.cv, &b->m, &dl) != 0 && !x.signaled) {
+                gort_unqueue(b, &x);                       /* give up: leave the queue, then say why */
+                pthread_mutex_unlock(&b->m);
+                gort_trap("lock wait too long (another thread holds this object, two threads upgrade the same lock, or two objects are locked in opposite orders)");
+            }
+        }
+    }
+    pthread_mutex_unlock(&b->m);
+    pthread_cond_destroy(&x.cv);
+}
+static void gort_release_slow(void *p) {
+    gort_bucket *b = gort_bucket_of(p);
+    pthread_mutex_lock(&b->m);
+    uint32_t v = __atomic_load_n(&GORT_CTL(p)->lock, __ATOMIC_ACQUIRE);
+    if (!(v & (GORT_WRBIT | GORT_CNTMASK))) gort_wake_head(b, p);   /* still free (a newcomer may have taken it already) */
+    pthread_mutex_unlock(&b->m);
+}
+
+static inline void gort_rd_lock(void *p) {
+    if (gort_held_mode(p)) { gort_held_push(p, GORT_H_NOOP); return; }
+    uint32_t *l = &GORT_CTL(p)->lock;
+    uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+    if (!(v & GORT_WRBIT) && __atomic_compare_exchange_n(l, &v, v + 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_READ); return; }
+    gort_lock_slow(p, 0);                       /* returns holding it */
     gort_held_push(p, GORT_H_READ);
 }
 static inline void gort_rd_unlock(void *p) {
-    if (gort_held_pop(p) == GORT_H_READ) __atomic_fetch_sub(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE);
+    if (gort_held_pop(p) != GORT_H_READ) return;
+    uint32_t v = __atomic_fetch_sub(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE);
+    if (((v - 1) & (GORT_CNTMASK | GORT_WAITBIT)) == GORT_WAITBIT) gort_release_slow(p);
 }
 static inline void gort_wr_lock(void *p) {
     int m = gort_held_mode(p);
     if (m == 2) { gort_held_push(p, GORT_H_NOOP); return; }
-    uint32_t *l = &GORT_CTL(p)->lock; unsigned spins = 0;
-    uint32_t from = m == 1 ? 1 : 0;                /* held for sync: this thread is one reader; upgrade when it is the only one */
-    for (;;) {
-        uint32_t v = from;
-        if (__atomic_compare_exchange_n(l, &v, GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
-        gort_lock_wait(&spins);
+    uint32_t *l = &GORT_CTL(p)->lock;
+    if (m == 1) {                               /* held for reading by this thread: upgrade when it is the only reader */
+        unsigned spins = 0;
+        for (;;) {
+            uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+            if (!(v & GORT_WRBIT) && (v & GORT_CNTMASK) == 1 && __atomic_compare_exchange_n(l, &v, (v & GORT_WAITBIT) | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
+            if (++spins > 100000000u) gort_trap("lock wait too long (two threads upgrade the same lock)");
+            if ((spins & 1023) == 0) sched_yield();
+        }
+        gort_held_push(p, GORT_H_UP);
+        return;
     }
-    gort_held_push(p, m == 1 ? GORT_H_UP : GORT_H_WRITE);
+    uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+    if (!(v & (GORT_WRBIT | GORT_CNTMASK)) && __atomic_compare_exchange_n(l, &v, v | GORT_WRBIT, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { gort_held_push(p, GORT_H_WRITE); return; }
+    gort_lock_slow(p, 1);
+    gort_held_push(p, GORT_H_WRITE);
 }
+static inline void gort_wr_unlock(void *p) {
+    unsigned char k = gort_held_pop(p);
+    uint32_t *l = &GORT_CTL(p)->lock;
+    if (k == GORT_H_WRITE) {
+        uint32_t v = __atomic_fetch_and(l, ~GORT_WRBIT, __ATOMIC_RELEASE);
+        if (v & GORT_WAITBIT) gort_release_slow(p);
+    } else if (k == GORT_H_UP) {                /* back to the plain read it was (one reader: this thread) */
+        for (;;) {
+            uint32_t v = __atomic_load_n(l, __ATOMIC_RELAXED);
+            if (__atomic_compare_exchange_n(l, &v, (v & GORT_WAITBIT) | 1, 1, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) break;
+        }
+    }
+}
+
 /* several objects in one block, each with its own mode: lock them in address order, so two threads naming the same objects in different
  * orders cannot deadlock; unlock in the reverse order. `w[i]` is 1 for an object that is written. */
 static inline void gort_lock_group(void **a, unsigned char *w, size_t n) {
@@ -106,15 +259,8 @@ static inline void gort_lock_group(void **a, unsigned char *w, size_t n) {
     }
     for (size_t i = 0; i < n; i++) { if (w[i]) gort_wr_lock(a[i]); else gort_rd_lock(a[i]); }
 }
-static void gort_wr_unlock(void *p);
-static void gort_rd_unlock(void *p);
 static inline void gort_unlock_group(void **a, unsigned char *w, size_t n) {
     for (size_t i = n; i-- > 0;) { if (w[i]) gort_wr_unlock(a[i]); else gort_rd_unlock(a[i]); }
-}
-static inline void gort_wr_unlock(void *p) {
-    unsigned char k = gort_held_pop(p);
-    if (k == GORT_H_WRITE) __atomic_store_n(&GORT_CTL(p)->lock, 0, __ATOMIC_RELEASE);
-    else if (k == GORT_H_UP) __atomic_store_n(&GORT_CTL(p)->lock, 1, __ATOMIC_RELEASE);   /* back to the plain read it was */
 }
 
 static inline void *gort_new(size_t size) {
