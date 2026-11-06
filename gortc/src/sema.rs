@@ -2060,8 +2060,32 @@ impl<'a> Sema<'a> {
                             continue;
                         }
                     }
-                    let sn = self.prog.structs[sid].name.clone();
-                    self.error(line, col, format!("missing field `{}` in `{}`", fname, sn));
+                    // anything else left out starts empty: zero, false, null, "", an empty array, a plain value of defaults
+                    let v = match &fty {
+                        Ty::Bool | Ty::F64 | Ty::Int(_) | Ty::Dur | Ty::Inst | Ty::Fn(..) | Ty::Opt(_) | Ty::Ref(_) => Some(self.zero(&fty, line)),
+                        Ty::Str => {
+                            let i = self.intern(b"");
+                            Some(typed(EK::StrLit(i), Ty::Str, line))
+                        }
+                        Ty::Arr(el) => {
+                            let n = typed(EK::Int(0), Ty::Int(IntTy::Usize), line);
+                            Some(typed(EK::NewArr((**el).clone(), Box::new(n)), fty.clone(), line))
+                        }
+                        Ty::Struct(t) if self.prog.structs[*t].variants.is_empty() && !self.prog.structs[*t].is_extern => {
+                            let t = *t;
+                            let fs = self.lower_fields(cx, t, &[], line, col);
+                            Some(typed(EK::StructLit(t, fs), fty.clone(), line))
+                        }
+                        Ty::Struct(_) => Some(self.zero(&fty, line)),
+                        _ => None,
+                    };
+                    match v {
+                        Some(v) => out.push((idx, v)),
+                        None => {
+                            let sn = self.prog.structs[sid].name.clone();
+                            self.error(line, col, format!("missing field `{}` in `{}`", fname, sn));
+                        }
+                    }
                 }
             }
         }

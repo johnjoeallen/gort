@@ -1,0 +1,13 @@
+package t
+struct Inner { a: i64, ok: bool }
+struct Node { n: i64 }
+struct S { count: u64, flag: bool, name: String, data: Array<u8>, next: Ref<Node>, opt: i64?, inner: Inner }
+fn main() {
+    let s = new S {}
+    println(s.count)
+    println(s.flag)
+    println(s.name.length)
+    println(s.data.length)
+    println(s.opt == null)
+    println(s.inner.a)
+}

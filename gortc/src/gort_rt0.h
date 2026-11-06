@@ -42,7 +42,7 @@ static inline void *gort_new(size_t size) {
     gort_live++;
     return c + 1;
 }
-static inline void *gort_retain(void *p) { GORT_CTL(p)->strong++; return p; }
+static inline void *gort_retain(void *p) { if (p) GORT_CTL(p)->strong++; return p; }
 static inline bool gort_release_last(void *p) { return --GORT_CTL(p)->strong == 0; }
 static inline void gort_free(void *p) { free(GORT_CTL(p)); gort_live--; }
 

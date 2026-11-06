@@ -281,7 +281,7 @@ impl<'a> Gen<'a> {
                 out.push_str("}\n");
             }
             out.push_str(&format!("static void G_{}_release(G_{}* p) {{\n", n, n));
-            out.push_str("    if (gort_release_last(p)) {\n");
+            out.push_str("    if (p && gort_release_last(p)) {\n");
             if s.needs_drop {
                 out.push_str(&format!("        G_{}_drop(p);\n", n));
             }

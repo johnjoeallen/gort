@@ -58,8 +58,8 @@ a mutable subject (the note in `gort/http/body.gort`), a union layout that overl
 | generics: `Ring<T>`, `Task<T>`, `Mailbox<T>` (explicit arguments) | pipeline, runtime | done (structs and enums, by monomorphisation); inference from arguments, fields or the expected type done; `Map<K,V>` is not defined anywhere yet |
 | arrays of optionals and plain values, `T?[](n)`, `u8[N]` | ring, runtime | done |
 | varargs `T...` | leaves | done (the extra arguments become an array) |
-| `T?&` (borrowed), `Range` | leaves | `&` parsed as the plain type. `Range { lo, hi }` is a prelude struct; `a..b` and `Range(a, b)` build one. `Array` is a language element: `capacity()` works (the length, for now); `grow()` and `moveWithin(range, to)` wait for growable arrays |
-| `Array<T>()`, `grow()`, `moveWithin`, `[a, b]` | reader, server | done: `Array<T>()` is a growable array of 256 elements; `grow()` doubles it (trap if shared or viewed); `moveWithin(range, to)` is a memmove; `[..]` literals take any value element, including structs holding Strings; `new T[n]` still needs a zero |
+| `T?&` (borrowed), `Range` | leaves | `&` parsed as the plain type. `Range { lo, hi }` is a prelude struct; `a..b` and `Range(a, b)` build one. `Array` is a language element: `length` is the elements in use and `capacity()` the elements allocated; indexing and slicing are checked against the capacity |
+| `Array<T>()`, `grow()`, `moveWithin`, `[a, b]` | reader, server | done: `Array<T>()` starts empty (length 0, capacity 0); `grow()` goes to 256 and then doubles (trap if shared or viewed); `append(x)` and `append(array)` add numbers after the used length; `moveWithin(range, to)` is a memmove; `[..]` literals take any value element, including structs holding Strings; `new T[n]` still needs a zero |
 | `json.parse<T>(bytes[, limits])` | server | done as a built-in generic, like serde: the compiler writes a decoder per struct T (ints with range checks, bool, f64, String, optionals, nested structs; unknown keys skipped; missing, duplicate, over-deep or over-long input throws the prelude's `JsonError`). `JsonLimits { maxDepth, maxStringBytes }` is in the prelude. `json.stream<T>`, arrays and enums to do; `User` and `Row` are not defined in `gort/` |
 | `var x: T?`, `fn[yield]`, `while (c) stmt` | server, reader | done (`var x: T?` starts as null; the `[yield]` attribute is parsed and ignored until slice 2) |
 | `scope { }`, `mutate(x) { }`, `sync(x) { }`, `spawn call` | server, store | stubs, to be replaced by slices 2 and 3: the body runs in place, `spawn f(x)` just calls `f(x)`. No parking, no children, no locks yet |
@@ -73,7 +73,7 @@ a mutable subject (the note in `gort/http/body.gort`), a union layout that overl
 | `for (x in it)` | body, response, server | done for a `Range` and an `Array` (desugared to a `while`; `continue` is safe); the `lines().skip(n)` iterators to do |
 | function types `fn(..): T throws E`, `fn[nopark]` | route, batching | done: a plain pointer (no closures). A function name is a value; a non-throwing function given to a throwing type goes through a generated thunk. `fn` types may be enum payloads and fields |
 | slices `a[i..j]` | batching, pipeline, reader, io | done (views) |
-| `for x in iter`, growable `Array<u8>`, `Array<u8>` methods | response, body, reader | to do |
+| fields left out of `new T {..}` / `T {..}` | state types | done: scalars are zero, `bool` false, `String` empty, `Array` empty, optionals and `Ref` null (a `Ref<Map>` is a new empty map), a plain struct has its own defaults |
 | ternary `c ? a : b` | pipeline, reader, db | done (`null` in a branch makes the result optional) |
 | `mutate`, `sync`, `scope`, `spawn` | store, server | slice 2 and 3 |
 
