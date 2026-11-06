@@ -1,0 +1,11 @@
+// the block keeps its object alive even if the variable it named is pointed elsewhere inside the body
+package t
+struct A { n: i64 }
+fn main() {
+    var x: Ref<A> = new A { n: 1 }
+    sync (writes x) {
+        x = new A { n: 5 }
+        println(x.n)
+    }
+    println(x.n)
+}

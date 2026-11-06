@@ -932,11 +932,17 @@ impl<'a> FnGen<'a> {
                     let sn = self.prog.structs[*sid].name.clone();
                     self.push_frame();
                     let v = self.expr(target);
-                    let o = self.copy_value(v, &target.ty);
                     let r = self.tmp();
-                    self.line(format!("G_{}* {} = {};", sn, r, o));
-                    self.pop_frame();
-                    self.scopes.last_mut().unwrap().push(format!("G_{}_release({});", sn, r));
+                    // A variable that the body never assigns keeps its object alive through the block by itself: no count of our own is needed.
+                    if sync_var(target).map_or(false, |id| !assigns_var(body, id)) && v.own.is_none() {
+                        self.line(format!("G_{}* {} = {};", sn, r, v.c));
+                        self.pop_frame();
+                    } else {
+                        let o = self.copy_value(v, &target.ty);
+                        self.line(format!("G_{}* {} = {};", sn, r, o));
+                        self.pop_frame();
+                        self.scopes.last_mut().unwrap().push(format!("G_{}_release({});", sn, r));
+                    }
                     let handled = self.try_stack.iter().any(|t| t.catches_null) || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
                     if handled {
                         self.null_throw(format!("!{}", r));
@@ -1967,4 +1973,26 @@ fn eq_defs(prog: &Program) -> String {
         }
     }
     out
+}
+
+/// The variable a `sync` target names, if it is just a variable (or an object variable used as a reference).
+fn sync_var(e: &TExpr) -> Option<VarId> {
+    match &e.kind {
+        EK::Var(id) | EK::ObjRef(id) => Some(*id),
+        EK::Deref(inner) => sync_var(inner),
+        _ => None,
+    }
+}
+
+/// Does the block assign the variable itself (not a field of its object)?
+fn assigns_var(b: &TBlock, id: VarId) -> bool {
+    let mut hit = false;
+    crate::sema::walk_stmts(b, &mut |s| {
+        if let TS::Assign(l, _) | TS::AssignOp(_, l, _) = &s.kind {
+            if sync_var(l) == Some(id) {
+                hit = true;
+            }
+        }
+    });
+    hit
 }
