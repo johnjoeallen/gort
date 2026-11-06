@@ -332,6 +332,9 @@ impl<'a> Sema<'a> {
         }
         self.compute_borrows();
         self.compute_effects();
+        for fi in crate::share::check(&self.prog) {
+            self.diags.push(Diag { file: fi.file, line: fi.line, col: 1, msg: fi.msg });
+        }
         // main: no parameters, or one config struct whose fields (numbers, bool, String) are set from `--name=value`
         if let Some(&m) = self.fn_ids.get("main") {
             let (line, ret, ptys) = {
@@ -691,39 +694,10 @@ impl<'a> Sema<'a> {
         }
     }
 
-    /// Writes of parameters: `writes[f][k]` is true if function f assigns through, grows, or passes on for writing its parameter k.
-    fn param_writes(&self) -> Vec<Vec<bool>> {
-        let n = self.prog.fns.len();
-        // index 0 is the receiver (`self`), index k + 1 is parameter k
-        let mut w: Vec<Vec<bool>> = self.prog.fns.iter().map(|f| vec![false; f.params.len() + 1]).collect();
-        loop {
-            let mut changed = false;
-            for i in 0..n {
-                let f = &self.prog.fns[i];
-                let Some(body) = &f.body else { continue };
-                for k in 0..=f.params.len() {
-                    if w[i][k] {
-                        continue;
-                    }
-                    let kind = if k == 0 { EK::SelfPlace } else { EK::Var(f.params[k - 1]) };
-                    let pv = TExpr { kind, ty: Ty::Unit, line: 0, lit: false };
-                    if block_writes(body, &pv, &w) {
-                        w[i][k] = true;
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        w
-    }
-
     /// The rules for `sync` / `mutate` blocks: the body may not park; a `sync` body may not write through its object; a block may not lock
     /// the object it is already inside.
     fn check_sync(&mut self, may: &[bool]) {
-        let writes = self.param_writes();
+        let writes = param_writes(&self.prog);
         let mut errs: Vec<(u32, String)> = Vec::new();
         for f in &self.prog.fns {
             let Some(body) = &f.body else { continue };
@@ -873,6 +847,7 @@ impl<'a> Sema<'a> {
             vars: cx.vars,
             body: Some(TBlock { stmts: vec![TStmt { kind: TS::SetGlobal(g, v), line: at.0 }] }),
             line: at.0,
+            file: self.cur_file.clone(),
         });
         self.prog.global_inits.push(fid);
     }
@@ -922,6 +897,7 @@ impl<'a> Sema<'a> {
             vars: Vec::new(),
             body: None,
             line: fd.line,
+            file: self.cur_file.clone(),
         });
         match owner {
             Some(o) => self.prog.structs[o].methods.push((fd.name.clone(), id)),
@@ -3206,13 +3182,42 @@ fn block_breaks(b: &TBlock) -> bool {
     })
 }
 
+/// Writes of parameters: `writes[f][k]` is true if function f assigns through, grows, or passes on for writing its parameter k.
+pub(crate) fn param_writes(prog: &Program) -> Vec<Vec<bool>> {
+    let n = prog.fns.len();
+    // index 0 is the receiver (`self`), index k + 1 is parameter k
+    let mut w: Vec<Vec<bool>> = prog.fns.iter().map(|f| vec![false; f.params.len() + 1]).collect();
+    loop {
+        let mut changed = false;
+        for i in 0..n {
+            let f = &prog.fns[i];
+            let Some(body) = &f.body else { continue };
+            for k in 0..=f.params.len() {
+                if w[i][k] {
+                    continue;
+                }
+                let kind = if k == 0 { EK::SelfPlace } else { EK::Var(f.params[k - 1]) };
+                let pv = TExpr { kind, ty: Ty::Unit, line: 0, lit: false };
+                if block_writes(body, &pv, &w) {
+                    w[i][k] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    w
+}
+
 
 /// Are `a` and `b` the same place (the same variable, or the same field of the same place)?
-fn same_place(a: &TExpr, b: &TExpr) -> bool {
+pub(crate) fn same_place(a: &TExpr, b: &TExpr) -> bool {
     match (&a.kind, &b.kind) {
         (EK::Var(x), EK::Var(y)) => x == y,
         (EK::SelfPlace, EK::SelfPlace) => true,
-        (EK::ObjRef(x), EK::ObjRef(y)) | (EK::ObjPlace(x), EK::ObjPlace(y)) => x == y,
+        (EK::ObjRef(x), EK::ObjRef(y)) | (EK::ObjPlace(x), EK::ObjPlace(y)) | (EK::ObjRef(x), EK::ObjPlace(y)) | (EK::ObjPlace(x), EK::ObjRef(y)) => x == y,
         (EK::Field(x, f), EK::Field(y, g)) => f == g && same_place(x, y),
         (EK::Deref(x), EK::Deref(y)) => same_place(x, y),
         _ => false,
@@ -3221,7 +3226,7 @@ fn same_place(a: &TExpr, b: &TExpr) -> bool {
 
 /// Does the place expression `w` reach the object `t` points to? That is: `t` itself (a callee may write through it), or a field,
 /// element or target below it.
-fn reaches(w: &TExpr, t: &TExpr, below_only: bool) -> bool {
+pub(crate) fn reaches(w: &TExpr, t: &TExpr, below_only: bool) -> bool {
     if !below_only && same_place(w, t) {
         return true;
     }
@@ -3232,7 +3237,7 @@ fn reaches(w: &TExpr, t: &TExpr, below_only: bool) -> bool {
 }
 
 /// Does the block write through the object that `t` (a `Ref` place) points to? `writes[f][k]` says which parameters a function writes.
-fn block_writes(b: &TBlock, t: &TExpr, writes: &[Vec<bool>]) -> bool {
+pub(crate) fn block_writes(b: &TBlock, t: &TExpr, writes: &[Vec<bool>]) -> bool {
     let mut hit = false;
     walk_stmts(b, &mut |s| match &s.kind {
         TS::Assign(w, _) | TS::AssignOp(_, w, _) => {
@@ -3267,13 +3272,13 @@ fn block_writes(b: &TBlock, t: &TExpr, writes: &[Vec<bool>]) -> bool {
 }
 
 /// Every statement of the block, nested ones included, outermost first.
-fn walk_stmts(b: &TBlock, f: &mut dyn FnMut(&TStmt)) {
+pub(crate) fn walk_stmts(b: &TBlock, f: &mut dyn FnMut(&TStmt)) {
     for s in &b.stmts {
         walk_stmt(s, f);
     }
 }
 
-fn walk_stmt(s: &TStmt, f: &mut dyn FnMut(&TStmt)) {
+pub(crate) fn walk_stmt(s: &TStmt, f: &mut dyn FnMut(&TStmt)) {
     f(s);
     match &s.kind {
         TS::If(_, t, e) => {
@@ -3328,13 +3333,13 @@ fn sync_walk_stmt<'a>(s: &'a TStmt, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut
 }
 
 /// Calls `f` on every root expression of every statement in the block (nested blocks included).
-fn visit_block(b: &TBlock, f: &mut dyn FnMut(&TExpr)) {
+pub(crate) fn visit_block(b: &TBlock, f: &mut dyn FnMut(&TExpr)) {
     for s in &b.stmts {
         visit_stmt(s, f);
     }
 }
 
-fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
+pub(crate) fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
     match &s.kind {
         TS::Let(_, e) | TS::Expr(e) | TS::SetGlobal(_, e) => f(e),
         TS::LetObj(_, _, fs) | TS::Throw(_, fs) => {
@@ -3359,7 +3364,8 @@ fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
         }
         TS::Loop(b) | TS::Block(b) => visit_block(b, f),
         TS::Sync(_, t, b) => {
-            f(t);
+            // naming an object to lock it only reads through it; it does not let the handle escape
+            f(&TExpr { kind: EK::Deref(Box::new(t.clone())), ty: Ty::Unit, line: t.line, lit: false });
             visit_block(b, f);
         }
         TS::Labeled(i) => visit_stmt(i, f),
@@ -3374,7 +3380,7 @@ fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
     }
 }
 
-fn children(e: &TExpr) -> Vec<&TExpr> {
+pub(crate) fn children(e: &TExpr) -> Vec<&TExpr> {
     match &e.kind {
         EK::Field(a, _) | EK::Deref(a) | EK::Borrow(a) | EK::BoxVal(a) | EK::Len(a) | EK::ExternFn(a) | EK::Unary(_, a) | EK::Cast(a) | EK::Some(a) | EK::IsNull(a) | EK::Unwrap(a) | EK::NewArr(_, a) => vec![&**a],
         EK::Index(a, b) | EK::Binary(_, a, b) => vec![&**a, &**b],
@@ -3395,7 +3401,7 @@ fn children(e: &TExpr) -> Vec<&TExpr> {
 }
 
 /// Calls `f` on `e` and every expression inside it.
-fn visit_expr(e: &TExpr, f: &mut dyn FnMut(&TExpr)) {
+pub(crate) fn visit_expr(e: &TExpr, f: &mut dyn FnMut(&TExpr)) {
     f(e);
     for c in children(e) {
         visit_expr(c, f);
@@ -3404,10 +3410,10 @@ fn visit_expr(e: &TExpr, f: &mut dyn FnMut(&TExpr)) {
 
 /// Does the handle held by variable `pid` get used in `e` in a way that lets it outlive the call?
 /// Fine: reading through it, comparing it, giving it to a parameter that itself only borrows.
-fn escapes(e: &TExpr, pid: VarId, ok_here: bool, borrowed: &[Vec<bool>]) -> bool {
-    let is_p = |x: &TExpr| matches!(x.kind, EK::Var(v) if v == pid);
+pub(crate) fn escapes(e: &TExpr, pid: VarId, ok_here: bool, borrowed: &[Vec<bool>]) -> bool {
+    let is_p = |x: &TExpr| matches!(x.kind, EK::Var(v) | EK::ObjRef(v) if v == pid);
     match &e.kind {
-        EK::Var(v) if *v == pid => !ok_here,
+        EK::Var(v) | EK::ObjRef(v) if *v == pid => !ok_here,
         EK::Deref(a) => escapes(a, pid, true, borrowed),
         EK::Binary(BinOp::Eq | BinOp::Ne, a, b) => escapes(a, pid, true, borrowed) || escapes(b, pid, true, borrowed),
         EK::Call(fid, args) => args.iter().enumerate().any(|(i, a)| escapes(a, pid, is_p(a) && borrowed[*fid].get(i).copied().unwrap_or(false), borrowed)),

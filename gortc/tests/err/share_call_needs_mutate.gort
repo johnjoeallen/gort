@@ -1,0 +1,8 @@
+// error: passing it to `setN`, which writes through it, needs mutate(h.s): the object is not local and is mutable
+package t
+struct S { n: i64 }
+fn setN(s: Ref<S>) { s.n = 5 }
+fn viaParam(s: Ref<S>) { setN(s) }          // fine here: a parameter, the caller holds the block
+fn viaGlobalField(h: Ref<H>) { setN(h.s) }
+struct H { s: Ref<S> }
+fn main() {}

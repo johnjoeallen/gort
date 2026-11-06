@@ -323,6 +323,7 @@ pub struct FnInfo {
     pub vars: Vec<VarInfo>,
     pub body: Option<TBlock>,
     pub line: u32,
+    pub file: String,
 }
 
 #[derive(Clone, Debug, Default)]

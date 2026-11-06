@@ -1,0 +1,19 @@
+package t
+struct Cell { v: i64 }
+struct Pair { a: Ref<Cell>, b: Ref<Cell> }
+fn setV(c: Ref<Cell>, x: i64) { c.v = x }                 // a parameter: the caller holds whatever block is needed
+fn readV(c: Ref<Cell>): i64 { return c.v }
+fn locked(c: Ref<Cell>): i64 { sync(c) { return c.v } }   // or the callee takes its own: then callers need nothing
+fn main() {
+    let c = new Cell { v: 1 }
+    c.v = 2                                               // local so far: no block
+    setV(c, 3)
+    println(readV(c))
+    println(locked(c))
+    let p = new Pair { a: new Cell { v: 10 }, b: new Cell { v: 20 } }
+    p.a.v = p.a.v + p.b.v                                 // fields of a local object are local
+    println(p.a.v)
+    var plain = Cell { v: 5 }                             // a plain value: never shared
+    setV(plain, 6)
+    println(plain.v)
+}

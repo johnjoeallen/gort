@@ -1,0 +1,11 @@
+// error: reading `Counter.n` needs sync(c): the object is not local and is mutable
+package t
+struct Counter { n: i64 }
+extern fn spawnTask(body: fn())
+fn bump(c: Ref<Counter>) { mutate(c) { c.n = c.n + 1 } }
+fn main() {
+    let c = new Counter { n: 0 }
+    println(c.n)                       // fine: nobody else has it yet
+    spawn bump(c)                      // published here
+    println(c.n)                       // not fine any more
+}

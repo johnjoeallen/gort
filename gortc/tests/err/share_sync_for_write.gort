@@ -1,0 +1,8 @@
+// error: this sync block writes through its object: it needs mutate, have sync
+// error: writing `S.n` needs mutate(h.s), have sync(h.s)
+package t
+struct S { n: i64 }
+fn f(s: Ref<S>) { s.n = 1 }
+struct H { s: Ref<S> }
+fn g(h: Ref<H>) { sync(h.s) { h.s.n = 2 } }
+fn main() {}
