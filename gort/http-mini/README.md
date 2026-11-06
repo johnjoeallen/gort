@@ -16,5 +16,7 @@ curl -i http://127.0.0.1:8080/        # 200 hello
 curl -i http://127.0.0.1:8080/nope    # 404
 ```
 
-`gortc/rt/posix.c` is the C side of the `extern` declarations: blocking sockets, one thread per worker, and `spawn call` is `spawnTask(fn() { call })`,
-one OS thread per connection (vthreads and parking are still to come). Reference counts are atomic, so `--workers=N` is fine.
+`gortc/rt/posix.c` is the C side of the `extern` declarations. Each worker is an OS thread with an epoll scheduler; `spawn call` is
+`spawnTask(fn() { call })`, which makes a vthread (a coroutine on its own 256 KB stack, pinned to that worker). `accept`, `recv`, `send`,
+`waitReadable` and `lingerClose` park the vthread while the socket is not ready, so one worker serves many connections. Reference counts
+are atomic, so `--workers=N` is fine. The compiler does no effect inference or frame building yet: the vthreads are stackful coroutines in the runtime.
