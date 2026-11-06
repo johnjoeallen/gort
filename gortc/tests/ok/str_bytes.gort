@@ -1,0 +1,7 @@
+package t
+fn size(b: Array<u8>): usize { return b.length }
+fn main() {
+    println(size("hello\r\n"))
+    let b: Array<u8> = "abc"
+    println(b[1])
+}

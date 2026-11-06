@@ -1682,6 +1682,13 @@ impl<'a> Sema<'a> {
             self.check_copyable(&te, at);
             return te;
         }
+        // a string literal given where bytes are wanted: its bytes, as a fresh array
+        if let (EK::StrLit(_), Ty::Arr(el)) = (&te.kind, target) {
+            if **el == Ty::Int(IntTy::U8) {
+                let line = te.line;
+                return typed(EK::RtCall("toBytes", vec![te]), target.clone(), line);
+            }
+        }
         // optionals: null, a present value, a checked unwrap
         if te.ty == Ty::Null {
             if let Ty::Opt(_) = target {

@@ -73,6 +73,7 @@ a mutable subject (the note in `gort/http/body.gort`), a union layout that overl
 | `for (x in it)` | body, response, server | done for a `Range` and an `Array` (desugared to a `while`; `continue` is safe); the `lines().skip(n)` iterators to do |
 | function types `fn(..): T throws E`, `fn[nopark]` | route, batching | done: a plain pointer (no closures). A function name is a value; a non-throwing function given to a throwing type goes through a generated thunk. `fn` types may be enum payloads and fields |
 | slices `a[i..j]` | batching, pipeline, reader, io | done (views) |
+| a string literal where `Array<u8>` is wanted | reader | done: the literal's bytes as a fresh array (a literal only, for now) |
 | fields left out of `new T {..}` / `T {..}` | state types | done: scalars are zero, `bool` false, `String` empty, `Array` empty, optionals null, including `Ref<T>?`; a plain `Ref<T>` field cannot be left out (except `Ref<Map>`, a new empty map). A `Ref` may still be null (a runtime value, or a null from the runtime): `r == null` is allowed, and using a null `Ref` is a `NullValue` exception where the function declares it or a `try` catches it, otherwise a trap, a plain struct has its own defaults |
 | ternary `c ? a : b` | pipeline, reader, db | done (`null` in a branch makes the result optional) |
 | `mutate`, `sync`, `scope`, `spawn` | store, server | slice 2 and 3 |
