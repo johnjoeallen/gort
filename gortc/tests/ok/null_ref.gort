@@ -1,6 +1,6 @@
 package t
 struct Node { n: i64 }
-struct S { next: Ref<Node> }
+struct S { next: Ref<Node>? }
 fn read(s: Ref<S>): i64 throws NullValue { return s.next.n }
 fn main() {
     let s = new S {}

@@ -1,0 +1,5 @@
+// error: missing field `next` in `S`
+package t
+struct Node { n: i64 }
+struct S { next: Ref<Node> }
+fn main() { let s = new S {} }

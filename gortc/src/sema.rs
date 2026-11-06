@@ -2062,7 +2062,7 @@ impl<'a> Sema<'a> {
                     }
                     // anything else left out starts empty: zero, false, null, "", an empty array, a plain value of defaults
                     let v = match &fty {
-                        Ty::Bool | Ty::F64 | Ty::Int(_) | Ty::Dur | Ty::Inst | Ty::Fn(..) | Ty::Opt(_) | Ty::Ref(_) => Some(self.zero(&fty, line)),
+                        Ty::Bool | Ty::F64 | Ty::Int(_) | Ty::Dur | Ty::Inst | Ty::Fn(..) | Ty::Opt(_) => Some(self.zero(&fty, line)),
                         Ty::Str => {
                             let i = self.intern(b"");
                             Some(typed(EK::StrLit(i), Ty::Str, line))
