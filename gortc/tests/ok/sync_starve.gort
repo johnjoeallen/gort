@@ -1,5 +1,5 @@
-// three threads read in overlapping blocks without pause; a fourth needs to write. The writer is not held off for ever: once it has waited
-// a millisecond, new readers queue behind it.
+// three threads read in long, overlapping blocks without pause, so the reader count never reaches zero by chance; a fourth needs to write.
+// Without a bound on overtaking it would wait for ever (and trap after 5 s); once it has waited 1 ms, new readers queue behind it.
 package t
 struct St { stop: i64, seen: i64 }
 fn burn(k: i64): i64 {
@@ -12,7 +12,7 @@ fn reader(st: Ref<St>) {
     var done = false
     while (!done) {
         sync (reads st) {
-            if (burn(20000) < 0) { println(0) }
+            if (burn(300000) < 0) { println(0) }
             if (st.stop == 1) { done = true }
         }
     }
@@ -27,7 +27,7 @@ fn main() {
     startThread(fn() { reader(st) })
     startThread(fn() { reader(st) })
     startThread(fn() { reader(st) })
-    startThread(fn() { burn(100000); writer(st) })
+    startThread(fn() { burn(1500000); writer(st) })
     joinAll()
     sync (reads st) { println(st.seen) }
 }

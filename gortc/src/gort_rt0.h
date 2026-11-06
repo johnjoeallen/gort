@@ -78,7 +78,7 @@ extern void gort_rt_vt_unpark(void *vt) __attribute__((weak));             /* ca
 typedef struct gort_waiter { void *obj; int write; int signaled; uint64_t since; void *vt; struct gort_waiter *next; pthread_cond_t cv; } gort_waiter;
 typedef struct { pthread_mutex_t m; gort_waiter *head, *tail; } gort_bucket;
 static gort_bucket gort_buckets[64];       /* all zero is a valid unlocked mutex on glibc */
-static size_t gort_stat_parked, gort_stat_blocked;
+static size_t gort_stat_parked, gort_stat_blocked, gort_stat_prio;
 static inline gort_bucket *gort_bucket_of(void *p) { return &gort_buckets[((uintptr_t)p >> 4) % 64]; }
 
 /* what this call tree holds on p: 0 nothing, 1 read, 2 write */
@@ -166,7 +166,8 @@ static inline void gort_cpu_relax(void) {
 static void gort_check_starved(gort_bucket *b, void *p) {
     for (gort_waiter *w = b->head; w; w = w->next)
         if (w->obj == p) {
-            if (gort_lk_now() - w->since > GORT_STARVE_NS) __atomic_fetch_or(&GORT_CTL(p)->lock, GORT_PRIOBIT, __ATOMIC_ACQ_REL);
+            if (gort_lk_now() - w->since > GORT_STARVE_NS &&
+                !(__atomic_fetch_or(&GORT_CTL(p)->lock, GORT_PRIOBIT, __ATOMIC_ACQ_REL) & GORT_PRIOBIT)) __atomic_fetch_add(&gort_stat_prio, 1, __ATOMIC_RELAXED);
             return;
         }
 }

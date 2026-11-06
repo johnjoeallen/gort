@@ -109,7 +109,7 @@ pub fn generate(prog: &Program) -> String {
             }
         };
         out.push_str(&format!(
-            "\nint main({}) {{\n{}{}    {};\n    if (gort_rt_exit_hook) gort_rt_exit_hook();\n    if (getenv(\"GORT_STATS\")) fprintf(stderr, \"gort: lock waits: %zu parked, %zu blocked\\n\", gort_stat_parked, gort_stat_blocked);\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
+            "\nint main({}) {{\n{}{}    {};\n    if (gort_rt_exit_hook) gort_rt_exit_hook();\n    if (getenv(\"GORT_STATS\")) fprintf(stderr, \"gort: lock waits: %zu parked, %zu blocked, %zu priority\\n\", gort_stat_parked, gort_stat_blocked, gort_stat_prio);\n{}    if (gort_live != 0) {{\n        fprintf(stderr, \"gort: %zu object(s) still live at exit (leak)\\n\", gort_live);\n        return 70;\n    }}\n    return 0;\n}}\n",
             head, inits, setup, call, drops
         ));
     }
