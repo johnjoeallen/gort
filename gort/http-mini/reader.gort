@@ -1,0 +1,64 @@
+// http-mini/reader.gort - the connection's input reader: owns the buffer, finds request heads.
+// Unconsumed input is buf[start..end]. A finished request is consumed by advancing `start` (no copy). The buffer exists only while there is
+// unconsumed input, so an idle connection owns none.
+package http
+import runtime
+
+struct Reader {
+    conn: Ref<Conn>
+    buf: Array<u8>? = null                                   // a runtime growable array; unallocated while the connection is idle
+    maxHead: usize                                           // the largest header block accepted
+    start: usize = 0
+    end: usize = 0
+    consumed: usize = 0                                      // end of the request most recently returned
+
+    static fn of(conn: Ref<Conn>, cfg: Ref<ServerConfig>): Reader {
+        return Reader { conn: conn, maxHead: cfg.maxHead }
+    }
+
+    // The next complete request head, waiting for input if needed. null: the peer closed cleanly.
+    fn nextRequest(): Request? throws IoError, TooLarge {
+        if (buf == null) {                                   // nothing buffered: wait without holding memory
+            conn.waitReadable()
+            self.buf = Array<u8>()
+            self.start = 0
+            self.end = 0
+        } else {
+            self.start = consumed                            // the previous request's bytes are now dead
+        }
+        while (true) {
+            let req = findCompleteRequest()
+            if (req != null) return req
+            if (!makeRoom()) throw TooLarge()
+            let n = conn.recv(buf[end..buf.capacity()])      // EAGAIN: park until readable
+            if (n == 0) return null
+            self.end += n
+        }
+    }
+
+    fn head(req: Ref<Request>): Array<u8> { return buf[req.start..req.end] }   // resolved against the buffer's current address
+    fn releaseIfDrained() { if (start == end) self.buf = null }               // dropping the array returns it to its pool
+
+    // The next complete request head in buf[start..end], if one is there.
+    fn findCompleteRequest(): Request? {
+        if (buf == null || end <= start) return null
+        let i = buf[start..end].find("\r\n\r\n")             // null: not there yet
+        if (i == null) return null
+        self.consumed = start + i + 4
+        return Request { start: start, end: consumed }
+    }
+
+    // Free space at the tail for the next read. false: the buffer is full of one unfinished header block and is already at maxHead.
+    fn makeRoom(): bool {
+        if (end < buf.capacity()) return true
+        if (start > 0) {
+            buf.moveWithin(start..end, 0)
+            self.end -= start
+            self.start = 0
+            return true
+        }
+        if (buf.capacity() >= maxHead) return false
+        buf.grow()
+        return true
+    }
+}

@@ -1,0 +1,14 @@
+// http-mini/types.gort - requests, responses and how a connection loop ended.
+package http
+import runtime
+
+struct Resp { bytes: Array<u8>, keepAlive: bool }       // built once at startup
+struct Request { start: usize, end: usize }             // offsets of the head inside the reader's buffer, not a pointer
+
+exception TooLarge                                      // the header block does not fit in the buffer
+
+enum Ending {
+    ClientClosed             // the peer closed it, or it failed: nothing more can arrive
+    ServerClosed             // the server ended it after a normal answer (Connection: close, HTTP/1.0)
+    ServerRejected           // the server ended it with an ERROR answer: the client is probably still sending
+}

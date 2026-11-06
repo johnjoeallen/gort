@@ -1,0 +1,74 @@
+// http-mini/server.gort - one route, one request at a time per connection, one listener per worker.
+package http
+import runtime
+
+// GET / answers "hello"; any other request is a 404.
+fn answer(head: Array<u8>, table: Ref<ResponseTable>): Ref<Resp> {
+    if (head.startsWith("GET / ")) return table.ok
+    return table.notFound
+}
+
+// Serves one connection until the client leaves or the server ends it.
+fn handleSequential(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>): Ending throws IoError {
+    var input = Reader.of(conn, cfg)
+    var ending = Ending.ClientClosed
+    while (true) {
+        var req: Request?
+        try {
+            req = input.nextRequest()                        // parks while idle or mid-request
+        } catch (e: TooLarge) {
+            writeAll(conn, table.headersTooLarge.bytes)
+            ending = Ending.ServerRejected
+            break
+        }
+        if (req == null) break                               // the client closed the connection
+        let resp = answer(input.head(req), table)
+        writeAll(conn, resp.bytes)                           // parks if the send buffer is full
+        if (!resp.keepAlive) { ending = Ending.ServerClosed; break }
+        input.releaseIfDrained()
+    }
+    return ending
+}
+
+// The root of a connection's vthread: a reset or a failed write ends this connection only.
+fn runConnection(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) {
+    var ending = Ending.ClientClosed
+    try {
+        ending = handleSequential(conn, table, cfg)
+    } catch (e: IoError) {
+        log(e)
+    }
+    // Closing a socket that still holds unread input makes the kernel send a RESET that can destroy the response. So when the SERVER ends
+    // a connection it is handed to a lingering closer: always after an error answer, and after a plain Connection: close only if input is unread.
+    switch (ending) {
+        ClientClosed   -> {}
+        ServerClosed   -> { if (conn.hasUnread()) conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+        ServerRejected -> { conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+    }
+}
+
+fn serve(listener: Listener, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) throws IoError {   // one per worker
+    while (true) {
+        let conn = listener.accept()                         // parks until a client arrives
+        spawn runConnection(conn, table, cfg)                // `conn` moves into the new vthread
+    }
+}
+
+// Started as: server --port=8080 --workers=4. Fields left out keep these defaults.
+struct Config { port: u16 = 8080, workers: usize = 1 }
+
+fn main(config: Config) {
+    let port = config.port
+    let table = ResponseTable.build()
+    let cfg = new ServerConfig()
+    for (core in 0..config.workers) {
+        spawnWorker(core, fn() {                             // the worker's root: throws nothing
+            try {
+                serve(Listener.bindReusePort(port), table, cfg)
+            } catch (e: IoError) {
+                log(e)
+                exit(1)
+            }
+        })
+    }
+}

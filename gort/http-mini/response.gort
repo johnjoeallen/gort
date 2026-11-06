@@ -1,0 +1,29 @@
+// http-mini/response.gort - canned responses, the reason phrase, and the Connection: header rule.
+package http
+
+struct ResponseTable {
+    ok: Ref<Resp>, notFound: Ref<Resp>, headersTooLarge: Ref<Resp>
+
+    static fn build(): Ref<ResponseTable> {   // runs once at startup
+        return new ResponseTable {
+            ok:              makeResponse(200, "", HELLO, true),
+            notFound:        makeResponse(404, "Connection: close\r\n", "not found\n", false),
+            headersTooLarge: makeResponse(431, "Connection: close\r\n", "headers too large\n", false),
+        }
+    }
+}
+
+fn reasonPhrase(code: u16): String {
+    switch (code) {
+        200     -> { return "OK" }
+        404     -> { return "Not Found" }
+        431     -> { return "Request Header Fields Too Large" }
+        default -> { return "Other" }
+    }
+}
+
+fn makeResponse(code: u16, connHdr: String, body: String, keepAlive: bool): Ref<Resp> {
+    let text = "HTTP/1.1 " + code + " " + reasonPhrase(code) + "\r\nContent-Type: text/plain\r\nContent-Length: " + body.length + "\r\n"
+             + connHdr + "\r\n" + body
+    return new Resp { bytes: leak(text.toBytes()), keepAlive: keepAlive }   // lives for the whole run
+}

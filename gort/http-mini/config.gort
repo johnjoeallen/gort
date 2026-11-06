@@ -1,0 +1,8 @@
+// http-mini/config.gort - the settings the loop reads.
+package http
+
+struct ServerConfig {
+    maxHead: usize = 16.kb         // largest accepted header block (431 beyond it)
+    lingerTime: Duration = 2.s     // after the server ends a connection while the client may still be sending: keep reading this long
+    lingerBytes: u64 = 256.mb      // ... and at most this many bytes, then close
+}
