@@ -1,8 +1,8 @@
 # Sharing and access checking
 
-One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` or `mutate` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `gort/redis/db.gort`.
+One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `gort/redis/db.gort`.
 
-Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Partly implemented in `gortc`: explicit `sync`/`mutate` blocks with the lock, R1 to R4 (where a block is required, and its mode) and the no-parking rule, with `spawn` as the publishing point (R5, by capture). Not implemented: `fresh` results, the shared flag (R6) and write-once inference across modules; the C beside the `.gort` is hand-written.
+Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Partly implemented in `gortc`: explicit `sync` blocks with the lock, R1 to R4 (where a block is required, and its mode) and the no-parking rule, with `spawn` as the publishing point (R5, by capture). Not implemented: `fresh` results, the shared flag (R6) and write-once inference across modules; the C beside the `.gort` is hand-written.
 
 ## The rules
 
@@ -19,9 +19,9 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **R5. Publishing.** A reference to a local object crosses a vthread boundary when it is passed to `spawn`, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is *shared*: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).
 
-**R6. Cost on an unshared object.** `sync`/`mutate` test the flag once at entry. If it is clear, they do nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
+**R6. Cost on an unshared object.** A `sync` block tests the flag once at entry. If it is clear, it does nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
 
-**R7. No hoisting.** Every access goes through the `Ref`, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling `deref()` itself is unsafe, allowed only inside an `unsafe` block, and never on a shared object outside `sync`/`mutate` (D18 item 8). A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
+**R7. No hoisting.** Every access goes through the `Ref`, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling `deref()` itself is unsafe, allowed only inside an `unsafe` block, and never on a shared object outside `sync` (D18 item 8). A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary).
 
 **R8. Runtime types.** A type declared `extern` (Signal, Flag, Limiter, Mailbox, Wakeup) synchronises itself. Its methods need no block, whoever calls them and whether or not the object is shared; the `extern` declaration is a promise, as it is for parking. Only Gort-defined types follow R1 to R7.
 
@@ -44,7 +44,7 @@ fn loadAndCount(path: String): usize {
     for line in readLines(path) {
         store.entries.insert(Bytes.copyOf(line.key), Entry { value: new Value { bytes: line.value.copy() }, expiresAt: null })
     }
-    return store.entries.count            // local: no sync, no mutate
+    return store.entries.count            // local: no block
 }
 ```
 
@@ -90,12 +90,12 @@ struct Db {
 | Access | Block? | Why |
 |---|---|---|
 | `db.store`, `db.lim` (reading the field) | none | write-once (R3): nothing ever changes them after `make` |
-| `store.entries` read | `sync(store)` | `entries` is mutable and the `Store` is incoming (R1); a read needs only `sync` (R4) |
-| `store.entries` written (`set`, `purgeExpired`) | `mutate(store)` | writing needs the exclusive mode (R4) |
+| `store.entries` read | `sync (reads store)` | `entries` is mutable and the `Store` is incoming (R1); a read needs only `reads` (R4) |
+| `store.entries` written (`set`, `purgeExpired`) | `sync (writes store)` | writing needs the exclusive mode (R4) |
 | `db.purgeWake`, `db.closed`, `db.reaper.tryPush(...)` | none | `extern` runtime types synchronise themselves (R8) |
 | `v.bytes` on the `Ref<Value>` that `get` returned | none | `Value` is immutable once built (R3), so the caller reads it after the lock is released |
 
-This is why the code writes `sync(store)` and not `sync(db)`: the lock belongs to the object with the mutable field, not to the `Db` that merely holds a reference to it.
+This is why the code writes `sync (reads store)` and not `sync (reads db)`: the lock belongs to the object with the mutable field, not to the `Db` that merely holds a reference to it.
 
 ## Example 3: errors the compiler reports
 
@@ -115,7 +115,7 @@ package redis
 fn trim(store: Ref<Store>) {
     sync (reads store) {
         store.entries.remove(oldest(store))   // error: entries.remove writes its receiver
-    }                                         //   needs mutate(store), have sync(store)
+    }                                         //   needs writes store, but it is listed under reads
 }
 ```
 
@@ -131,8 +131,8 @@ fn peekKeys(store: Ref<Store>): Ref<Map<Bytes, Entry>> {
 
 fn countKeys(store: Ref<Store>): usize {
     let m = peekKeys(store)
-    return m.count                        // error: m is incoming and Map is mutable: needs sync(m)
-}                                         //   fix: sync (reads m) { return m.count }  (or do the count inside sync(store), before the Ref leaves)
+    return m.count                        // error: m is incoming and Map is mutable: needs `sync (reads m)`
+}                                         //   fix: sync (reads m) { return m.count }  (or do the count inside `sync (reads store)`, before the Ref leaves)
 ```
 
 The messages name the chain and the fix. A missing block on a reference that turns out never to be shared is still reported: that is the over-approximation in R2, and the cost is one extra block that does nothing at run time.
@@ -162,14 +162,14 @@ package redis
 
 fn expireAndCount(store: Ref<Store>): usize {
     sync (writes store) {
-        purgeBatch(store)                 // summary: purgeBatch writes param 0 -> mutate required: ok
+        purgeBatch(store)                 // summary: purgeBatch writes param 0 -> writes required: ok
         return store.entries.count
     }
 }
 
 fn statsOnly(store: Ref<Store>): usize {
     sync (reads store) {
-        purgeBatch(store)                 // error: purgeBatch writes its argument; have sync(store)
+        purgeBatch(store)                 // error: purgeBatch writes its argument; store is listed under reads
         return store.entries.count
     }
 }
@@ -217,8 +217,8 @@ fn nudge(f: Ref<Fleet>, i: usize) {
 Errors the compiler reports:
 
 ```cpp
-sync (reads w.player) { w.player.move(1, 0) }   // error: Point.move writes its receiver; needs mutate(w.player), have sync
-w.player.move(1, 0)                      // error: Point is mutable and w.player is incoming; needs mutate(w.player)
+sync (reads w.player) { w.player.move(1, 0) }   // error: Point.move writes its receiver; needs writes w.player, but it is listed under reads
+w.player.move(1, 0)                      // error: Point is mutable and w.player is incoming; needs `sync (writes w.player)`
 sync (reads f.ships) { f.ships[i].move(1, 0) }  // error: the array lock does not cover the Point behind the Ref
 ```
 
@@ -238,7 +238,7 @@ sync (writes all) { all[0].spawnMore(all) }    // error: all[0] is pinned for th
 
 | | Developer writes | Compiler does |
 |---|---|---|
-| Lock | `sync`/`mutate` naming the owner | reports a missing or too-weak block |
+| Lock | a `sync` block naming the owner | reports a missing or too-weak block |
 | Mode | which one | takes it from the callee summary |
 | Local object | nothing | proves it local, skips the block |
 | Deref and receiver place | nothing | derefs, passes the body |
@@ -333,7 +333,7 @@ Reference counts follow the same split. An object the compiler proves local uses
 
 ## Growable containers
 
-A container that can relocate its storage (arrays, builders, map tables) is reached through a non-moving header, and references into it are `(header, offset)`. Growing a shared container needs `mutate`, reading it needs `sync`, so a raw address is valid exactly inside the block that holds it and a grow cannot happen under a reader (R1, R4, R7). An unshared container has no lock; its raw address is valid until the next call that may grow it or the next park. See spec 4.5 and [D15](architecture/open-decisions.md#d15-growable-arrays-relocation-and-stable-references).
+A container that can relocate its storage (arrays, builders, map tables) is reached through a non-moving header, and references into it are `(header, offset)`. Growing a shared container needs `writes`, reading it needs `reads`, so a raw address is valid exactly inside the block that holds it and a grow cannot happen under a reader (R1, R4, R7). An unshared container has no lock; its raw address is valid until the next call that may grow it or the next park. See spec 4.5 and [D15](architecture/open-decisions.md#d15-growable-arrays-relocation-and-stable-references).
 
 ## Open
 
@@ -344,4 +344,4 @@ A container that can relocate its storage (arrays, builders, map tables) is reac
 - **Immutable types.** Inferred from R3 as above; whether to also let the programmer assert it (for a compile error if a later change breaks it) is undecided.
 - **Runtime types that are not thread-safe.** R8 treats every `extern` type as self-synchronising. Whether an `extern` declaration may say otherwise (a handle that one vthread must own) is undecided.
 - **Interfaces and function values.** A call through one needs a declared access mode per parameter, as it needs an effect bound. Default is "writes", the safe direction for the caller.
-- **Lint.** A value read in a `sync` block and used to decide a write in a separate `mutate` block on the same object (the get-then-put race of spec 7.2). A warning, not an error.
+- **Lint.** A value read in one `sync (reads x)` block and used to decide a write in a separate `sync (writes x)` block on the same object (the get-then-put race of spec 7.2). A warning, not an error.

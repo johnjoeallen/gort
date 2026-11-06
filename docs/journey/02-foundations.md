@@ -27,7 +27,7 @@ Before writing any Gort, the expensive questions got small C benchmarks, compare
 
 - Biased counting is 2 to 7x cheaper than atomic for thread-private objects, but once objects cross threads it is equal or worse (0.71 to 0.87x at 16 threads with message passing).
 - **Decision:** no biased counting in v1. Types proven thread-confined get plain counts; shared types get plain atomic counts.
-- Messaging stays for passing data, with typed per-vthread mailboxes. Shared memory with `sync` and `mutate` is the primary sharing model.
+- Messaging stays for passing data, with typed per-vthread mailboxes. Shared memory with `sync` blocks is the primary sharing model.
 
 ## Frames for parked calls
 

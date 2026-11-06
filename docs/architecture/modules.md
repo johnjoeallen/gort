@@ -83,7 +83,7 @@ result:                         fresh  = yes | no                 (a new allocat
 per type field:                 mutability = write-once | mutable
 ```
 
-These are what the compiler needs to report a missing or too-weak `sync`/`mutate` across modules without the callee's source. Changing a field from write-once to mutable, a parameter's access from read to write, or a result from fresh to not fresh is a breaking change.
+These are what the compiler needs to report a missing or too-weak `sync` across modules without the callee's source. Changing a field from write-once to mutable, a parameter's access from read to write, or a result from fresh to not fresh is a breaking change.
 
 ### Call-graph information
 
@@ -121,7 +121,7 @@ Keeping the frame body private is what makes incremental compilation work: a cal
 
 The IR is what a consumer uses to *regenerate* code, so it must carry what the generated C needs, and no more:
 
-- Typed, structured control flow with ownership operations explicit: move, `Ref` copy and release, `new`, cleanup scopes, `sync`/`mutate` regions, throw edges.
+- Typed, structured control flow with ownership operations explicit: move, `Ref` copy and release, `new`, cleanup scopes, `sync` regions, throw edges.
 - Effects on every call site, and park points marked, so that frame lowering is a function of the IR alone.
 - **Not** raw source text, comments, formatting or macro structure.
 - Stable under a format version number; the consumer refuses a newer major version.

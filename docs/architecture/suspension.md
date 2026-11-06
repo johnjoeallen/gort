@@ -18,13 +18,13 @@ with the order `Never < Cond(P) < May`. The complete summary, which also records
 A function's own body can park only through these, and the analysis starts from them:
 
 1. A call to an `extern parks fn` (`sleep`, `yield`, `waitAny`, `Conn.recv`, `Conn.send`, ...). Already in `gort/runtime/leaves.gort`.
-2. Entering `sync`/`mutate` (it queues FIFO, see spec 7.1). The body of the block can never park, so a lock is never held across a suspension.
+2. Entering `sync` (it queues FIFO, see spec 7.1). The body of the block can never park, so a lock is never held across a suspension.
 3. A call to a function whose summary is `May`, or `Cond(P)` with a member of `P` bound to something that may park.
 4. A call through an interface or function value whose declared bound permits parking (see [dispatch](dispatch-and-ffi.md#interface-calls)).
 5. A **compiler-inserted slice check**, only in a function that asks for one with `[yield]`, on the function itself or through its type or package (section 1.1). The check sits on loop back-edges and recursive-call entries of that function's own body; when the slice is exhausted the task yields, which is an ordinary park point. Without `[yield]` the compiler inserts nothing.
 6. A call to a blocking foreign function that the runtime offloads (see [blocking FFI](dispatch-and-ffi.md#blocking-foreign-calls)).
 
-Cleanup methods are `Never` by rule (spec section 9). A cleanup that tries to call a `May` function is a compile error, which is already the behaviour for `sync`/`mutate` bodies.
+Cleanup methods are `Never` by rule (spec section 9). A cleanup that tries to call a `May` function is a compile error, which is already the behaviour for `sync` bodies.
 
 ### Propagation
 
@@ -83,7 +83,7 @@ Three attributes on a function (`fn[yield] name(...)`). Spellings are the author
 - **`[yield]` is not the `yield()` call.** `yield()` is an `extern parks fn` the program calls itself. The attribute only lets the compiler insert yields.
 - **Limits:** the slice bounds how long a *checked* region runs. It does not bound a function without `[yield]`, a plain `extern fn`, or a single indivisible library operation. Such code stalls its worker and cannot be cancelled until it returns. The loop warnings in 1.3 exist to find it.
 
-### 1.2 Calls allowed in `sync`/`mutate` bodies, cleanups and C callbacks
+### 1.2 Calls allowed in `sync` bodies, cleanups and C callbacks
 
 These regions may not park, so they may call only functions whose effect is `Never`.
 
@@ -99,7 +99,7 @@ Rejected, with the call chain in the message:
 
 - Any `May` function. That includes one that is `May` only because it is marked `[yield]` and has a loop.
 - Anything that parks: `sleep`, `recv`, `send`, `yield()`.
-- Entering another `sync`/`mutate`, unless that object is in the same head.
+- Entering another `sync`, unless that object is in the same head.
 - A call through an interface or function value whose declared bound is not `Never` (the default bound is `May`).
 
 Inside such a region a `[yield]` marking is ignored for the region's own loops: no check is inserted there, and a type- or package-level `[yield]` does not apply.
@@ -108,7 +108,7 @@ Inside such a region a `[yield]` marking is ignored for the region's own loops: 
 
 1. *Hold time stays bounded by the code in the block.* A holder parked on a socket keeps the lock while every other vthread queues; with FIFO fairness one waiting writer also blocks the readers behind it.
 2. *Two vthreads on one worker never contend.* A body that cannot park runs to completion before anything else runs on that worker, so contention is only across workers, where the runtime can spin briefly before parking. That spin removed a 55 to 75 percent throughput loss (`bench/results/miniredis.md`).
-3. *Multi-object blocks retry safely.* `mutate(a, b)` takes all its locks before the body runs, or none, and backs off if one is busy. This is safe only because no body code has run. It is also why nested acquisition is an error.
+3. *Multi-object blocks retry safely.* `sync (writes a, b)` takes all its locks before the body runs, or none, and backs off if one is busy. This is safe only because no body code has run. It is also why nested acquisition is an error.
 4. *No frame ever owns a lock.* Cancellation, errors and unwinding never have to release a lock on behalf of a suspended task.
 5. *A class of deadlocks cannot be written:* a holder waiting for something that another vthread can provide only after taking the same lock.
 
@@ -131,13 +131,13 @@ A loop that advances a counter toward a loop-invariant bound terminates even whe
 
 Calls through interfaces, function values and foreign code contribute nothing at normal levels (a lint is not a proof) and are listed as `unknown` at the strictest level.
 
-**What warns.** Within `[noyield]`, `[nopark]` and `sync`/`mutate` bodies:
+**What warns.** Within `[noyield]`, `[nopark]` and `sync` bodies:
 
 - `unbounded` own loop or recursion;
 - a call to a function whose summary says `unbounded` (the chain is printed: `tight -> parse -> scanForever`);
 - `long`, at the stricter levels.
 
-**When it runs.** Off by default in ordinary builds, except for one case: **`unbounded` inside a `sync`/`mutate` body always warns**, because spec 7.1 relies on hold time being bounded by the block, and nothing else enforces it. A flag selects levels (placeholder `--warn-loops=off|marked|reachable|all`): `marked` covers `[noyield]` and `[nopark]` functions; `reachable` adds unmarked functions reachable from `spawn` roots; `all` adds everything. Editor and CI use it freely.
+**When it runs.** Off by default in ordinary builds, except for one case: **`unbounded` inside a `sync` body always warns**, because spec 7.1 relies on hold time being bounded by the block, and nothing else enforces it. A flag selects levels (placeholder `--warn-loops=off|marked|reachable|all`): `marked` covers `[noyield]` and `[nopark]` functions; `reachable` adds unmarked functions reachable from `spawn` roots; `all` adds everything. Editor and CI use it freely.
 
 **Suppression.** An allow-attribute on the function or loop (placeholder). It acknowledges the warning and makes no claim about the loop. A loop-level bound annotation was considered and dropped: if the compiler can see a counter or constant it is redundant, if not it is an unchecked claim, yielding at the bound is just `[yield]`, and silently stopping at the bound hides behaviour. The only coherent form is an ordinary `if`/`throw` on a limit, which the program can already write.
 

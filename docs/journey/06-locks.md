@@ -2,13 +2,13 @@
 
 ## The rule
 
-Entering `sync` or `mutate` may park the virtual thread. A holder never parks inside the block (a compile error), so two vthreads on one worker never contend and hold time is bounded by the code in the block.
+Entering a `sync` block may park the virtual thread. A holder never parks inside the block (a compile error), so two vthreads on one worker never contend and hold time is bounded by the code in the block.
 
-Several objects in one head, as in `mutate(a, b)`, are acquired all-or-nothing in a fixed global order; if one is busy the acquirer releases everything, parks on that lock's FIFO queue and retries, keeping its arrival ticket. Nested acquisition of another object, reentrancy and read-to-write upgrade are errors.
+Several objects in one head, as in `sync (writes a, b)`, are acquired all-or-nothing in a fixed global order; if one is busy the acquirer releases everything, parks on that lock's FIFO queue and retries, keeping its arrival ticket. This was the first decision. Once the compiler existed it changed in three ways: the lock is re-entrant within a call tree (the thread cannot park while it holds the lock, so a nested block on an object it already holds takes nothing and releases nothing), a `writes` on an object held only for `reads` upgrades in place, and nesting a block on a different object is a warning that suggests naming both in one head, not an error. See `docs/architecture/compiler.md`.
 
 ## The ordering key
 
-The order is by the address of each object's lock word, or `(arena id, slot index)` for arena objects whose storage can move. A per-allocation sequence number was rejected for its cost. Arenas never compact, and a chunk is freed only when empty, so a live object's address never changes. Only types that appear in a `sync` or `mutate` head carry a lock word.
+The order is by the address of each object's lock word, or `(arena id, slot index)` for arena objects whose storage can move. A per-allocation sequence number was rejected for its cost. Arenas never compact, and a chunk is freed only when empty, so a live object's address never changes. Only types that appear in a `sync` head carry a lock word.
 
 ## The measurement that changed the contract's implementation
 
