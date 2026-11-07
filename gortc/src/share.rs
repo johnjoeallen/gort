@@ -332,8 +332,10 @@ impl<'a> Cx<'a> {
         match &strip(e).kind {
             EK::NewArr(..) | EK::ArrLit(..) | EK::RtCall(..) | EK::Builtin(..) | EK::Json(..) => true,
             EK::Call(f, args) | EK::Method(f, _, args) => {
+                // an extern function gets a raw pointer, so it may hand back the array it was given or a new one: the result is fresh only
+                // when every array argument is local too
                 if self.prog.fns[*f].body.is_none() {
-                    return true;
+                    return args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || self.arr_origin(a).is_none());
                 }
                 // a function that returns (a view of) its parameter gives back an array that is as local as its arguments
                 self.fresh[*f] && (!self.returns_param_array(*f) || args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || self.arr_origin(a).is_none()))

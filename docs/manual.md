@@ -135,11 +135,11 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 
 `sync (writes g)` **does not cover `g.xs`**.
 
-An `extern` function never hands back a Gort `Array<T>` that something else holds: C returns a dynamically allocated array, which is copied into a new Gort array and freed. So an extern result is always a fresh array, local to the caller. Counts do not enter into it; the local/shared distinction matters only for `sync`.
+An `extern` function receives a raw pointer to the array's data, so what it returns is either that same array or a new one (C's dynamically allocated array, copied into a new Gort array and freed). The checker cannot tell which, so an extern result is local only when every array argument is local; otherwise it is as shared as the arguments. Counts do not enter into it; the local/shared distinction matters only for `sync`.
 
 **One style per array field.** A field's array is locked through its holder (receiver and parameter accesses, covered by the caller) or by a block on the array itself, never both (**checked**: ``G.xs is locked through its holder elsewhere ... use sync on the holder everywhere, or on the array everywhere``, `err/share_array_mixed_locks.gort`). The two locks do not exclude each other, so mixing them could race.
 
-Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
+Known gaps: the run-time side of the extern rule (comparing the returned pointer with the argument's, to return the original handle instead of a copy) is not built, and no extern in the tests returns an array; the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
 ### 5.5 `spawn` and publishing
 
