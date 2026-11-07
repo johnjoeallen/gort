@@ -1,0 +1,11 @@
+package t
+struct G { xs: Array<i64> }
+let shared: Ref<G> = new G { xs: [1, 2] }
+fn get(): Ref<G> { return shared }
+fn main() {
+    let g = get()
+    let xs = g.xs
+    sync (writes xs) { xs[0] = 5 }
+    sync (writes g.xs) { g.xs[1] = 6 }
+    sync (reads xs) { println(str(xs[0] + xs[1])) }
+}

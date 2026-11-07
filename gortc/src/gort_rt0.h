@@ -336,9 +336,15 @@ static gort_str *gort_str_from_b(bool v) { return gort_str_make((const uint8_t *
 /* a view (slice) has `parent`: the array whose run it shares; it counts the parent, never the run */
 typedef struct gort_arr { size_t strong; size_t len; size_t cap; void *data; struct gort_arr *parent; size_t esize; void (*edrop)(void *); } gort_arr;
 
+/* An array header sits after a gort_ctl, so the object lock (`sync (reads xs)`) works on it like on a struct. A view locks its root. */
+static gort_arr *gort_arr_alloc(void) {
+    gort_ctl *c = (gort_ctl *)calloc(1, sizeof(gort_ctl) + sizeof(gort_arr));
+    if (!c) gort_trap("out of memory");
+    return (gort_arr *)(c + 1);
+}
+static inline void *gort_arr_lockobj(gort_arr *a) { return a->parent ? (void *)a->parent : (void *)a; }
 static gort_arr *gort_arr_new(size_t esize, size_t len) {
-    gort_arr *a = (gort_arr *)calloc(1, sizeof(gort_arr));
-    if (!a) gort_trap("out of memory");
+    gort_arr *a = gort_arr_alloc();
     if (len) {
         a->data = calloc(len, esize);
         if (!a->data) gort_trap("out of memory");
@@ -361,13 +367,12 @@ static inline void gort_arr_release(gort_arr *a) {
             if (a->edrop) for (size_t i = 0; i < a->cap; i++) a->edrop((char *)a->data + i * a->esize);
             free(a->data);
         }
-        free(a); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED);
+        free(GORT_CTL(a)); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED);
     }
 }
 static gort_arr *gort_arr_slice(gort_arr *a, size_t esize, size_t lo, size_t hi) {
     if (lo > hi || hi > a->cap) gort_trap("slice out of range");
-    gort_arr *v = (gort_arr *)calloc(1, sizeof(gort_arr));
-    if (!v) gort_trap("out of memory");
+    gort_arr *v = gort_arr_alloc();
     gort_arr *root = a->parent ? a->parent : a;
     v->strong = 1; v->len = v->cap = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root);
     __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);

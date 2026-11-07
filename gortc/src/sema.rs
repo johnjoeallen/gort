@@ -1569,7 +1569,7 @@ impl<'a> Sema<'a> {
                             self.error(target.line, target.col, format!("`{}` is an extern type: it synchronises itself and needs no sync block", n));
                             ok = false;
                         }
-                        Ty::Ref(_) => {
+                        Ty::Ref(_) | Ty::Arr(_) => {
                             // the same object under both reads and writes is a mistake, not a request for the stronger lock
                             if let Some((w0, _)) = vs.iter().find(|(w0, t0)| *w0 != *write && same_place(t0, &v)) {
                                 let (a, b) = if *w0 { ("writes", "reads") } else { ("reads", "writes") };
@@ -1580,7 +1580,7 @@ impl<'a> Sema<'a> {
                         }
                         other => {
                             let n = self.prog.type_name(other);
-                            self.error(target.line, target.col, format!("{} needs a Ref<T> to lock, found {}", kw, n));
+                            self.error(target.line, target.col, format!("{} needs a Ref<T> or an Array<T> to lock, found {}", kw, n));
                             ok = false;
                         }
                     }

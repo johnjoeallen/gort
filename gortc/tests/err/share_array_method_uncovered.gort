@@ -1,0 +1,12 @@
+// error: calling `G.bump`, which writes its receiver, needs `sync (writes g)`
+package t
+struct G {
+    xs: Array<i64>
+    fn bump() { self.xs[0] = self.xs[0] + 1 }
+}
+let shared: Ref<G> = new G { xs: [1, 2] }
+fn get(): Ref<G> { return shared }
+fn main() {
+    let g = get()
+    g.bump()
+}

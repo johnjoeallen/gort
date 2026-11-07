@@ -1,0 +1,10 @@
+// error: changing an array needs `sync (writes xs)`: the array is not local and is mutable
+package t
+struct G { xs: Array<i64> }
+let shared: Ref<G> = new G { xs: [1, 2] }
+fn get(): Ref<G> { return shared }
+fn main() {
+    let g = get()
+    let xs = g.xs
+    xs[0] = 5
+}

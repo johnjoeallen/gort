@@ -36,7 +36,7 @@ fn sid_of(t: &Ty) -> Option<usize> {
 
 pub fn check(prog: &Program) -> Vec<Finding> {
     let writes = param_writes(prog);
-    let mutable = mutable_fields(prog, &writes);
+    let (mutable, arr_mutable, garr_mutable) = mutable_fields(prog, &writes);
     let borrowed: Vec<Vec<bool>> = prog.fns.iter().map(|f| f.borrowed.clone()).collect();
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
@@ -50,7 +50,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), out: Vec::new(), hits: Vec::new() };
             cx.block(body);
             fresh_out[fid] = matches!(f.ret, Ty::Ref(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
@@ -96,57 +96,106 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     run(&needs, &fresh, true).0
 }
 
-/// Fields written outside construction: `(struct, field index)`.
-fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> HashSet<(usize, usize)> {
-    let mut m: HashSet<(usize, usize)> = HashSet::new();
-    fn mark(e: &TExpr, m: &mut HashSet<(usize, usize)>) {
+/// Fields written outside construction: `(struct, field index)`, and separately the array fields whose array is changed in place.
+fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usize)>, HashSet<(usize, usize)>, HashSet<usize>) {
+    struct M {
+        fields: HashSet<(usize, usize)>,
+        arrs: HashSet<(usize, usize)>,
+        garrs: HashSet<usize>,
+    }
+    /// `e` is assigned, or something inside it is
+    fn assign(e: &TExpr, m: &mut M) {
         match &e.kind {
             EK::Field(b, idx) => {
                 if let Some(s) = sid_of(&b.ty) {
-                    m.insert((s, *idx));
+                    m.fields.insert((s, *idx));
                 }
-                mark(b, m);
+                assign(b, m);
             }
-            EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => mark(b, m),
+            EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_)) => arr(b, m),
+            EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => assign(b, m),
             _ => {}
         }
     }
+    /// the array `e` points to is changed in place (the field that holds it is not)
+    fn arr(e: &TExpr, m: &mut M) {
+        match &strip(e).kind {
+            EK::Field(b, idx) => {
+                if let Some(s) = sid_of(&b.ty) {
+                    m.arrs.insert((s, *idx));
+                }
+            }
+            EK::Global(g) => {
+                m.garrs.insert(*g);
+            }
+            _ => {}
+        }
+    }
+    fn touch(e: &TExpr, m: &mut M) {
+        if matches!(e.ty, Ty::Arr(_)) { arr(e, m) } else { assign(e, m) }
+    }
+    let mut m = M { fields: HashSet::new(), arrs: HashSet::new(), garrs: HashSet::new() };
     for f in &prog.fns {
         let Some(body) = &f.body else { continue };
+        // a handle copied out of a field and then written (`let xs = g.xs; xs[0] = 1`) writes that field's array
+        let mut written: HashSet<VarId> = HashSet::new();
+        fn root_arr(e: &TExpr) -> Option<VarId> {
+            match &e.kind {
+                EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_)) => match &b.kind {
+                    EK::Var(v) => Some(*v),
+                    _ => None,
+                },
+                EK::Field(b, _) | EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => root_arr(b),
+                _ => None,
+            }
+        }
         walk_stmts(body, &mut |s| {
             if let TS::Assign(t, _) | TS::AssignOp(_, t, _) = &s.kind {
-                mark(t, &mut m);
+                assign(t, &mut m);
+                if let Some(v) = root_arr(t) {
+                    written.insert(v);
+                }
             }
         });
         visit_block(body, &mut |e| {
             visit_expr(e, &mut |x| match &x.kind {
                 EK::RtCall(n, args) if matches!(*n, "appendArr" | "appendOne" | "grow" | "moveWithin" | "copyFrom") => {
                     if let Some(a) = args.first() {
-                        mark(a, &mut m);
+                        touch(a, &mut m);
+                        if let EK::Var(v) = &strip(a).kind {
+                            written.insert(*v);
+                        }
                     }
                 }
                 EK::Call(c, args) => {
                     for (k, a) in args.iter().enumerate() {
                         if writes[*c].get(k + 1).copied().unwrap_or(false) {
-                            mark(a, &mut m);
+                            touch(a, &mut m);
                         }
                     }
                 }
                 EK::Method(c, r, args) => {
                     if writes[*c].first().copied().unwrap_or(false) {
-                        mark(r, &mut m);
+                        touch(r, &mut m);
                     }
                     for (k, a) in args.iter().enumerate() {
                         if writes[*c].get(k + 1).copied().unwrap_or(false) {
-                            mark(a, &mut m);
+                            touch(a, &mut m);
                         }
                     }
                 }
                 _ => {}
             })
         });
+        walk_stmts(body, &mut |s| {
+            if let TS::Let(id, e) = &s.kind {
+                if written.contains(id) {
+                    arr(e, &mut m);
+                }
+            }
+        });
     }
-    m
+    (m.fields, m.arrs, m.garrs)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -159,6 +208,10 @@ struct Cx<'a> {
     prog: &'a Program,
     fid: FnId,
     mutable: &'a HashSet<(usize, usize)>,
+    /// array fields whose array is changed in place somewhere
+    arr_mutable: &'a HashSet<(usize, usize)>,
+    /// global arrays changed in place somewhere
+    garr_mutable: &'a HashSet<usize>,
     needs: &'a [Vec<u8>],
     /// functions whose result is a new object nothing else refers to
     fresh: &'a [bool],
@@ -169,6 +222,8 @@ struct Cx<'a> {
     open: Vec<(bool, TExpr)>,
     /// variables bound to a fresh `new` in this function: has the handle escaped yet?
     locals: HashMap<VarId, bool>,
+    /// variables holding a copy of an array handle taken from a place that other code can reach (a field, a global, a parameter, another such copy)
+    shared_arrs: HashMap<VarId, Option<usize>>,
     out: Vec<Finding>,
     /// accesses through this function's own receiver or parameters that no block of its own covers: (function, slot, level)
     hits: Vec<(FnId, usize, u8)>,
@@ -243,6 +298,11 @@ impl<'a> Cx<'a> {
         match &s.kind {
             TS::Let(id, e) => {
                 self.expr(e, s.line, Need::Read);
+                if matches!(e.ty, Ty::Arr(_)) {
+                    if let Some(o) = self.arr_origin(e) {
+                        self.shared_arrs.insert(*id, o);
+                    }
+                }
                 // a new name for an existing local is a second handle on the object, not a new object: only an allocation starts a local
                 let fresh = self.is_fresh_value(e) && !matches!(strip(e).kind, EK::Var(_) | EK::ObjRef(_));
                 self.escape_in(&[e]);
@@ -276,6 +336,13 @@ impl<'a> Cx<'a> {
                 self.escape_in(&es);
             }
             TS::Assign(t, v) | TS::AssignOp(_, t, v) => {
+                if let EK::Var(id) = &t.kind {
+                    if matches!(t.ty, Ty::Arr(_)) {
+                        if let Some(o) = self.arr_origin(v) {
+                            self.shared_arrs.insert(*id, o);
+                        }
+                    }
+                }
                 self.expr(v, s.line, Need::Read);
                 self.expr(t, s.line, Need::Write);
                 self.escape_in(&[v, t]);
@@ -370,6 +437,18 @@ impl<'a> Cx<'a> {
                         }
                     }
                 }
+                EK::Index(b, _) | EK::Len(b) | EK::Slice(b, ..) if matches!(b.ty, Ty::Arr(_)) => {
+                    self.access_arr(b, Need::Read, line, "reading an array element");
+                }
+                EK::RtCall(n, args) => {
+                    let mutator = matches!(*n, "appendArr" | "appendOne" | "grow" | "moveWithin" | "copyFrom");
+                    for (k, a) in args.iter().enumerate() {
+                        if matches!(a.ty, Ty::Arr(_)) {
+                            let need = if mutator && k == 0 { Need::Write } else { Need::Read };
+                            self.access_arr(a, need, line, if need == Need::Write { "changing an array" } else { "reading an array" });
+                        }
+                    }
+                }
                 EK::Call(fid, args) => {
                     for (j, a) in args.iter().enumerate() {
                         self.call_arg(*fid, j + 1, a, line);
@@ -431,6 +510,14 @@ impl<'a> Cx<'a> {
 
     /// An argument that is a `Ref`: the callee reads or writes through it as its summary says, so the caller must hold a block of that strength.
     fn call_arg(&mut self, fid: FnId, slot: usize, a: &TExpr, line: u32) {
+        if matches!(a.ty, Ty::Arr(_)) {
+            let lvl = self.needs[fid].get(slot).copied().unwrap_or(0);
+            if lvl > 0 {
+                let what = format!("passing it to `{}`, which {} through it,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads" });
+                self.access_arr(a, if lvl == 2 { Need::Write } else { Need::Read }, line, &what);
+            }
+            return;
+        }
         let Some(sid) = (match &a.ty {
             Ty::Ref(s) | Ty::Obj(s) => Some(*s),
             _ => None,
@@ -479,9 +566,101 @@ impl<'a> Cx<'a> {
                 }
                 self.access_spine(b, need, line);
             }
-            EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => self.access_spine(b, need, line),
+            EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => {
+                if matches!(b.ty, Ty::Arr(_)) {
+                    // storing into an array changes it; picking a handle out of one (`xs[i].n = 1`) only reads it
+                    let n = if matches!(e.ty, Ty::Ref(_) | Ty::Obj(_)) { Need::Read } else { need };
+                    self.access_arr(b, n, line, if n == Need::Write { "changing an array" } else { "reading an array element" });
+                    // the array is its own object: the object that holds it is only read to get the handle
+                    return self.access_spine(b, Need::Read, line);
+                }
+                self.access_spine(b, need, line)
+            }
             _ => {}
         }
+    }
+
+    /// Can other code reach the array handle `e` too? None: no, it is this function's own. Some(None): yes, and this function must lock the
+    /// array itself. Some(Some(slot)): it comes from this function's receiver (slot 0) or parameter (slot k + 1); the caller's block covers it.
+    fn arr_origin(&self, e: &TExpr) -> Option<Option<usize>> {
+        match &strip(e).kind {
+            EK::Field(b, _) => {
+                // a struct held by value is nobody else's: the owner must be reached through a handle
+                let mut n: &TExpr = b;
+                let mut hop = false;
+                loop {
+                    hop |= matches!(n.ty, Ty::Ref(_) | Ty::Obj(_)) || matches!(n.kind, EK::Deref(_) | EK::ObjRef(_) | EK::ObjPlace(_));
+                    match &n.kind {
+                        EK::Field(x, _) | EK::Index(x, _) | EK::Len(x) | EK::Unwrap(x) | EK::Borrow(x) | EK::BoxVal(x) | EK::Deref(x) => n = x,
+                        _ => break,
+                    }
+                }
+                match &n.kind {
+                    EK::SelfPlace => Some(Some(0)),
+                    EK::Var(v) | EK::ObjRef(v) | EK::ObjPlace(v) => {
+                        if !hop || self.locals.get(v) == Some(&false) {
+                            None
+                        } else if let Some(k) = self.f().params.iter().position(|p| p == v) {
+                            Some(Some(k + 1))
+                        } else {
+                            Some(None)
+                        }
+                    }
+                    _ => if hop { Some(None) } else { None },
+                }
+            }
+            EK::Global(_) => Some(None),
+            EK::Var(v) => match self.shared_arrs.get(v) {
+                Some(o) => Some(*o),
+                None => self.f().params.iter().position(|p| p == v).map(|k| Some(k + 1)),
+            },
+            EK::Slice(b, ..) => self.arr_origin(b),
+            _ => None,
+        }
+    }
+
+    /// The array `a` points to is read or written. An array is an object of its own: a block must name it (a block on the object that holds it
+    /// does not cover it), unless it came in through this function's receiver or parameter (the caller covers it, as for a `Ref` field), or
+    /// is not reachable from anywhere else.
+    fn access_arr(&mut self, a: &TExpr, need: Need, line: u32, what: &str) {
+        let a = strip(a);
+        let want_mutate = need == Need::Write;
+        if let EK::Slice(b, ..) = &a.kind {
+            return self.access_arr(b, need, line, what);
+        }
+        match &a.kind {
+            EK::Field(b, idx) if !want_mutate => match sid_of(&b.ty) {
+                Some(s) if self.arr_mutable.contains(&(s, *idx)) || self.mutable.contains(&(s, *idx)) => {}
+                _ => return,                              // nothing ever writes this field
+            },
+            EK::Global(g) if !want_mutate && !self.garr_mutable.contains(g) => return,
+            EK::Field(..) | EK::Global(_) | EK::Var(_) => {}
+            _ => return,
+        }
+        let Some(origin) = self.arr_origin(a) else { return };
+        let mut weak: Option<String> = None;
+        for (m, t) in &self.open {
+            if same_place(a, t) {
+                if *m || !want_mutate {
+                    return;
+                }
+                weak = Some(self.name_of(t));
+            }
+        }
+        if let (None, Some(slot)) = (&weak, origin) {
+            self.hits.push((self.fid, slot, if want_mutate { 2 } else { 1 }));
+            return;
+        }
+        self.arr_error(a, want_mutate, weak, line, what);
+    }
+
+    fn arr_error(&mut self, a: &TExpr, want_mutate: bool, weak: Option<String>, line: u32, what: &str) {
+        let kw = if want_mutate { "writes" } else { "reads" };
+        let msg = match weak {
+            Some(w) => format!("{} needs writes {}, but it is listed under reads", what, w),
+            None => format!("{} needs `sync ({} {})`: the array is not local and is mutable", what, kw, self.name_of(a)),
+        };
+        self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
     }
 
     /// The body reached through place `p` is read or written. Is that allowed here?

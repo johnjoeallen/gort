@@ -1,0 +1,18 @@
+// KNOWN GAP (docs/architecture/compiler.md): `bump` locks the holder, `viaCopy` locks the array itself. Both are accepted, but they take
+// different locks, so on two threads they would not exclude each other. This test only pins down that the checker accepts it.
+package t
+struct G { xs: Array<i64> }
+let shared: Ref<G> = new G { xs: [1, 2] }
+fn get(): Ref<G> { return shared }
+fn bump(g: Ref<G>) { g.xs[0] = g.xs[0] + 1 }
+fn viaCopy() {
+    let g = get()
+    let xs = g.xs
+    sync (writes xs) { xs[0] = xs[0] + 1 }
+}
+fn main() {
+    let g = get()
+    sync (writes g) { bump(g) }
+    viaCopy()
+    sync (reads g.xs) { println(str(g.xs[0])) }
+}

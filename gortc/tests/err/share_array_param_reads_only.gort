@@ -1,0 +1,10 @@
+// error: passing it to `bump`, which writes through it, needs writes g
+package t
+struct G { xs: Array<i64> }
+let shared: Ref<G> = new G { xs: [1, 2] }
+fn get(): Ref<G> { return shared }
+fn bump(g: Ref<G>) { g.xs[0] = 1 }
+fn main() {
+    let g = get()
+    sync (reads g) { bump(g) }
+}

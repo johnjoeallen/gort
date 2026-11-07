@@ -1,3 +1,3 @@
-// error: reads needs a Ref<T> to lock, found i64
+// error: reads needs a Ref<T> or an Array<T> to lock, found i64
 package t
 fn main() { let x = 3; sync (reads x) { println(x) } }

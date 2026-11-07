@@ -928,28 +928,44 @@ impl<'a> FnGen<'a> {
                 self.scopes.push(Vec::new());
                 let mut rs: Vec<String> = Vec::new();
                 for (_, target) in targets {
-                    let Ty::Ref(sid) = &target.ty else { unreachable!() };
-                    let sn = self.prog.structs[*sid].name.clone();
+                    let (cty, rel) = match &target.ty {
+                        Ty::Ref(sid) => {
+                            let sn = self.prog.structs[*sid].name.clone();
+                            (format!("G_{}*", sn), format!("G_{}_release", sn))
+                        }
+                        Ty::Arr(_) => ("gort_arr*".to_string(), "gort_arr_release".to_string()),
+                        _ => unreachable!(),
+                    };
+                    let is_arr = matches!(target.ty, Ty::Arr(_));
                     self.push_frame();
                     let v = self.expr(target);
                     let r = self.tmp();
                     // A variable that the body never assigns keeps its object alive through the block by itself: no count of our own is needed.
                     if sync_var(target).map_or(false, |id| !assigns_var(body, id)) && v.own.is_none() {
-                        self.line(format!("G_{}* {} = {};", sn, r, v.c));
+                        self.line(format!("{} {} = {};", cty, r, v.c));
                         self.pop_frame();
                     } else {
                         let o = self.copy_value(v, &target.ty);
-                        self.line(format!("G_{}* {} = {};", sn, r, o));
+                        self.line(format!("{} {} = {};", cty, r, o));
                         self.pop_frame();
-                        self.scopes.last_mut().unwrap().push(format!("G_{}_release({});", sn, r));
+                        self.scopes.last_mut().unwrap().push(format!("{}({});", rel, r));
                     }
-                    let handled = self.try_stack.iter().any(|t| t.catches_null) || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
-                    if handled {
-                        self.null_throw(format!("!{}", r));
+                    if !is_arr {
+                        let handled = self.try_stack.iter().any(|t| t.catches_null) || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
+                        if handled {
+                            self.null_throw(format!("!{}", r));
+                        } else {
+                            self.line(format!("gort_nn({});", r));
+                        }
+                    }
+                    if is_arr {
+                        // a view locks the array it looks into
+                        let l = self.tmp();
+                        self.line(format!("void* {} = gort_arr_lockobj({});", l, r));
+                        rs.push(l);
                     } else {
-                        self.line(format!("gort_nn({});", r));
+                        rs.push(r);
                     }
-                    rs.push(r);
                 }
                 if rs.len() == 1 {
                     let (lock, unlock) = if targets[0].0 { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
