@@ -41,19 +41,21 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
-    let run = |needs: &Vec<Vec<u8>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>) {
+    let run = |needs: &Vec<Vec<u8>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<Style>) {
         let mut out: Vec<Finding> = Vec::new();
         let mut hits: Vec<(FnId, usize, u8)> = Vec::new();
         let mut fresh_out: Vec<bool> = vec![false; prog.fns.len()];
+        let mut styles_out: Vec<Style> = Vec::new();
         for (fid, f) in prog.fns.iter().enumerate() {
             let Some(body) = &f.body else { continue };
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), styles: Vec::new(), out: Vec::new(), hits: Vec::new() };
             cx.block(body);
             fresh_out[fid] = matches!(f.ret, Ty::Ref(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
+            styles_out.extend(cx.styles);
             if report {
                 let mut seen: HashSet<(u32, String)> = HashSet::new();
                 for fi in cx.out {
@@ -63,12 +65,12 @@ pub fn check(prog: &Program) -> Vec<Finding> {
                 }
             }
         }
-        (out, hits, fresh_out)
+        (out, hits, fresh_out, styles_out)
     };
     // fresh results first: a function is fresh if every return gives back a new object nothing else refers to (or a fresh call's result)
     let mut fresh: Vec<bool> = vec![false; prog.fns.len()];
     loop {
-        let (_, _, f2) = run(&needs, &fresh, false);
+        let (_, _, f2, _) = run(&needs, &fresh, false);
         let mut changed = false;
         for i in 0..fresh.len() {
             if f2[i] && !fresh[i] {
@@ -81,7 +83,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
         }
     }
     loop {
-        let (_, hits, _) = run(&needs, &fresh, false);
+        let (_, hits, _, _) = run(&needs, &fresh, false);
         let mut changed = false;
         for (f, k, l) in hits {
             if needs[f][k] < l {
@@ -93,7 +95,31 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             break;
         }
     }
-    run(&needs, &fresh, true).0
+    let (mut out, _, _, styles) = run(&needs, &fresh, true);
+    // one array, two locks: a block on the holder (a receiver or parameter, covered by the caller) and a block on the array itself do not
+    // exclude each other, so an array field must be locked one way throughout
+    let owner_keys: HashSet<(usize, usize)> = styles.iter().filter(|x| !x.direct).map(|x| x.key).collect();
+    let mut seen: HashSet<(usize, usize)> = HashSet::new();
+    for st in styles.iter().filter(|x| x.direct && owner_keys.contains(&x.key)) {
+        if seen.insert(st.key) {
+            let (sid, idx) = st.key;
+            out.push(Finding {
+                file: st.file.clone(),
+                line: st.line,
+                msg: format!("`{0}.{1}` is locked through its holder elsewhere (a receiver or parameter) and by a block on the array itself here; the two locks do not exclude each other: use `sync` on the holder everywhere, or on the array everywhere", prog.structs[sid].name, prog.structs[sid].fields[idx].name),
+                warn: false,
+            });
+        }
+    }
+    out
+}
+
+/// How an access to an array field was covered: by a block on the array itself (`direct`) or by the caller's block on the holder.
+pub struct Style {
+    key: (usize, usize),
+    direct: bool,
+    line: u32,
+    file: String,
 }
 
 /// Fields written outside construction: `(struct, field index)`, and separately the array fields whose array is changed in place.
@@ -224,6 +250,9 @@ struct Cx<'a> {
     locals: HashMap<VarId, bool>,
     /// variables holding a copy of an array handle taken from a place that other code can reach (a field, a global, a parameter, another such copy)
     shared_arrs: HashMap<VarId, Option<usize>>,
+    /// the array field a copied-out handle came from
+    var_field: HashMap<VarId, (usize, usize)>,
+    styles: Vec<Style>,
     out: Vec<Finding>,
     /// accesses through this function's own receiver or parameters that no block of its own covers: (function, slot, level)
     hits: Vec<(FnId, usize, u8)>,
@@ -301,6 +330,9 @@ impl<'a> Cx<'a> {
                 if matches!(e.ty, Ty::Arr(_)) {
                     if let Some(o) = self.arr_origin(e) {
                         self.shared_arrs.insert(*id, o);
+                        if let Some(k) = self.arr_key(e) {
+                            self.var_field.insert(*id, k);
+                        }
                     }
                 }
                 // a new name for an existing local is a second handle on the object, not a new object: only an allocation starts a local
@@ -340,6 +372,9 @@ impl<'a> Cx<'a> {
                     if matches!(t.ty, Ty::Arr(_)) {
                         if let Some(o) = self.arr_origin(v) {
                             self.shared_arrs.insert(*id, o);
+                            if let Some(k) = self.arr_key(v) {
+                                self.var_field.insert(*id, k);
+                            }
                         }
                     }
                 }
@@ -580,6 +615,16 @@ impl<'a> Cx<'a> {
         }
     }
 
+    /// The array field `e` is, or was copied from.
+    fn arr_key(&self, e: &TExpr) -> Option<(usize, usize)> {
+        match &strip(e).kind {
+            EK::Field(b, idx) => sid_of(&b.ty).map(|s| (s, *idx)),
+            EK::Var(v) => self.var_field.get(v).copied(),
+            EK::Slice(b, ..) => self.arr_key(b),
+            _ => None,
+        }
+    }
+
     /// Can other code reach the array handle `e` too? None: no, it is this function's own. Some(None): yes, and this function must lock the
     /// array itself. Some(Some(slot)): it comes from this function's receiver (slot 0) or parameter (slot k + 1); the caller's block covers it.
     fn arr_origin(&self, e: &TExpr) -> Option<Option<usize>> {
@@ -638,16 +683,23 @@ impl<'a> Cx<'a> {
             _ => return,
         }
         let Some(origin) = self.arr_origin(a) else { return };
+        let key = self.arr_key(a);
         let mut weak: Option<String> = None;
         for (m, t) in &self.open {
             if same_place(a, t) {
                 if *m || !want_mutate {
+                    if let Some(key) = key {
+                        self.styles.push(Style { key, direct: true, line, file: self.f().file.clone() });
+                    }
                     return;
                 }
                 weak = Some(self.name_of(t));
             }
         }
         if let (None, Some(slot)) = (&weak, origin) {
+            if let Some(key) = key {
+                self.styles.push(Style { key, direct: false, line, file: self.f().file.clone() });
+            }
             self.hits.push((self.fid, slot, if want_mutate { 2 } else { 1 }));
             return;
         }

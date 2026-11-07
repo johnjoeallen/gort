@@ -1,5 +1,5 @@
-// KNOWN GAP (docs/architecture/compiler.md): `bump` locks the holder, `viaCopy` locks the array itself. Both are accepted, but they take
-// different locks, so on two threads they would not exclude each other. This test only pins down that the checker accepts it.
+// error: `G.xs` is locked through its holder elsewhere (a receiver or parameter) and by a block on the array itself here
+// `bump` locks the holder, `viaCopy` locks the array itself: different locks, so the two could race. One style per array field.
 package t
 struct G { xs: Array<i64> }
 let shared: Ref<G> = new G { xs: [1, 2] }
