@@ -1,0 +1,13 @@
+// a function that always returns a new array is fresh: its result is local to the caller
+package t
+fn make(n: usize): Array<i64> {
+    let a = new i64[n]
+    a[0] = 1
+    return a
+}
+fn twice(n: usize): Array<i64> { return make(n) }
+fn main() {
+    let xs = twice(3)
+    xs[1] = 7
+    println(str(xs[0] + xs[1]))
+}

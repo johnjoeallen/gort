@@ -53,7 +53,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             }
             let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), styles: Vec::new(), out: Vec::new(), hits: Vec::new() };
             cx.block(body);
-            fresh_out[fid] = matches!(f.ret, Ty::Ref(_)) && cx.ret_fresh == Some(true);
+            fresh_out[fid] = matches!(f.ret, Ty::Ref(_) | Ty::Arr(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
             styles_out.extend(cx.styles);
             if report {
@@ -314,6 +314,9 @@ impl<'a> Cx<'a> {
 
     /// Is `e` a new object that nothing else refers to? A `new`, the result of a fresh function, or a local that has not escaped.
     fn is_fresh_value(&self, e: &TExpr) -> bool {
+        if matches!(e.ty, Ty::Arr(_)) {
+            return self.is_fresh_arr(e);
+        }
         match &e.kind {
             EK::NewObj(..) => true,
             EK::Call(f, _) | EK::Method(f, _, _) => self.fresh[*f],
@@ -321,6 +324,56 @@ impl<'a> Cx<'a> {
             EK::BoxVal(i) | EK::Borrow(i) => self.is_fresh_value(i),
             _ => false,
         }
+    }
+
+    /// Is the array handle `e` a new array that nothing else refers to? A function that returns a stored array (`return self.xs`) is not
+    /// fresh, so its result is as shared as the field it came from.
+    fn is_fresh_arr(&self, e: &TExpr) -> bool {
+        match &strip(e).kind {
+            EK::NewArr(..) | EK::ArrLit(..) | EK::RtCall(..) | EK::Builtin(..) | EK::Json(..) => true,
+            EK::Call(f, args) | EK::Method(f, _, args) => {
+                if self.prog.fns[*f].body.is_none() {
+                    return true;
+                }
+                // a function that returns (a view of) its parameter gives back an array that is as local as its arguments
+                self.fresh[*f] && (!self.returns_param_array(*f) || args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || self.arr_origin(a).is_none()))
+            }
+            EK::Var(v) => !self.f().params.contains(v) && !self.shared_arrs.contains_key(v),
+            EK::Slice(b, ..) => self.is_fresh_arr(b),
+            EK::Cond(_, a, b) => self.is_fresh_arr(a) && self.is_fresh_arr(b),
+            _ => false,
+        }
+    }
+
+    /// Is `e` a parameter's array, or a view of it?
+    fn arr_param_derived(&self, e: &TExpr) -> bool {
+        match &strip(e).kind {
+            EK::Var(v) => self.f().params.contains(v),
+            EK::Slice(b, ..) => self.arr_param_derived(b),
+            _ => false,
+        }
+    }
+
+    /// Does any `return` in function `f` give back an array derived from one of its parameters?
+    fn returns_param_array(&self, f: FnId) -> bool {
+        fn derived(e: &TExpr, params: &[VarId]) -> bool {
+            match &strip(e).kind {
+                EK::Var(v) => params.contains(v),
+                EK::Slice(b, ..) => derived(b, params),
+                _ => false,
+            }
+        }
+        let info = &self.prog.fns[f];
+        let Some(body) = &info.body else { return false };
+        let mut hit = false;
+        walk_stmts(body, &mut |s| {
+            if let TS::Return(Some(e)) = &s.kind {
+                if matches!(e.ty, Ty::Arr(_)) && derived(e, &info.params) {
+                    hit = true;
+                }
+            }
+        });
+        hit
     }
 
     fn stmt(&mut self, s: &TStmt) {
@@ -352,7 +405,8 @@ impl<'a> Cx<'a> {
             }
             TS::Return(Some(e)) => {
                 self.expr(e, s.line, Need::Read);
-                let fr = self.is_fresh_value(e);
+                // an array derived from a parameter (`return a[lo..hi]`) is as local as the argument was: checked at the call
+                let fr = self.is_fresh_value(e) || (matches!(e.ty, Ty::Arr(_)) && self.arr_param_derived(e));
                 self.ret_fresh = Some(self.ret_fresh.unwrap_or(true) && fr);
                 self.escape_in(&[e]);
             }
@@ -660,6 +714,7 @@ impl<'a> Cx<'a> {
                 None => self.f().params.iter().position(|p| p == v).map(|k| Some(k + 1)),
             },
             EK::Slice(b, ..) => self.arr_origin(b),
+            EK::Call(..) | EK::Method(..) | EK::Cond(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
             _ => None,
         }
     }

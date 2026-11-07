@@ -125,7 +125,8 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 
 | Access | Needs |
 |---|---|
-| array made in this function, or returned by a call | nothing (taken as local) |
+| array made in this function, or returned by a *fresh* function (every `return` is a new array, or a view of a parameter whose argument is itself local) | nothing |
+| array returned by a function that returns a stored array (`return self.xs`) | as shared as the field it came from: the copy needs its own block |
 | `g.xs[i]`, `g.xs.length`, append, where `g` is shared and something changes `xs` in place | `sync (reads g.xs)` / `sync (writes g.xs)` |
 | `let xs = g.xs` then `xs[i] = v` | `sync (writes xs)` on the copy |
 | global array that something changes in place | a block naming it |
@@ -136,7 +137,7 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 
 **One style per array field.** A field's array is locked through its holder (receiver and parameter accesses, covered by the caller) or by a block on the array itself, never both (**checked**: ``G.xs is locked through its holder elsewhere ... use sync on the holder everywhere, or on the array everywhere``, `err/share_array_mixed_locks.gort`). The two locks do not exclude each other, so mixing them could race.
 
-Known gaps: an array returned by a call is taken as local; the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
+Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
 ### 5.5 `spawn` and publishing
 
