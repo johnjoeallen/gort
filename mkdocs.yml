@@ -41,6 +41,7 @@ nav:
       - 4. Measured Against Go, Java and Rust: journey/04-comparison.md
       - 5. mini-redis: journey/05-mini-redis.md
       - 6. Locks that park: journey/06-locks.md
+  - Language manual: manual.md
   - Sharing and access checking: sharing.md
   - Architecture:
       - architecture/index.md
