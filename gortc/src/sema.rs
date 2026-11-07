@@ -286,6 +286,34 @@ impl<'a> Sema<'a> {
                 }
             }
         }
+        // an array handed to or returned by C holds plain data: scalars, or structs made only of them
+        fn plain(prog: &Program, t: &Ty, depth: usize) -> bool {
+            match t {
+                Ty::Bool | Ty::Int(_) | Ty::F64 | Ty::Dur | Ty::Inst => true,
+                Ty::Struct(s) => {
+                    let si = &prog.structs[*s];
+                    depth < 16 && !si.is_extern && si.variants.is_empty() && !si.methods.iter().any(|m| m.0 == "cleanup") && si.fields.iter().all(|f| plain(prog, &f.ty, depth + 1))
+                }
+                _ => false,
+            }
+        }
+        for fi in 0..self.prog.fns.len() {
+            if !self.prog.fns[fi].is_extern {
+                continue;
+            }
+            let tys: Vec<Ty> = self.prog.fns[fi].param_tys.iter().cloned().chain(std::iter::once(self.prog.fns[fi].ret.clone())).collect();
+            for t in tys {
+                if let Ty::Arr(el) = &t {
+                    if !plain(&self.prog, el, 0) {
+                        let (line, name, file) = (self.prog.fns[fi].line, self.prog.fns[fi].name.clone(), self.prog.fns[fi].file.clone());
+                        self.cur_file = file;
+                        let en = self.prog.type_name(el);
+                        self.error(line, 1, format!("`extern fn {}` takes or returns Array<{}>: an array that crosses into C holds only numbers, bool, or structs of them", name, en));
+                        break;
+                    }
+                }
+            }
+        }
         // cleanup() methods
         for sid in 0..self.prog.structs.len() {
             let c = self.prog.structs[sid].methods.iter().find(|m| m.0 == "cleanup").map(|m| m.1);
@@ -584,7 +612,7 @@ impl<'a> Sema<'a> {
             Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Dur | Ty::Inst | Ty::Fn(..) | Ty::Error => true,
             Ty::Struct(s) => {
                 let si = &self.prog.structs[*s];
-                si.variants.is_empty() && si.cleanup.is_none() && si.fields.iter().all(|f| self.zeroable(&f.ty))
+                si.variants.is_empty() && !si.methods.iter().any(|m| m.0 == "cleanup") && si.fields.iter().all(|f| self.zeroable(&f.ty))
             }
             _ => false,
         }

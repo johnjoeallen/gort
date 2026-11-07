@@ -1,0 +1,5 @@
+// error: an array element must be a scalar, an optional or a plain value, not Ref<P>
+package t
+struct P { x: i64 }
+extern fn bad(a: Array<Ref<P>>): i64
+fn main() { }

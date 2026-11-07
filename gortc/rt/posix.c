@@ -31,6 +31,7 @@
 
 /* the generated program's side (gort_rt0.h and codegen) */
 typedef struct gort_arr gort_arr;
+typedef struct { void *p; size_t n; } gort_xarr;      /* an array given back by an extern function: pointer and length */
 typedef struct G_Conn G_Conn;
 typedef struct G_Listener G_Listener;
 typedef struct { char _empty; } G_IoError;
@@ -158,24 +159,22 @@ static int wait_fd(int fd, uint32_t events, int64_t timeout_ns) {
 }
 
 /* ---- Conn ---- */
-int gort_x_Conn_recv(G_Conn *self, gort_arr *buf, size_t *ret_out) {
+int gort_x_Conn_recv(G_Conn *self, void *buf, size_t buf_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
     for (;;) {
-        ssize_t n = recv(c->fd, gort_rt_arr_data(buf), gort_rt_arr_len(buf), 0);
+        ssize_t n = recv(c->fd, buf, buf_len, 0);
         if (n < 0 && errno == EINTR) continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLIN, -1) == 0) continue; }
-        gort_rt_arr_release(buf);                       /* the argument arrived owned */
         if (n >= 0) { *ret_out = (size_t)n; return 0; }
         return gort_rt_throw_io();
     }
 }
-int gort_x_Conn_send(G_Conn *self, gort_arr *bytes, size_t *ret_out) {
+int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
     for (;;) {
-        ssize_t n = send(c->fd, gort_rt_arr_data(bytes), gort_rt_arr_len(bytes), MSG_NOSIGNAL);
+        ssize_t n = send(c->fd, bytes, bytes_len, MSG_NOSIGNAL);
         if (n < 0 && errno == EINTR) continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLOUT, -1) == 0) continue; }
-        gort_rt_arr_release(bytes);
         if (n >= 0) { *ret_out = (size_t)n; return 0; }
         return gort_rt_throw_io();
     }
@@ -241,7 +240,7 @@ void gort_x_Listener_cleanup(G_Listener *self) {
 }
 
 /* ---- the host ---- */
-gort_arr *gort_x_leak(gort_arr *bytes) { return bytes; }   /* the argument arrives owned; the caller keeps it for the run */
+gort_xarr gort_x_leak(void *bytes, size_t n) { return (gort_xarr){ bytes, n }; }   /* the same array comes back: the caller gets its own handle */
 void gort_x_log(G_IoError e) { (void)e; fprintf(stderr, "gort: connection failed (I/O error)\n"); }
 void gort_x_exit(int32_t code) { exit(code); }
 

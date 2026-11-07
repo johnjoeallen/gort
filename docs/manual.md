@@ -135,11 +135,17 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 
 `sync (writes g)` **does not cover `g.xs`**.
 
-An `extern` function receives a raw pointer to the array's data, so what it returns is either that same array or a new one (C's dynamically allocated array, copied into a new Gort array and freed). The checker cannot tell which, so an extern result is local only when every array argument is local; otherwise it is as shared as the arguments. Counts do not enter into it; the local/shared distinction matters only for `sync`.
+An `extern` function receives an array as a raw pointer and a length, `(void* p, size_t p_len)`, and the caller keeps the array alive for the call. It gives an array back as `gort_xarr { void* p; size_t n; }`. The runtime compares the returned pointer with the data of each array argument:
+
+* inside an argument's data (at an element boundary): the result is **that array**, or a view of it when the pointer or length differs (`firstHalf`, `dropFirst` in `ok/extern_array.gort`); writes through the result show in the original;
+* anywhere else: C allocated it, so it is **copied into a new Gort array and freed**;
+* a null pointer with length 0 is an empty array; a pointer inside an argument that runs past it, or is not on an element boundary, traps.
+
+The element type of an array that crosses into C is a number, `bool`, or a plain struct made only of those (no `String`, `Ref`, `Array`, optional, enum, `cleanup()` or extern struct): anything else is a compile error (`err/extern_array_*.gort`). The checker cannot tell the two result cases apart, so an extern result is local only when every array argument is local; otherwise it is as shared as the arguments. Counts do not enter into it; the local/shared distinction matters only for `sync`.
 
 **One style per array field.** A field's array is locked through its holder (receiver and parameter accesses, covered by the caller) or by a block on the array itself, never both (**checked**: ``G.xs is locked through its holder elsewhere ... use sync on the holder everywhere, or on the array everywhere``, `err/share_array_mixed_locks.gort`). The two locks do not exclude each other, so mixing them could race.
 
-Known gaps: the run-time side of the extern rule (comparing the returned pointer with the argument's, to return the original handle instead of a copy) is not built, and no extern in the tests returns an array; the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
+Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
 ### 5.5 `spawn` and publishing
 

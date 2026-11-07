@@ -1,0 +1,29 @@
+// An extern function sees an array as a raw pointer and a length. If the pointer it gives back is inside an array it was given, the result is
+// that array (or a view of it); otherwise it is memory the function allocated, copied into a new array and freed.
+package t
+struct Pt { x: i64, y: i64 }
+extern fn same(a: Array<i64>): Array<i64>              // returns the pointer it was given
+extern fn firstHalf(a: Array<i64>): Array<i64>         // same pointer, shorter
+extern fn dropFirst(a: Array<i64>): Array<i64>         // a pointer inside the argument
+extern fn doubled(a: Array<i64>): Array<i64>           // malloc'd, new
+extern fn points(n: usize): Array<Pt>                  // malloc'd structs, no arguments
+extern fn sumBytes(a: Array<u8>): i64                  // only reads
+fn main() {
+    let a = [1, 2, 3, 4]
+    let s = same(a)
+    s[0] = 100
+    println(str(a[0]))                                   // 100: the same array
+    let h = firstHalf(a)
+    h[1] = 200
+    println(str(h.length) + " " + str(a[1]))             // 2 200: a view
+    let r = dropFirst(a)
+    r[0] = 300
+    println(str(r.length) + " " + str(a[1]))             // 3 300: a view that starts at element 1
+    let d = doubled(a)
+    d[0] = -1
+    println(str(d.length) + " " + str(d[1]) + " " + str(a[0]))   // 8 300 100: a copy, the original is unchanged
+    let p = points(3)
+    println(str(p.length) + " " + str(p[2].x) + " " + str(p[2].y))
+    let b = [1 as u8, 2 as u8, 3 as u8]
+    println(str(sumBytes(b[1..])))                       // 5
+}

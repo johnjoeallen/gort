@@ -1,0 +1,5 @@
+// error: takes or returns Array<Holder>: an array that crosses into C holds only numbers, bool, or structs of them
+package t
+struct Holder { name: String, n: i64 }
+extern fn bad(n: usize): Array<Holder>
+fn main() { }

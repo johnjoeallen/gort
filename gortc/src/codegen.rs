@@ -210,18 +210,22 @@ impl<'a> Gen<'a> {
             ps.push(format!("G_{}* self", self.prog.structs[o].name));
         }
         for (i, t) in f.param_tys.iter().enumerate() {
-            if f.is_extern && matches!(t, Ty::Fn(..)) {
+            if f.is_extern && matches!(t, Ty::Arr(_)) {
+                // an array travels as a raw pointer and a length; the caller keeps the array alive for the call
+                ps.push(format!("void* p{0}, size_t p{0}_len", i));
+            } else if f.is_extern && matches!(t, Ty::Fn(..)) {
                 // a function given to the runtime travels as (code, environment); the code takes the environment first
                 ps.push(format!("void* p{}, void* p{}_env", i, i));
             } else {
                 ps.push(format!("{} p{}", self.ctype(t), i));
             }
         }
+        let rty = if f.is_extern && matches!(f.ret, Ty::Arr(_)) { "gort_xarr".to_string() } else { self.ctype(&f.ret) };
         let rt = if f.throws.is_empty() {
-            self.ctype(&f.ret)
+            rty
         } else {
             if f.ret != Ty::Unit {
-                ps.push(format!("{}* ret_out", self.ctype(&f.ret)));
+                ps.push(format!("{}* ret_out", rty));
             }
             "int".to_string()
         };
@@ -1421,7 +1425,7 @@ impl<'a> FnGen<'a> {
                 }
                 let rt = if *th { "int".to_string() } else { self.ct(r) };
                 let target = format!("(({} (*)({})){})", rt, if sig.is_empty() { "void".into() } else { sig.join(", ") }, fv.c);
-                self.call_c(target, *th, None, args, &e.ty, &[])
+                self.call_c(target, *th, None, args, &e.ty, &[], false)
             }
             EK::Method(fid, recv, args) => {
                 let rv = self.expr(recv);
@@ -1646,17 +1650,27 @@ impl<'a> FnGen<'a> {
         let throws = !self.prog.fns[fid].throws.is_empty();
         let cname = self.prog.fns[fid].cname.clone();
         let borrowed = self.prog.fns[fid].borrowed.clone();
-        self.call_c(cname, throws, recv, args, ret, &borrowed)
+        let ext = self.prog.fns[fid].is_extern;
+        self.call_c(cname, throws, recv, args, ret, &borrowed, ext)
     }
 
-    fn call_c(&mut self, cname: String, throws: bool, recv: Option<Val>, args: &[TExpr], ret: &Ty, borrowed: &[bool]) -> Val {
+    fn call_c(&mut self, cname: String, throws: bool, recv: Option<Val>, args: &[TExpr], ret: &Ty, borrowed: &[bool], ext: bool) -> Val {
         let mut cargs: Vec<String> = Vec::new();
         if let Some(r) = recv {
             cargs.push(format!("&({})", r.c));
         }
         let mut copies: Vec<String> = Vec::new();
+        let mut arr_args: Vec<String> = Vec::new();
         for (i, a) in args.iter().enumerate() {
             let v = self.expr(a);
+            if ext && matches!(a.ty, Ty::Arr(_)) {
+                // the extern function borrows the array: a count of our own keeps it alive until the statement ends
+                let h = self.copy_value(v, &a.ty);
+                self.register_temp(&h, format!("gort_arr_release({});", h));
+                cargs.push(format!("(void*){}->data, {}->len", h, h));
+                arr_args.push(h);
+                continue;
+            }
             // a borrowing parameter takes the pointer as it is: no count moves, and the caller's variable keeps it alive
             let lends = borrowed.get(i).copied().unwrap_or(false);
             if matches!(a.kind, EK::ExternFn(_) | EK::Borrow(_)) || (lends && a.handle_stable()) {
@@ -1676,7 +1690,8 @@ impl<'a> FnGen<'a> {
             cargs.push(c);
         }
         let t = self.tmp();
-        let cty = self.ct(ret);
+        let raw_ret = ext && matches!(ret, Ty::Arr(_));
+        let cty = if raw_ret { "gort_xarr".to_string() } else { self.ct(ret) };
         if throws && *ret != Ty::Unit {
             self.line(format!("{} {};", cty, t));
             cargs.push(format!("&{}", t));
@@ -1701,6 +1716,16 @@ impl<'a> FnGen<'a> {
         } else {
             self.line(format!("{} {} = {};", cty, t, call));
         }
+        let t = if raw_ret {
+            // the pointer it gave back says whether this is one of the arrays it was given or a new one
+            let Ty::Arr(el) = ret else { unreachable!() };
+            let (hs, r) = (self.tmp(), self.tmp());
+            self.line(format!("gort_arr* {}[{}] = {{ {} }};", hs, arr_args.len().max(1), if arr_args.is_empty() { "0".to_string() } else { arr_args.join(", ") }));
+            self.line(format!("gort_arr* {} = gort_arr_from_c({}, sizeof({}), {}, {});", r, t, self.ct(el), hs, arr_args.len()));
+            r
+        } else {
+            t
+        };
         match drop_code(self.prog, ret, &t) {
             Some(d) => {
                 self.register_temp(&t, d);

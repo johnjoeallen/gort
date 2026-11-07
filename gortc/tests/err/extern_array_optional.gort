@@ -1,0 +1,4 @@
+// error: takes or returns Array<i64?>: an array that crosses into C holds only numbers, bool, or structs of them
+package t
+extern fn bad(a: Array<i64?>): i64
+fn main() { }

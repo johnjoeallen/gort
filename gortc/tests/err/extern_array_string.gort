@@ -1,0 +1,4 @@
+// error: an array element must be a scalar, an optional or a plain value, not String
+package t
+extern fn names(): Array<String>
+fn main() { }

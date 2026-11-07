@@ -399,6 +399,32 @@ static void gort_arr_move(gort_arr *a, size_t lo, size_t hi, size_t to) {
     memmove((char *)a->data + to * a->esize, (char *)a->data + lo * a->esize, (hi - lo) * a->esize);
 }
 
+/* An extern function sees an array as a raw pointer and a length, and gives one back as a `gort_xarr`. What it returns is either (part of) an
+ * array it was given, which is then that same array (or a view of it), or memory it allocated with malloc, which is copied into a new array and
+ * freed. `args` are the handles that were passed. */
+typedef struct { void *p; size_t n; } gort_xarr;
+static gort_arr *gort_arr_from_c(gort_xarr r, size_t esize, gort_arr **args, size_t nargs) {
+    if (!r.p) {
+        if (r.n) gort_trap("extern returned a null array with a length");
+        return gort_arr_new(esize, 0);
+    }
+    for (size_t i = 0; i < nargs; i++) {
+        gort_arr *a = args[i];
+        char *d = (char *)a->data;
+        if (!d || (char *)r.p < d || (char *)r.p > d + a->cap * esize) continue;
+        size_t off = (size_t)((char *)r.p - d);
+        if (off % esize) gort_trap("extern returned a pointer into an argument array that is not an element boundary");
+        size_t lo = off / esize;
+        if (lo + r.n > a->cap) gort_trap("extern returned an array that runs past its argument");
+        if (lo == 0 && r.n == a->len) return gort_arr_retain(a);
+        return gort_arr_slice(a, esize, lo, lo + r.n);
+    }
+    gort_arr *v = gort_arr_new(esize, r.n);
+    if (r.n) memcpy(v->data, r.p, r.n * esize);
+    free(r.p);
+    return v;
+}
+
 /* ---- json.parse<T>: a small strict parser; the compiler writes one decoder per struct on top of these ---- */
 typedef struct { const uint8_t *s, *p, *end; long depth, maxdepth, maxstr; char err[96]; } gort_jp;
 static int gort_jp_fail(gort_jp *j, const char *m) {
