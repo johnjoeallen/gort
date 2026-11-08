@@ -301,7 +301,9 @@ impl<'a> Sema<'a> {
             if !self.prog.fns[fi].is_extern {
                 continue;
             }
-            let tys: Vec<Ty> = self.prog.fns[fi].param_tys.iter().cloned().chain(std::iter::once(self.prog.fns[fi].ret.clone())).collect();
+            // a variadic parameter packs the call's arguments (`sources: Wakeup...`); it is not a buffer of data
+            let np = self.prog.fns[fi].param_tys.len() - usize::from(self.prog.fns[fi].variadic);
+            let tys: Vec<Ty> = self.prog.fns[fi].param_tys[..np].iter().cloned().chain(std::iter::once(self.prog.fns[fi].ret.clone())).collect();
             for t in tys {
                 if let Ty::Arr(el) = &t {
                     if !plain(&self.prog, el, 0) {
