@@ -1,0 +1,13 @@
+// the same program with the block inside each lambda
+package t
+struct G { n: i64 }
+extern fn startThread(body: fn())
+extern fn joinAll()
+fn bump(g: Ref<G>) { g.n = g.n + 1 }
+fn main() {
+    let g = new G { n: 1 }
+    startThread(fn() { sync (writes g) { bump(g) } })
+    startThread(fn() { sync (writes g) { bump(g) } })
+    joinAll()
+    sync (reads g) { println(str(g.n)) }
+}

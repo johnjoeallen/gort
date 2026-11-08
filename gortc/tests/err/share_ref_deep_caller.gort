@@ -1,0 +1,12 @@
+// error: calling `bump`, which writes an object reached through its argument, needs `sync (writes a.b)`
+// an object reached through another object is asked of the caller, like a direct one
+package t
+struct B { n: i64 }
+struct A { b: Ref<B> }
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn get(): Ref<A> { return shared }
+fn bump(a: Ref<A>) { a.b.n = a.b.n + 1 }
+fn main() {
+    let a = get()
+    sync (writes a) { bump(a) }
+}

@@ -1,4 +1,4 @@
-// error: writing `B.n` needs `sync (writes a.b)`
+// error: calling `bump`, which writes an object reached through its argument, needs `sync (writes x.b)`
 package t
 struct B { n: i64 }
 struct A { b: Ref<B> }

@@ -41,8 +41,8 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
-    let mut fneeds: Vec<Vec<Vec<(Vec<(usize, usize)>, u8)>>> = prog.fns.iter().map(|f| vec![Vec::new(); f.params.len() + 1]).collect();
-    let run = |needs: &Vec<Vec<u8>>, fneeds: &Vec<Vec<Vec<(Vec<(usize, usize)>, u8)>>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<FieldHit>) {
+    let mut fneeds: Vec<Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>> = prog.fns.iter().map(|f| vec![Vec::new(); f.params.len() + 1]).collect();
+    let run = |needs: &Vec<Vec<u8>>, fneeds: &Vec<Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<FieldHit>) {
         let mut out: Vec<Finding> = Vec::new();
         let mut hits: Vec<(FnId, usize, u8)> = Vec::new();
         let mut fresh_out: Vec<bool> = vec![false; prog.fns.len()];
@@ -88,14 +88,14 @@ pub fn check(prog: &Program) -> Vec<Finding> {
         let mut changed = false;
         for h in fh {
             let v = &mut fneeds[h.f][h.slot];
-            match v.iter_mut().find(|e| e.0 == h.path) {
-                Some(e) if e.1 >= h.lvl => {}
+            match v.iter_mut().find(|e| e.0 == h.path && e.1 == h.arr) {
+                Some(e) if e.2 >= h.lvl => {}
                 Some(e) => {
-                    e.1 = h.lvl;
+                    e.2 = h.lvl;
                     changed = true;
                 }
                 None => {
-                    v.push((h.path, h.lvl));
+                    v.push((h.path, h.arr, h.lvl));
                     changed = true;
                 }
             }
@@ -119,6 +119,8 @@ pub struct FieldHit {
     slot: usize,
     /// from the receiver or parameter outward: (struct, field) for each step; the last field is the array
     path: Vec<(usize, usize)>,
+    /// the last step is an array field (otherwise the step leads to a `Ref` and the object it points to is accessed)
+    arr: bool,
     lvl: u8,
 }
 
@@ -139,7 +141,9 @@ fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usiz
                 assign(b, m);
             }
             EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_)) => arr(b, m),
-            EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => assign(b, m),
+            // what a handle points to is another object: writing through `a.b` does not change the field `b` itself
+            EK::Deref(_) => {}
+            EK::Index(b, _) | EK::Len(b) | EK::Unwrap(b) => assign(b, m),
             _ => {}
         }
     }
@@ -254,13 +258,19 @@ struct Cx<'a> {
     var_field: HashMap<VarId, Vec<(usize, usize)>>,
     /// array fields this function reached through its own receiver or parameter without a block of its own: the caller must hold one
     fhits: Vec<FieldHit>,
-    fneeds: &'a [Vec<Vec<(Vec<(usize, usize)>, u8)>>],
+    fneeds: &'a [Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>],
     out: Vec<Finding>,
     /// accesses through this function's own receiver or parameters that no block of its own covers: (function, slot, level)
     hits: Vec<(FnId, usize, u8)>,
 }
 
 impl<'a> Cx<'a> {
+    /// Can this function hand a requirement to its caller? A lambda cannot: it is started by `spawn` or called through a function value,
+    /// where nothing checks the caller, so whatever it needs of its captured objects and parameters it must hold itself.
+    fn defers(&self) -> bool {
+        !self.f().name.starts_with("_lambda")
+    }
+
     fn f(&self) -> &'a FnInfo {
         &self.prog.fns[self.fid]
     }
@@ -759,11 +769,11 @@ impl<'a> Cx<'a> {
                 weak = Some(self.name_of(t));
             }
         }
-        if let (None, Some(slot)) = (&weak, origin) {
+        if let (None, Some(slot), true) = (&weak, origin, self.defers()) {
             let lvl = if want_mutate { 2 } else { 1 };
             match key {
                 // a field of the receiver or parameter: the caller must hold a block on that array
-                Some(path) => self.fhits.push(FieldHit { f: self.fid, slot, path, lvl }),
+                Some(path) => self.fhits.push(FieldHit { f: self.fid, slot, path, arr: true, lvl }),
                 // a parameter that is itself an array: the caller must hold a block on the argument
                 None => self.hits.push((self.fid, slot, lvl)),
             }
@@ -774,7 +784,7 @@ impl<'a> Cx<'a> {
 
     /// The caller of `fid` must hold a block on each array field the callee reached through slot `slot` (0 the receiver, k + 1 parameter k).
     fn field_needs(&mut self, fid: FnId, slot: usize, arg: &TExpr, line: u32) {
-        let needs: Vec<(Vec<(usize, usize)>, u8)> = self.fneeds[fid].get(slot).cloned().unwrap_or_default();
+        let needs: Vec<(Vec<(usize, usize)>, bool, u8)> = self.fneeds[fid].get(slot).cloned().unwrap_or_default();
         if needs.is_empty() || self.is_fresh_value(arg) {
             return;
         }
@@ -782,14 +792,24 @@ impl<'a> Cx<'a> {
             EK::Borrow(i) | EK::BoxVal(i) if matches!(i.ty, Ty::Struct(_)) => &**i,
             _ => arg,
         };
-        for (path, lvl) in needs {
+        for (path, arr, lvl) in needs {
             let mut place = base.clone();
             for (sid, idx) in &path {
+                // reaching through a handle is an explicit dereference, as the lowering writes it: the hop counts against blocks on the way
+                if let Ty::Ref(t) | Ty::Obj(t) = place.ty.clone() {
+                    place = TExpr { kind: EK::Deref(Box::new(place)), ty: Ty::Struct(t), line, lit: false };
+                }
                 let fty = self.prog.structs[*sid].fields[*idx].ty.clone();
                 place = TExpr { kind: EK::Field(Box::new(place), *idx), ty: fty, line, lit: false };
             }
-            let what = format!("calling `{}`, which {} an array field of its argument,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads" });
-            self.access_arr(&place, if lvl == 2 { Need::Write } else { Need::Read }, line, &what);
+            let need = if lvl == 2 { Need::Write } else { Need::Read };
+            if arr {
+                let what = format!("calling `{}`, which {} an array field of its argument,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads" });
+                self.access_arr(&place, need, line, &what);
+            } else {
+                let what = format!("calling `{}`, which {} an object reached through its argument,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads mutable fields of" });
+                self.access_ref(&place, need, line, &what);
+            }
         }
     }
 
@@ -833,7 +853,7 @@ impl<'a> Cx<'a> {
             }
         }
         match &n.kind {
-            EK::SelfPlace => {
+            EK::SelfPlace if owner_expr.map_or(true, |o| matches!(norm(o).kind, EK::SelfPlace)) => {
                 // inside a method the caller holds the block: the method needs it of its caller
                 self.hits.push((self.fid, 0, if need == Need::Write { 2 } else { 1 }));
                 return;
@@ -862,7 +882,9 @@ impl<'a> Cx<'a> {
             // A block covers the object its reference names and the by-value places inside it, not another object reached through a field that
             // holds a reference: that one may be held by someone else too, who locks a different object. So no further reference hop may lie
             // between the access and the block's reference (the one hop that opens the named object itself is the allowed one).
-            let j = nodes.iter().position(|x| same_place(x, t)).or_else(|| if same_place(n, t) { Some(nodes.len()) } else { None });
+            let j = nodes.iter().position(|x| same_place(x, t))
+                .or_else(|| nodes.iter().position(|x| !matches!(x.kind, EK::Deref(_)) && same_arr(x, t)))   // a place built from a summary has no explicit dereferences
+                .or_else(|| if same_place(n, t) { Some(nodes.len()) } else { None });
             let Some(j) = j else { continue };
             let hops = nodes[..j].iter().filter(|x| matches!(x.kind, EK::Deref(_))).count() + usize::from(via_ref);
             if hops > 1 {
@@ -876,7 +898,7 @@ impl<'a> Cx<'a> {
             }
         }
         // the object that is reached first is the caller's when it is this function's own parameter: the caller holds the block
-        if weak.is_none() {
+        if weak.is_none() && self.defers() {
             if let Some(o) = owner_expr {
                 let mut o = o;
                 while let EK::Unwrap(i) = &o.kind {
@@ -889,6 +911,19 @@ impl<'a> Cx<'a> {
                 if let EK::Var(v) = &o2.kind {
                     if let Some(k) = self.f().params.iter().position(|p| p == v) {
                         self.hits.push((self.fid, k + 1, if want_mutate { 2 } else { 1 }));
+                        return;
+                    }
+                }
+                // an object reached through another object that is the receiver's or a parameter's (`self.child`, `a.b`): the caller must
+                // hold a block naming that object, so the summary records the path to it
+                if let Some((root, steps)) = field_chain(o2) {
+                    let slot = match &root.kind {
+                        EK::SelfPlace => Some(0),
+                        EK::Var(v) => self.f().params.iter().position(|p| p == v).map(|k| k + 1),
+                        _ => None,
+                    };
+                    if let Some(slot) = slot {
+                        self.fhits.push(FieldHit { f: self.fid, slot, path: steps, arr: false, lvl: if want_mutate { 2 } else { 1 } });
                         return;
                     }
                 }

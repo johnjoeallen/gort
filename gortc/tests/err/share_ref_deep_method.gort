@@ -1,0 +1,13 @@
+// error: needs `sync (writes a.b)`
+package t
+struct B { n: i64 }
+struct A {
+    b: Ref<B>
+    fn bump() { self.b.n = self.b.n + 1 }
+}
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn get(): Ref<A> { return shared }
+fn main() {
+    let a = get()
+    a.bump()
+}

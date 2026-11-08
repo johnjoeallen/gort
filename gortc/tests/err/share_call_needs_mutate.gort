@@ -1,8 +1,13 @@
-// error: passing it to `setN`, which writes through it, needs `sync (writes h.s)`: the object is not local and is mutable
+// error: calling `viaGlobalField`, which writes an object reached through its argument, needs `sync (writes h.s)`
 package t
 struct S { n: i64 }
 fn setN(s: Ref<S>) { s.n = 5 }
 fn viaParam(s: Ref<S>) { setN(s) }          // fine here: a parameter, the caller holds the block
-fn viaGlobalField(h: Ref<H>) { setN(h.s) }
+fn viaGlobalField(h: Ref<H>) { setN(h.s) }  // h.s is another object: the caller must hold a block on it
 struct H { s: Ref<S> }
-fn main() {}
+let shared: Ref<H> = new H { s: new S { n: 0 } }
+fn getH(): Ref<H> { return shared }
+fn main() {
+    let h = getH()
+    viaGlobalField(h)
+}

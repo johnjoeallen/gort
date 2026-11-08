@@ -1,0 +1,16 @@
+// the caller holds the lock on an object reached through another object, for a function and for a method
+package t
+struct B { n: i64 }
+struct A {
+    b: Ref<B>
+    fn bump() { self.b.n = self.b.n + 1 }
+    fn get(): i64 { return self.b.n }
+}
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn getA(): Ref<A> { return shared }
+fn add(a: Ref<A>, k: i64) { a.b.n = a.b.n + k }
+fn main() {
+    let a = getA()
+    sync (writes a.b) { a.bump(); add(a, 5) }
+    sync (reads a.b) { println(str(a.get())) }
+}

@@ -1,0 +1,11 @@
+// error: passing it to `bump`, which writes through it, needs `sync (writes g)`
+// a lambda is started by spawn: what it needs of the objects it captured it must hold itself
+package t
+struct G { n: i64 }
+extern fn startThread(body: fn())
+fn bump(g: Ref<G>) { g.n = g.n + 1 }
+fn main() {
+    let g = new G { n: 1 }
+    startThread(fn() { bump(g) })
+    startThread(fn() { bump(g) })
+}

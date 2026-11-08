@@ -119,6 +119,10 @@ A block on `a` covers `a`'s own fields and values stored inline in it. It does *
 
 A `Ref` parameter or receiver needs no block in the callee: the caller either owns the object locally or holds the block, and the compiler checks the caller's block against the callee's summary, including its **mode** (`passing it to bump, which writes through it, needs writes g`).
 
+This holds at any depth. The callee's summary records the *path* to each object it reaches through its receiver or a parameter (`a`, `a.b`, `a.b.c`), and the caller must hold a block naming that object: `bump(a)` that writes `a.b.n` needs `sync (writes a.b)`, and a block on `a` alone is rejected (`err/share_ref_deep_caller.gort`, `ok/sync_ref_deep.gort`). Writing through `a.b` does not make the field `b` itself mutable; only assigning `a.b = ...` does.
+
+**Lambdas hold their own locks.** A lambda is started by `spawn` or called through a function value, so nothing checks its caller. Whatever it needs of the objects it captured, or of its parameters, it must hold itself: `startThread(fn() { bump(g) })` is rejected unless the lambda wraps the call in `sync (writes g)` (`err/share_lambda_captured.gort`, `ok/sync_lambda_captured.gort`).
+
 ### 5.4 Arrays under `sync`
 
 An `Array<T>` is an object of its own with its own lock; a slice locks the array it looks into.
@@ -131,7 +135,7 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 | `let xs = g.xs` then `xs[i] = v` | `sync (writes xs)` on the copy |
 | global array that something changes in place | a block naming it |
 | array field reached through this function's receiver or parameter, at any depth of plain field steps (`self.xs`, `g.xs`, `a.b.xs`) | the caller's block on that array: the callee's summary records the field path it reads or writes, and a caller that does not hold the object locally must hold `sync (reads/writes a.b.xs)` |
-| array reached through an element (`self.items[i].xs`) | a block in this function |
+| array reached through an element (`self.items[i].xs`) | a block in this function: the caller cannot name "element i" |
 | array field of a struct held by value | nothing |
 
 `sync (writes g)` **does not cover `g.xs`**.
