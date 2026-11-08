@@ -269,6 +269,7 @@ fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usiz
         });
         visit_block(body, &mut |e| {
             visit_expr(e, &mut |x| match &x.kind {
+                EK::Take(p) => assign(p, &mut m),
                 EK::RtCall(n, args) if matches!(*n, "appendArr" | "appendOne" | "grow" | "moveWithin" | "copyFrom") => {
                     if let Some(a) = args.first() {
                         touch(a, &mut m);
@@ -421,6 +422,8 @@ impl<'a> Cx<'a> {
             EK::Call(f, _) | EK::Method(f, _, _) => self.fresh[*f],
             EK::Var(id) | EK::ObjRef(id) => self.locals.get(id) == Some(&false),
             EK::BoxVal(i) | EK::Borrow(i) => self.is_fresh_value(i),
+            // what is taken out of an owned field is held by nothing else
+            EK::Take(p) => owned_place(self.owned, p),
             _ => false,
         }
     }
@@ -441,6 +444,7 @@ impl<'a> Cx<'a> {
             }
             EK::Var(v) => !self.f().params.contains(v) && !self.shared_arrs.contains_key(v),
             EK::Slice(b, ..) => self.is_fresh_arr(b),
+            EK::Take(p) => owned_place(self.owned, p),
             EK::Cond(_, a, b) => self.is_fresh_arr(a) && self.is_fresh_arr(b),
             _ => false,
         }
@@ -651,6 +655,8 @@ impl<'a> Cx<'a> {
                 self.o2(b, true, line);
             }
             EK::Borrow(x) | EK::BoxVal(x) => self.o2(x, in_place, line),
+            // taking a handle out of an owned field is the one way to move it: the field is replaced, so nothing else holds it
+            EK::Take(p) => self.o2(p, true, line),
             EK::Call(f, args) => {
                 for (i, a) in args.iter().enumerate() {
                     let ok = self.borrowed[*f].get(i).copied().unwrap_or(false) || self.arr_ok[*f].get(i).copied().unwrap_or(false);
@@ -747,6 +753,10 @@ impl<'a> Cx<'a> {
                             self.access(b, Need::Read, line, &format!("reading `{}.{}`", self.prog.structs[s].name, self.prog.structs[s].fields[*idx].name));
                         }
                     }
+                }
+                EK::Take(p) => {
+                    self.access_spine(p, Need::Write, line);
+                    self.write_operands(p, line);
                 }
                 EK::StructLit(sid, fs) | EK::NewObj(sid, fs) => {
                     for (idx, v) in fs {
@@ -951,7 +961,7 @@ impl<'a> Cx<'a> {
                 None => self.f().params.iter().position(|p| p == v).map(|k| Some(k + 1)),
             },
             EK::Slice(b, ..) => self.arr_origin(b),
-            EK::Call(..) | EK::Method(..) | EK::Cond(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
+            EK::Call(..) | EK::Method(..) | EK::Cond(..) | EK::Take(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
             _ => None,
         }
     }

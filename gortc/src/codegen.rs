@@ -1474,6 +1474,36 @@ impl<'a> FnGen<'a> {
                 self.register_temp(&t, format!("G_{}_release({});", sn, t));
                 Val { c: t.clone(), own: Some(t) }
             }
+            EK::Take(place) => {
+                // move the handle out: the field gets an empty array (or null) and the result owns the old handle, no count moves
+                let p = self.expr(place);
+                let cty = self.ct(&place.ty);
+                let t = self.tmp();
+                self.line(format!("{} {} = {};", cty, t, p.c));
+                match &place.ty {
+                    Ty::Arr(el) => {
+                        let ecty = self.ct(el);
+                        let n = self.tmp();
+                        match drop_code(self.prog, el, "(*e)") {
+                            Some(_) => {
+                                let name: String = format!("gort_edrop_{}", self.prog.type_name(el).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect::<String>());
+                                EDROPS.with(|m| m.borrow_mut().insert(name.clone(), (**el).clone()));
+                                self.line(format!("gort_arr* {} = gort_arr_new_d(sizeof({}), 0, {});", n, ecty, name));
+                            }
+                            None => self.line(format!("gort_arr* {} = gort_arr_new(sizeof({}), 0);", n, ecty)),
+                        }
+                        self.line(format!("{} = {};", p.c, n));
+                    }
+                    _ => self.line(format!("{} = NULL;", p.c)),
+                }
+                match drop_code(self.prog, &place.ty, &t) {
+                    Some(d) => {
+                        self.register_temp(&t, d);
+                        Val { c: t.clone(), own: Some(t) }
+                    }
+                    None => Val::plain(t),
+                }
+            }
             EK::NewArr(el, len) => {
                 let lv = self.expr(len);
                 let cty = self.ct(el);

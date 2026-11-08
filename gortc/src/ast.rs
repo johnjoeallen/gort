@@ -56,6 +56,8 @@ pub enum ExprKind {
     /// `a[lo..hi]`, either bound optional: a view of the array
     Slice(Box<Expr>, Option<Box<Expr>>, Option<Box<Expr>>),
     Unary(UnOp, Box<Expr>),
+    /// `take x.f`: move the handle out of a field, leaving an empty array or null behind
+    Take(Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     /// `Name { f: e, ... }`, a struct value
     StructLit(TypeExpr, Vec<(String, Expr)>),

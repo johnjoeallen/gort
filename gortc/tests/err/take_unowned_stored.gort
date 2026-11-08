@@ -1,0 +1,8 @@
+// error: `a.b` is owned by its struct: it must be given a new object
+// what is taken from a field that is not owned may be held elsewhere, so it is not new
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B>? }
+struct C { peer: Ref<B>? }
+fn move(a: Ref<A>, c: Ref<C>) { sync (writes a) { a.b = take c.peer } }
+fn main() { }

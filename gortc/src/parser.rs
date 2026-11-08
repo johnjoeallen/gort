@@ -828,6 +828,12 @@ impl Parser {
             let e = self.unary()?;
             return Ok(Expr { kind: ExprKind::Unary(UnOp::Not, Box::new(e)), line: t.line, col: t.col });
         }
+        // `take` is a keyword only before a name (a variable may still be called `take`)
+        if self.is_kw("take") && matches!(self.peek_at(1).tok, Tok::Ident(_)) {
+            self.bump();
+            let e = self.postfix()?;
+            return Ok(Expr { kind: ExprKind::Take(Box::new(e)), line: t.line, col: t.col });
+        }
         self.postfix()
     }
 

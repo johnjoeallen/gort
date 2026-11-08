@@ -1,0 +1,16 @@
+// a shared Map needs only the block on the map: its arrays are owned, and rehash moves them with take
+package t
+let cache: Ref<Map<i64, i64>> = new Map<i64, i64> {}
+fn getCache(): Ref<Map<i64, i64>> { return cache }
+fn fill(m: Ref<Map<i64, i64>>, n: i64) {
+    var i = 0
+    while i < n {
+        m.insert(i, i * 2)
+        i++
+    }
+}
+fn main() {
+    let m = getCache()
+    sync (writes m) { fill(m, 40) }
+    sync (reads m) { println(str(m.count) + " " + str(m.has(21)) + " " + str(m.has(99))) }
+}

@@ -1,0 +1,6 @@
+// error: `take` moves a handle out of a field
+package t
+fn main() {
+    let xs = [1, 2]
+    let ys = take xs
+}

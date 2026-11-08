@@ -197,6 +197,8 @@ pub enum EK {
     IsNull(Box<TExpr>),
     /// the value of an optional; traps when it is null (flow narrowing will replace most of these)
     Unwrap(Box<TExpr>),
+    /// `take place`: the handle in a field, which is left holding an empty array or null; the result is owned
+    Take(Box<TExpr>),
     /// the arguments of a variadic call, collected into a new array
     ArrLit(Ty, Vec<TExpr>),
     /// the all-zero value of its type: null handles, absent optionals, zeroed structs (the payloads of the other variants of an enum)

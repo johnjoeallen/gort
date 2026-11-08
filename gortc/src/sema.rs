@@ -2193,6 +2193,25 @@ impl<'a> Sema<'a> {
                     }
                 }
             }
+            ExprKind::Take(x) => {
+                let v = self.lower_expr(cx, x);
+                if v.ty == Ty::Error {
+                    return v;
+                }
+                // a field of an object, holding an array (left as an empty one) or an optional handle (left null)
+                let movable = match &v.ty {
+                    Ty::Arr(_) => true,
+                    Ty::Opt(i) => matches!(**i, Ty::Ref(_) | Ty::Arr(_)),
+                    _ => false,
+                };
+                if !matches!(v.kind, EK::Field(..)) || !movable {
+                    let n = self.prog.type_name(&v.ty);
+                    self.error(e.line, e.col, format!("`take` moves a handle out of a field: it needs a field of type Array<T> or an optional handle (T?), found {}", n));
+                    return typed(EK::Null, Ty::Error, line);
+                }
+                let ty = v.ty.clone();
+                typed(EK::Take(Box::new(v)), ty, line)
+            }
             ExprKind::Unary(op, x) => {
                 let v = self.lower_expr(cx, x);
                 let v = self.decay(cx, v, (x.line, x.col));
@@ -3427,6 +3446,12 @@ pub(crate) fn block_writes(b: &TBlock, t: &TExpr, writes: &[Vec<bool>]) -> bool 
                     hit = true;
                 }
             }
+            // taking a handle out replaces the field: a write
+            EK::Take(p) => {
+                if reaches(p, t, true) {
+                    hit = true;
+                }
+            }
             EK::Call(f, args) => {
                 if args.iter().enumerate().any(|(k, a)| writes[*f].get(k + 1).copied().unwrap_or(false) && reaches(a, t, false)) {
                     hit = true;
@@ -3555,7 +3580,7 @@ pub(crate) fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
 
 pub(crate) fn children(e: &TExpr) -> Vec<&TExpr> {
     match &e.kind {
-        EK::Field(a, _) | EK::Deref(a) | EK::Borrow(a) | EK::BoxVal(a) | EK::Len(a) | EK::ExternFn(a) | EK::Unary(_, a) | EK::Cast(a) | EK::Some(a) | EK::IsNull(a) | EK::Unwrap(a) | EK::NewArr(_, a) => vec![&**a],
+        EK::Field(a, _) | EK::Deref(a) | EK::Borrow(a) | EK::BoxVal(a) | EK::Len(a) | EK::ExternFn(a) | EK::Unary(_, a) | EK::Cast(a) | EK::Some(a) | EK::IsNull(a) | EK::Unwrap(a) | EK::Take(a) | EK::NewArr(_, a) => vec![&**a],
         EK::Index(a, b) | EK::Binary(_, a, b) => vec![&**a, &**b],
         EK::Slice(a, lo, hi) => {
             let mut v = vec![&**a];
@@ -3588,6 +3613,8 @@ pub(crate) fn escapes(e: &TExpr, pid: VarId, ok_here: bool, borrowed: &[Vec<bool
     match &e.kind {
         EK::Var(v) | EK::ObjRef(v) if *v == pid => !ok_here,
         EK::Deref(a) => escapes(a, pid, true, borrowed),
+        // using an optional handle's target (`n.v`) is a use in place, like a plain handle's
+        EK::Unwrap(a) if ok_here => escapes(a, pid, true, borrowed),
         EK::Binary(BinOp::Eq | BinOp::Ne, a, b) => escapes(a, pid, true, borrowed) || escapes(b, pid, true, borrowed),
         EK::Call(fid, args) => args.iter().enumerate().any(|(i, a)| escapes(a, pid, is_p(a) && borrowed[*fid].get(i).copied().unwrap_or(false), borrowed)),
         EK::Method(fid, r, args) => escapes(r, pid, false, borrowed) || args.iter().enumerate().any(|(i, a)| escapes(a, pid, is_p(a) && borrowed[*fid].get(i).copied().unwrap_or(false), borrowed)),
@@ -3668,7 +3695,7 @@ fn hint_expr<'a>(e: &'a Expr, name: &str, out: &mut Vec<Option<&'a Expr>>) {
             hint_expr(a, name, out);
             hint_expr(b, name, out);
         }
-        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) => hint_expr(a, name, out),
+        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) | ExprKind::Take(a) => hint_expr(a, name, out),
         ExprKind::Call(f, args) => {
             hint_expr(f, name, out);
             for a in args {
@@ -3747,7 +3774,7 @@ fn expr_mutates(e: &Expr, name: &str) -> bool {
     match &e.kind {
         // `name.m(..)`: the method may change what it is called on
         ExprKind::Call(f, args) => matches!(&f.kind, ExprKind::Field(b, _) if root_is(b, name)) || ex(f) || args.iter().any(ex),
-        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) => ex(a),
+        ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) | ExprKind::Take(a) => ex(a),
         ExprKind::Index(a, b) | ExprKind::Binary(_, a, b) => ex(a) || ex(b),
         ExprKind::Cond(a, b, c) => ex(a) || ex(b) || ex(c),
         _ => false,

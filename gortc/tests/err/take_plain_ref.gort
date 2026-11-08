@@ -1,0 +1,8 @@
+// error: `take` moves a handle out of a field: it needs a field of type Array<T> or an optional handle
+package t
+struct B { n: i64 }
+struct A { b: Ref<B> }
+fn main() {
+    let a = new A { b: new B { n: 1 } }
+    let b = take a.b
+}

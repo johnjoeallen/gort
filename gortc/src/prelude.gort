@@ -14,9 +14,9 @@ struct JsonLimits {
 }
 exception JsonError { message: String }
 struct Map<K, V> {
-    keys: Array<K?> = K?[](8)
-    vals: Array<V?> = V?[](8)
-    dead: Array<bool> = new bool[8]
+    owns keys: Array<K?> = K?[](8)
+    owns vals: Array<V?> = V?[](8)
+    owns dead: Array<bool> = new bool[8]
     count: usize = 0
     filled: usize = 0
     fn slot(k: K): usize {
@@ -68,9 +68,9 @@ struct Map<K, V> {
         }
     }
     fn rehash(m: usize) {
-        let oldK = keys
-        let oldV = vals
-        let oldD = dead
+        let oldK = take keys              // the old tables move out; the fields hold empty ones until the new ones are stored
+        let oldV = take vals
+        let oldD = take dead
         self.keys = K?[](m)
         self.vals = V?[](m)
         self.dead = new bool[m]

@@ -1,0 +1,23 @@
+// take moves a handle out of a field: the field is left with an empty array or null, and the result owns the old one
+package t
+struct Node { v: i64 }
+struct Bag {
+    owns xs: Array<i64>
+    owns node: Ref<Node>?
+    other: Ref<Node>?
+}
+fn main() {
+    let b = new Bag { xs: [1, 2, 3], node: new Node { v: 7 } }
+    let old = take b.xs
+    println(str(old.length) + " " + str(b.xs.length))        // 3 0
+    b.xs = [9]
+    old[0] = 100
+    println(str(old[0]) + " " + str(b.xs[0]))                // 100 9
+    let n = take b.node
+    println(str(b.node == null) + " " + str(n.v))            // true 7
+    b.node = n                                               // the taken object can be stored back
+    let again = take b.node
+    println(str(again != null))                              // true
+    let e = take b.other
+    println(str(e == null))                                  // true
+}
