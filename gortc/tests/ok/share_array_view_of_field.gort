@@ -1,0 +1,18 @@
+// a method that returns a view of its own buffer gives back an array as local as the receiver; an unrelated argument does not matter
+package t
+struct Req { start: usize }
+struct R {
+    buf: Array<u8>? = null
+    fn head(req: Ref<Req>): Array<u8> { return buf[req.start..req.start + 2] }
+    fn fill() { self.buf = [1 as u8, 2 as u8, 3 as u8] }
+}
+let sharedReq: Ref<Req> = new Req { start: 0 }
+fn getReq(): Ref<Req> { return sharedReq }
+fn main() {
+    var r = R {}
+    r.fill()
+    let req = getReq()
+    let h = r.head(req)
+    h[0] = 9
+    println(str(h[0] + h[1]))
+}

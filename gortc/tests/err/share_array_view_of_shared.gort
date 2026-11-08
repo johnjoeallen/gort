@@ -1,0 +1,16 @@
+// error: changing an array needs `sync (writes h)`: the array is not local and is mutable
+// the same method on a receiver that other code can reach: the view is as shared as the buffer
+package t
+struct R {
+    buf: Array<u8>? = null
+    fn head(): Array<u8> { return buf[0..2] }
+    fn fill() { self.buf = [1 as u8, 2 as u8, 3 as u8] }
+}
+let shared: Ref<R> = new R {}
+fn getR(): Ref<R> { return shared }
+fn main() {
+    let r = getR()
+    var h: Array<u8>? = null
+    sync (reads r, r.buf) { h = r.head() }
+    h[0] = 9
+}

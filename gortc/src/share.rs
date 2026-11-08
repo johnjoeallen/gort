@@ -434,16 +434,32 @@ impl<'a> Cx<'a> {
         match &strip(e).kind {
             EK::NewArr(..) | EK::ArrLit(..) | EK::RtCall(..) | EK::Builtin(..) | EK::Json(..) => true,
             EK::Call(f, args) | EK::Method(f, _, args) => {
+                let recv = if let EK::Method(_, r, _) = &strip(e).kind { Some(&**r) } else { None };
+                // is an argument (or the receiver) local: nothing else can reach it?
+                let local = |a: &TExpr| match &a.ty {
+                    Ty::Arr(_) => self.arr_origin(a).is_none(),
+                    Ty::Ref(_) | Ty::Obj(_) | Ty::Opt(_) => self.is_fresh_value(a),
+                    _ => true,
+                };
                 // an extern function gets a raw pointer, so it may hand back the array it was given or a new one: the result is fresh only
                 // when every array argument is local too
                 if self.prog.fns[*f].body.is_none() {
-                    return args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || self.arr_origin(a).is_none());
+                    return args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || local(a));
                 }
-                // a function that returns (a view of) its parameter gives back an array that is as local as its arguments
-                self.fresh[*f] && (!self.returns_param_array(*f) || args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || self.arr_origin(a).is_none()))
+                // a function that returns (a view of) its parameter or a field of its receiver gives back an array that is as local as they are
+                if !self.fresh[*f] {
+                    return false;
+                }
+                let src = self.param_sources(*f);
+                // (a receiver reached through a handle is written as a dereference of it: it is the handle that must be local)
+                let local_recv = |r: &TExpr| match &strip(r).kind {
+                    EK::Deref(h) => local(h),
+                    _ => local(r),
+                };
+                src.iter().all(|&slot| if slot == 0 { recv.map_or(true, |r| local_recv(r)) } else { args.get(slot - 1).map_or(true, |a| local(a)) })
             }
             EK::Var(v) => !self.f().params.contains(v) && !self.shared_arrs.contains_key(v),
-            EK::Slice(b, ..) => self.is_fresh_arr(b),
+            EK::Slice(b, ..) | EK::Some(b) => self.is_fresh_arr(b),
             EK::Take(p) => owned_place(self.owned, p),
             EK::Cond(_, a, b) => self.is_fresh_arr(a) && self.is_fresh_arr(b),
             _ => false,
@@ -454,31 +470,63 @@ impl<'a> Cx<'a> {
     fn arr_param_derived(&self, e: &TExpr) -> bool {
         match &strip(e).kind {
             EK::Var(v) => self.f().params.contains(v),
-            EK::Slice(b, ..) => self.arr_param_derived(b),
+            EK::Slice(b, ..) | EK::Unwrap(b) => self.arr_param_derived(b),
+            // a field of the receiver or a parameter (`self.buf`)
+            EK::Field(..) => match field_chain(e) {
+                Some((root, _)) => match &root.kind {
+                    EK::SelfPlace => true,
+                    EK::Var(v) => self.f().params.contains(v),
+                    _ => false,
+                },
+                None => false,
+            },
             _ => false,
         }
     }
 
-    /// Does any `return` in function `f` give back an array derived from one of its parameters?
-    fn returns_param_array(&self, f: FnId) -> bool {
-        fn derived(e: &TExpr, params: &[VarId]) -> bool {
+    /// Which of function `f`'s inputs do its `return`s give back an array derived from? Slot 0 is the receiver, slot k + 1 parameter k.
+    fn param_sources(&self, f: FnId) -> HashSet<usize> {
+        fn derived(e: &TExpr, params: &[VarId], out: &mut HashSet<usize>) {
             match &strip(e).kind {
-                EK::Var(v) => params.contains(v),
-                EK::Slice(b, ..) => derived(b, params),
-                _ => false,
+                EK::Var(v) => {
+                    if let Some(k) = params.iter().position(|p| p == v) {
+                        out.insert(k + 1);
+                    }
+                }
+                EK::Slice(b, ..) | EK::Unwrap(b) => derived(b, params, out),
+                EK::Field(..) => {
+                    if let Some((root, _)) = field_chain(e) {
+                        match &root.kind {
+                            EK::SelfPlace => {
+                                out.insert(0);
+                            }
+                            EK::Var(v) => {
+                                if let Some(k) = params.iter().position(|p| p == v) {
+                                    out.insert(k + 1);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                EK::Cond(_, a, b) => {
+                    derived(a, params, out);
+                    derived(b, params, out);
+                }
+                _ => {}
             }
         }
+        let mut out = HashSet::new();
         let info = &self.prog.fns[f];
-        let Some(body) = &info.body else { return false };
-        let mut hit = false;
+        let Some(body) = &info.body else { return out };
         walk_stmts(body, &mut |s| {
             if let TS::Return(Some(e)) = &s.kind {
-                if matches!(e.ty, Ty::Arr(_)) && derived(e, &info.params) {
-                    hit = true;
+                if matches!(e.ty, Ty::Arr(_)) {
+                    derived(e, &info.params, &mut out);
                 }
             }
         });
-        hit
+        out
     }
 
     fn stmt(&mut self, s: &TStmt) {
@@ -486,7 +534,7 @@ impl<'a> Cx<'a> {
         match &s.kind {
             TS::Let(id, e) => {
                 self.expr(e, s.line, Need::Read);
-                if matches!(e.ty, Ty::Arr(_)) {
+                if is_arr_ty(&e.ty) {
                     if let Some(o) = self.arr_origin(e) {
                         self.shared_arrs.insert(*id, o);
                         if let Some(k) = self.arr_key(e) {
@@ -536,7 +584,7 @@ impl<'a> Cx<'a> {
             }
             TS::Assign(t, v) | TS::AssignOp(_, t, v) => {
                 if let EK::Var(id) = &t.kind {
-                    if matches!(t.ty, Ty::Arr(_)) {
+                    if is_arr_ty(&t.ty) {
                         if let Some(o) = self.arr_origin(v) {
                             self.shared_arrs.insert(*id, o);
                             if let Some(k) = self.arr_key(v) {
@@ -919,7 +967,7 @@ impl<'a> Cx<'a> {
                 None => sid_of(&b.ty).map(|s| vec![(s, *idx)]),
             },
             EK::Var(v) => self.var_field.get(v).cloned(),
-            EK::Slice(b, ..) => self.arr_key(b),
+            EK::Slice(b, ..) | EK::Unwrap(b) => self.arr_key(b),
             _ => None,
         }
     }
@@ -960,7 +1008,7 @@ impl<'a> Cx<'a> {
                 Some(o) => Some(*o),
                 None => self.f().params.iter().position(|p| p == v).map(|k| Some(k + 1)),
             },
-            EK::Slice(b, ..) => self.arr_origin(b),
+            EK::Slice(b, ..) | EK::Unwrap(b) | EK::Some(b) => self.arr_origin(b),
             EK::Call(..) | EK::Method(..) | EK::Cond(..) | EK::Take(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
             _ => None,
         }
@@ -970,7 +1018,10 @@ impl<'a> Cx<'a> {
     /// does not cover it), unless it came in through this function's receiver or parameter (the caller covers it, as for a `Ref` field), or
     /// is not reachable from anywhere else.
     fn access_arr(&mut self, a: &TExpr, need: Need, line: u32, what: &str) {
-        let a = strip(a);
+        let mut a = strip(a);
+        while let EK::Unwrap(i) = &a.kind {
+            a = strip(i);
+        }
         let want_mutate = need == Need::Write;
         if let EK::Slice(b, ..) = &a.kind {
             return self.access_arr(b, need, line, what);
@@ -1234,6 +1285,11 @@ fn same_arr(a: &TExpr, b: &TExpr) -> bool {
         (EK::Field(x, f), EK::Field(y, g)) => f == g && same_arr(x, y),
         _ => same_place(a, b),
     }
+}
+
+/// An array, or an optional one
+fn is_arr_ty(t: &Ty) -> bool {
+    matches!(t, Ty::Arr(_)) || matches!(t, Ty::Opt(i) if matches!(**i, Ty::Arr(_)))
 }
 
 fn strip(mut e: &TExpr) -> &TExpr {
