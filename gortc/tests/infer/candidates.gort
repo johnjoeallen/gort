@@ -1,0 +1,17 @@
+// warning: field `A.b` could be declared `owns`
+// warning: field `A.xs` could be declared `owns`
+// no-warning: field `A.peer`
+// no-warning: field `A.leaked`
+// which fields could be `owns`: peer is stored from a parameter, leaked is copied out and returned
+package t
+struct B { n: i64 }
+struct A {
+    b: Ref<B>
+    xs: Array<i64>
+    peer: Ref<B>?
+    leaked: Ref<B>?
+}
+fn make(): Ref<A> { return new A { b: new B { n: 1 }, xs: [1, 2], peer: null, leaked: new B { n: 2 } } }
+fn setPeer(a: Ref<A>, p: Ref<B>) { sync (writes a) { a.peer = p } }
+fn getLeaked(a: Ref<A>): Ref<B>? { sync (reads a) { return a.leaked } }
+fn main() { let a = make(); sync (reads a) { println(str(a.b.n + a.xs[0])) } }

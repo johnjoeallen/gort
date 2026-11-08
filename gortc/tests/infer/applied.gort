@@ -1,0 +1,12 @@
+// default-error: needs `sync (writes a.b)`
+// with inference the child is owned and the owner's block is the right one; without it, the child needs its own
+package t
+struct B { n: i64 }
+struct A { b: Ref<B> }
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn getA(): Ref<A> { return shared }
+fn bump(a: Ref<A>) { a.b.n = a.b.n + 1 }
+fn main() {
+    let a = getA()
+    sync (writes a) { bump(a) }
+}

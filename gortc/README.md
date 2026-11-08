@@ -12,6 +12,7 @@ cargo build --release
 gortc run   [--notes] [--sanitize] FILE.gort...     # build and run
 gortc build -o OUT [--sanitize] [--keep-c] FILE...  # compile to an executable
 gortc emit  FILE.gort...                            # print the C
+gortc check --owns FILE...                          # list the fields that could be declared `owns`
 cargo test                                          # every program under tests/, under ASan and UBSan
 ```
 

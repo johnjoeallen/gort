@@ -1,0 +1,10 @@
+// error: `A.b` is owned by its struct: it must be given a new object
+// the same check when the object is bound to a variable
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+fn main() {
+    let shared = new B { n: 1 }
+    let x = new A { b: shared }
+    let y = new A { b: shared }
+}

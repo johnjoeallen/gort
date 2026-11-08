@@ -3,7 +3,7 @@ use std::process::{Command, ExitCode};
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --effects       list the functions that may park\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
+        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --effects       list the functions that may park\n  --owns          list the fields that could be declared `owns`\n  --infer-owns    treat every field that could be `owns` as owned\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
     );
     ExitCode::from(2)
 }
@@ -28,6 +28,8 @@ fn main() -> ExitCode {
             "--notes" => notes = true,
             "--instances" => instances = true,
             "--effects" => effects = true,
+            "--owns" => gortc::share::INFER_OWNS.store(1, std::sync::atomic::Ordering::Relaxed),
+            "--infer-owns" => gortc::share::INFER_OWNS.store(2, std::sync::atomic::Ordering::Relaxed),
             "--sanitize" => sanitize = true,
             "--keep-c" => keep_c = true,
             "--link" => links.extend(args.next()),

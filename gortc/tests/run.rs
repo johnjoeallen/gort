@@ -91,3 +91,39 @@ fn warned_programs() {
         }
     }
 }
+
+fn check_with(p: &Path, flag: Option<&str>) -> std::process::Output {
+    let mut c = Command::new(gortc());
+    c.arg("check");
+    if let Some(f) = flag {
+        c.arg(f);
+    }
+    c.arg(p).output().unwrap()
+}
+
+#[test]
+fn owns_inference() {
+    // --owns lists the fields that could be declared `owns` (and none that a use contradicts)
+    let c = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/infer/candidates.gort");
+    let r = check_with(&c, Some("--owns"));
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    let err = String::from_utf8_lossy(&r.stderr);
+    for w in header(&c, "warning") {
+        assert!(err.contains(&w), "{}: missing `{}` in\n{}", c.display(), w, err);
+    }
+    for w in header(&c, "no-warning") {
+        assert!(!err.contains(&w), "{}: unexpected `{}` in\n{}", c.display(), w, err);
+    }
+    // --infer-owns treats them as owned: a program that is rejected without it is accepted with it
+    let a = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/infer/applied.gort");
+    let off = check_with(&a, None);
+    assert_eq!(off.status.code(), Some(1), "{} should be rejected without inference", a.display());
+    for w in header(&a, "default-error") {
+        assert!(String::from_utf8_lossy(&off.stderr).contains(&w), "{}: missing `{}`", a.display(), w);
+    }
+    let on = check_with(&a, Some("--infer-owns"));
+    assert!(on.status.success(), "{} should pass with inference\n{}", a.display(), String::from_utf8_lossy(&on.stderr));
+    // and a field that is shared stays unowned with inference on
+    let s = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/err/share_alias_inner.gort");
+    assert_eq!(check_with(&s, Some("--infer-owns")).status.code(), Some(1));
+}

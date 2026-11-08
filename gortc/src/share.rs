@@ -89,21 +89,23 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
     let mut fneeds: Vec<Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>> = prog.fns.iter().map(|f| vec![Vec::new(); f.params.len() + 1]).collect();
-    let run = |needs: &Vec<Vec<u8>>, fneeds: &Vec<Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<FieldHit>) {
+    let run = |needs: &Vec<Vec<u8>>, fneeds: &Vec<Vec<Vec<(Vec<(usize, usize)>, bool, u8)>>>, fresh: &Vec<bool>, owned: &HashSet<(usize, usize)>, infer: bool, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<FieldHit>, HashSet<(usize, usize)>) {
         let mut out: Vec<Finding> = Vec::new();
         let mut hits: Vec<(FnId, usize, u8)> = Vec::new();
         let mut fresh_out: Vec<bool> = vec![false; prog.fns.len()];
         let mut fhits_out: Vec<FieldHit> = Vec::new();
+        let mut viol_out: HashSet<(usize, usize)> = HashSet::new();
         for (fid, f) in prog.fns.iter().enumerate() {
             let Some(body) = &f.body else { continue };
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, arr_ok: &arr_ok, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, arr_ok: &arr_ok, owned, infer, viol: HashSet::new(), needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
             cx.block(body);
             fresh_out[fid] = matches!(f.ret, Ty::Ref(_) | Ty::Arr(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
             fhits_out.extend(cx.fhits);
+            viol_out.extend(cx.viol);
             if report {
                 let mut seen: HashSet<(u32, String)> = HashSet::new();
                 for fi in cx.out {
@@ -113,12 +115,23 @@ pub fn check(prog: &Program) -> Vec<Finding> {
                 }
             }
         }
-        (out, hits, fresh_out, fhits_out)
+        (out, hits, fresh_out, fhits_out, viol_out)
     };
+    // owned fields: the declared ones, and with inference on every field no use contradicts
+    let declared: HashSet<(usize, usize)> = prog.structs.iter().enumerate().flat_map(|(sid, st)| st.fields.iter().enumerate().filter(|(_, f)| f.owned).map(move |(i, _)| (sid, i))).collect();
+    let eligible: HashSet<(usize, usize)> = prog.structs.iter().enumerate()
+        .filter(|(_, st)| !st.is_extern && st.variants.is_empty())
+        .flat_map(|(sid, st)| st.fields.iter().enumerate().filter(|(_, f)| {
+            let t = match &f.ty { Ty::Opt(i) => &**i, t => t };
+            match t { Ty::Ref(r) => !prog.structs[*r].is_extern, Ty::Arr(_) => true, _ => false }
+        }).map(move |(i, _)| (sid, i))).collect();
+    let mode = INFER_OWNS.load(std::sync::atomic::Ordering::Relaxed);
+    let mut owned_final = declared.clone();
+    let mut inferred: Vec<(usize, usize)> = Vec::new();
     // fresh results first: a function is fresh if every return gives back a new object nothing else refers to (or a fresh call's result)
     let mut fresh: Vec<bool> = vec![false; prog.fns.len()];
     loop {
-        let (_, _, f2, _) = run(&needs, &fneeds, &fresh, false);
+        let (_, _, f2, _, _) = run(&needs, &fneeds, &fresh, &declared, false, false);
         let mut changed = false;
         for i in 0..fresh.len() {
             if f2[i] && !fresh[i] {
@@ -130,8 +143,18 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             break;
         }
     }
+    if mode != 0 {
+        let all: HashSet<(usize, usize)> = declared.union(&eligible).copied().collect();
+        let (_, _, _, _, viol) = run(&needs, &fneeds, &fresh, &all, true, false);
+        let mut v: Vec<(usize, usize)> = eligible.iter().filter(|k| !declared.contains(k) && !viol.contains(k)).copied().collect();
+        v.sort();
+        inferred = v;
+        if mode == 2 {
+            owned_final.extend(inferred.iter().copied());
+        }
+    }
     loop {
-        let (_, hits, _, fh) = run(&needs, &fneeds, &fresh, false);
+        let (_, hits, _, fh, _) = run(&needs, &fneeds, &fresh, &owned_final, false, false);
         let mut changed = false;
         for h in fh {
             let v = &mut fneeds[h.f][h.slot];
@@ -157,8 +180,18 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             break;
         }
     }
-    run(&needs, &fneeds, &fresh, true).0
+    let mut out = run(&needs, &fneeds, &fresh, &owned_final, false, true).0;
+    if mode == 1 {
+        for (sid, i) in inferred {
+            let st = &prog.structs[sid];
+            out.push(Finding { file: st.file.clone(), line: st.line, msg: format!("field `{}.{}` could be declared `owns`: it is only given new objects and only used in place", st.name, st.fields[i].name), warn: true });
+        }
+    }
+    out
 }
+
+/// 0: ownership is only what is declared; 1: also list the fields that could be declared `owns`; 2: treat those fields as owned
+pub static INFER_OWNS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// An array field reached through a function's own receiver (slot 0) or parameter (slot k + 1) with no block of the function's own.
 pub struct FieldHit {
@@ -291,6 +324,11 @@ struct Cx<'a> {
     garr_mutable: &'a HashSet<usize>,
     /// array parameters that are only used in place
     arr_ok: &'a [Vec<bool>],
+    /// the owned fields: declared `owns`, and (with inference on) those no use contradicts
+    owned: &'a HashSet<(usize, usize)>,
+    /// inference run: a broken ownership rule marks the field instead of reporting an error
+    infer: bool,
+    viol: HashSet<(usize, usize)>,
     needs: &'a [Vec<u8>],
     /// functions whose result is a new object nothing else refers to
     fresh: &'a [bool],
@@ -459,7 +497,14 @@ impl<'a> Cx<'a> {
                     self.locals.insert(*id, false);
                 }
             }
-            TS::LetObj(id, _, fs) => {
+            TS::LetObj(id, sid, fs) => {
+                // `let x = new T { .. }` is its own statement: the fields of an owned field are checked here
+                for (idx, v) in fs {
+                    if self.owned.contains(&(*sid, *idx)) && !self.owned_fresh(v) {
+                        let msg = format!("`{}.{}` is owned by its struct: it must be given a new object (`new`, a call that returns a new one, or null), not a handle that something else holds", self.prog.structs[*sid].name, self.prog.structs[*sid].fields[*idx].name);
+                        self.owned_violation(Some((*sid, *idx)), s.line, msg);
+                    }
+                }
                 let es: Vec<&TExpr> = fs.iter().map(|(_, e)| e).collect();
                 for e in &es {
                     self.expr(e, s.line, Need::Read);
@@ -549,13 +594,24 @@ impl<'a> Cx<'a> {
 
     // ---- owned fields (docs/manual.md, section 5.6) ----
 
+    /// A rule about owned fields was broken: an error, or in an inference run a mark against the field.
+    fn owned_violation(&mut self, key: Option<(usize, usize)>, line: u32, msg: String) {
+        if self.infer {
+            if let Some(k) = key {
+                self.viol.insert(k);
+            }
+        } else {
+            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+        }
+    }
+
     fn owned_handle(&self, e: &TExpr) -> bool {
         let h = match &e.ty {
             Ty::Ref(_) | Ty::Arr(_) => true,
             Ty::Opt(i) => matches!(**i, Ty::Ref(_) | Ty::Arr(_)),
             _ => false,
         };
-        h && owned_place(self.prog, e)
+        h && owned_place(self.owned, e)
     }
 
     /// O1: what an owned field is given must be new: nothing else may hold it.
@@ -572,7 +628,7 @@ impl<'a> Cx<'a> {
         let t = strip(target);
         if self.owned_handle(t) && !self.owned_fresh(v) {
             let msg = format!("`{}` is owned by its struct: it must be given a new object (`new`, a call that returns a new one, or null), not a handle that something else holds", self.name_of(t));
-            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+            self.owned_violation(owned_key(t), line, msg);
         }
     }
 
@@ -582,7 +638,7 @@ impl<'a> Cx<'a> {
         let st = strip(e);
         if !in_place && self.owned_handle(st) {
             let msg = format!("`{}` is owned by its struct and cannot be copied out, stored, returned or captured; use it in place (`a.xs[i]`, `a.xs.length`, `a.child.field`) or give it to a function that only reads it", self.name_of(st));
-            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+            self.owned_violation(owned_key(st), line, msg);
         }
         match &st.kind {
             EK::Field(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) | EK::IsNull(b) => self.o2(b, true, line),
@@ -694,9 +750,9 @@ impl<'a> Cx<'a> {
                 }
                 EK::StructLit(sid, fs) | EK::NewObj(sid, fs) => {
                     for (idx, v) in fs {
-                        if self.prog.structs[*sid].fields[*idx].owned && !self.owned_fresh(v) {
+                        if self.owned.contains(&(*sid, *idx)) && !self.owned_fresh(v) {
                             let msg = format!("`{}.{}` is owned by its struct: it must be given a new object (`new`, a call that returns a new one, or null), not a handle that something else holds", self.prog.structs[*sid].name, self.prog.structs[*sid].fields[*idx].name);
-                            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+                            self.owned_violation(Some((*sid, *idx)), line, msg);
                         }
                     }
                 }
@@ -920,7 +976,7 @@ impl<'a> Cx<'a> {
         }
         // an owned array belongs to the struct that holds it: that struct's lock covers it
         if let EK::Field(b, idx) = &a.kind {
-            if field_owned(self.prog, b, *idx) {
+            if field_owned(self.owned, b, *idx) {
                 return self.access(b, need, line, what);
             }
         }
@@ -1002,7 +1058,7 @@ impl<'a> Cx<'a> {
         // walk down to the root, collecting the places on the way
         let mut nodes: Vec<&TExpr> = Vec::new();
         // a reference to an owned object is no new object: the owner's lock covers it
-        let via_ref = via_ref && !owned_place(self.prog, p);
+        let via_ref = via_ref && !owned_place(self.owned, p);
         let mut hop = via_ref;
         let mut owner_expr: Option<&TExpr> = if via_ref { Some(p) } else { None };
         let mut n = p;
@@ -1012,7 +1068,7 @@ impl<'a> Cx<'a> {
                 EK::Field(b, _) | EK::Index(b, _) | EK::Len(b) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => n = b,
                 EK::Deref(b) => {
                     // through an owned field the object belongs to the owner: not a hop to another object
-                    if !owned_place(self.prog, b) {
+                    if !owned_place(self.owned, b) {
                         hop = true;
                         if owner_expr.is_none() {
                             owner_expr = Some(b);
@@ -1058,10 +1114,10 @@ impl<'a> Cx<'a> {
                 .or_else(|| if same_place(n, t) { Some(nodes.len()) } else { None });
             let Some(j) = j else { continue };
             // a block on an owned object itself would lock a lock nobody else takes: the owner's block is the one that counts
-            if owned_place(self.prog, t) {
+            if owned_place(self.owned, t) {
                 continue;
             }
-            let hops = nodes[..j].iter().filter(|x| matches!(&x.kind, EK::Deref(i) if !owned_place(self.prog, i))).count() + usize::from(via_ref);
+            let hops = nodes[..j].iter().filter(|x| matches!(&x.kind, EK::Deref(i) if !owned_place(self.owned, i))).count() + usize::from(via_ref);
             if hops > 1 {
                 continue;
             }
@@ -1115,16 +1171,25 @@ impl<'a> Cx<'a> {
 }
 
 /// Is field `idx` of the struct `base` points to or holds declared `owns`?
-fn field_owned(prog: &Program, base: &TExpr, idx: usize) -> bool {
-    sid_of(&base.ty).map_or(false, |s| prog.structs[s].fields[idx].owned)
+fn field_owned(owned: &HashSet<(usize, usize)>, base: &TExpr, idx: usize) -> bool {
+    sid_of(&base.ty).map_or(false, |s| owned.contains(&(s, idx)))
 }
 
 /// Is `e` a place inside an owned subtree: an owned field, or an element of an owned array? The struct that owns it covers it with its lock.
-fn owned_place(prog: &Program, e: &TExpr) -> bool {
+fn owned_place(owned: &HashSet<(usize, usize)>, e: &TExpr) -> bool {
     match &e.kind {
-        EK::Field(b, idx) => field_owned(prog, b, *idx),
-        EK::Index(b, _) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => owned_place(prog, b),
+        EK::Field(b, idx) => field_owned(owned, b, *idx),
+        EK::Index(b, _) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => owned_place(owned, b),
         _ => false,
+    }
+}
+
+/// The field an owned place is, or belongs to (an element of an owned array belongs to the array's field).
+fn owned_key(e: &TExpr) -> Option<(usize, usize)> {
+    match &e.kind {
+        EK::Field(b, idx) => sid_of(&b.ty).map(|s| (s, *idx)),
+        EK::Index(b, _) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => owned_key(b),
+        _ => None,
     }
 }
 

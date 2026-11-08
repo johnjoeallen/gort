@@ -179,6 +179,8 @@ struct A {
 | summaries | a callee's requirement stops at an owned edge: `bump(a)` that writes `a.b.n` through an owned `b` needs `sync (writes a)`, not `a.b` | `err/owns_caller_needs_owner.gort` |
 | no block on the child | a block naming an owned child (`sync (writes a.b)`) is not accepted as a lock for it: it would take a lock nobody else takes | `err/owns_block_on_child.gort` |
 
+**Inference (opt-in).** `gortc check --owns` lists the fields that could be declared `owns`: every store to them is a new object and every use is in place. `--infer-owns` goes further and treats those fields as owned without the keyword. It is off by default, because it changes which block is required: a field that qualifies stops accepting a block on the child and needs the owner's. The answer also depends on the whole program, so adding one use that copies the handle out makes the field unowned again and its callers' blocks change with it. The declaration is the stable form; use `--owns` to find where to write it (`tests/infer/`).
+
 The cost is granularity: the whole owned tree is one lock, so two threads cannot work on `a.b` and `a.xs` at the same time. A child that two parents must hold is not owned; it keeps the explicit paths of section 5.3. There is no move yet (taking an owned child out to give it to another owner), so replacing an owned child means storing a new one.
 
 ### 5.6 `spawn` and publishing
