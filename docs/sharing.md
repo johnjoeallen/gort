@@ -19,6 +19,8 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **What a block covers.** A block on `a` covers `a`'s own fields and the values stored inline in it. It does not cover another object that `a` points to: `a.b.n` needs `sync (writes a.b)`, because `b` may also be held by some other object `x`, whose holder locks `x`, not `b`. A second handle on a local (`let d = c`) is not a new local: once `c` is published, `d` is shared too. An `Array<T>` is an object like any other: `xs[i] = v` on an array that is reachable from elsewhere needs `sync (writes xs)` (or `g.xs` for a field), and `sync (writes g)` does not cover `g.xs`.
 
+**Owned fields.** A field declared `owns` holds an object or array only its struct holds, so the struct's block covers it (and what it owns in turn). The compiler checks that it is only ever given new objects and never copied out. See the [manual](manual.md#55-owned-fields-owns).
+
 **R5. Publishing.** A reference to a local object crosses a vthread boundary when it is passed to `spawn`, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is *shared*: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).
 
 **R6. Cost on an unshared object.** A `sync` block tests the flag once at entry. If it is clear, it does nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.

@@ -1,0 +1,5 @@
+// error: `a.xs` is owned by its struct and cannot be copied out, stored, returned or captured
+package t
+struct A { owns xs: Array<i64> }
+fn get(a: Ref<A>): Array<i64> { sync (reads a) { return a.xs } }
+fn main() { }

@@ -1,0 +1,6 @@
+// error: `a.b` is owned by its struct: it must be given a new object
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+fn set(a: Ref<A>, other: Ref<B>) { sync (writes a) { a.b = other } }
+fn main() { }

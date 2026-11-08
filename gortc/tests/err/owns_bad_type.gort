@@ -1,0 +1,4 @@
+// error: only a Ref<T> of a Gort struct, an Array<T>, or an optional of one can be owned
+package t
+struct A { owns n: i64 }
+fn main() { }

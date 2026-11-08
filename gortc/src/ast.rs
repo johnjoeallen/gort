@@ -184,6 +184,8 @@ pub struct FnDecl {
 #[derive(Debug, Clone)]
 pub struct FieldDecl {
     pub name: String,
+    /// `owns x: Ref<T>`: the object is reachable only through this struct, so this struct's lock covers it
+    pub owns: bool,
     pub ty: TypeExpr,
     pub default: Option<Expr>,
     pub line: u32,

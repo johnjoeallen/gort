@@ -252,11 +252,16 @@ impl Parser {
                 }
                 variants.push(VariantDecl { name: vname, fields: vf, line: vt.line, col: vt.col });
             } else {
+                // `owns` before a field name is a modifier (a field may still be called `owns`: then a `:` follows)
+                let owns = self.is_kw("owns") && matches!(self.peek_at(1).tok, Tok::Ident(_));
+                if owns {
+                    self.ident()?;
+                }
                 let (fname, ft) = self.ident()?;
                 self.expect_sym(":")?;
                 let ty = self.type_expr()?;
                 let default = if self.eat_sym("=") { Some(self.expr()?) } else { None };
-                fields.push(FieldDecl { name: fname, ty, default, line: ft.line, col: ft.col });
+                fields.push(FieldDecl { name: fname, owns, ty, default, line: ft.line, col: ft.col });
             }
         }
         Ok(StructDecl { name, fields, methods, variants, is_enum, is_exception, is_extern, type_params, line: kw.line, col: kw.col })

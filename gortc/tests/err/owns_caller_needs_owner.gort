@@ -1,0 +1,12 @@
+// error: passing it to `bump`, which writes through it, needs `sync (writes a)`
+// the callee writes a.b.n through an owned b: the caller needs the owner's lock, not a.b
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn getA(): Ref<A> { return shared }
+fn bump(a: Ref<A>) { a.b.n = a.b.n + 1 }
+fn main() {
+    let a = getA()
+    bump(a)
+}

@@ -263,6 +263,8 @@ pub struct TCatch {
 pub struct FieldInfo {
     pub name: String,
     pub ty: Ty,
+    /// declared `owns`: the object or array it holds is reachable only through the struct
+    pub owned: bool,
     pub default: Option<AstExpr>,
 }
 

@@ -1,0 +1,6 @@
+// error: `A.b` is owned by its struct: it must be given a new object
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+fn make(other: Ref<B>): Ref<A> { return new A { b: other } }
+fn main() { }

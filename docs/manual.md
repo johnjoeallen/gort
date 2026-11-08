@@ -137,6 +137,7 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 | array field reached through this function's receiver or parameter, at any depth of plain field steps (`self.xs`, `g.xs`, `a.b.xs`) | the caller's block on that array: the callee's summary records the field path it reads or writes, and a caller that does not hold the object locally must hold `sync (reads/writes a.b.xs)` |
 | array reached through an element (`self.items[i].xs`) | a block in this function: the caller cannot name "element i" |
 | array field of a struct held by value | nothing |
+| array declared `owns` | the owner's block (section 5.5) |
 
 `sync (writes g)` **does not cover `g.xs`**.
 
@@ -152,7 +153,35 @@ A block on the holder never stands in for a block on the array: `sync (writes g)
 
 Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
-### 5.5 `spawn` and publishing
+### 5.5 Owned fields: `owns`
+
+A field declared `owns` holds an object or array that only its struct holds, so the struct's lock covers it.
+
+```
+struct B { n: i64 }
+struct A {
+    owns b: Ref<B>                  // a child object
+    owns xs: Array<i64>             // an array
+    owns items: Array<Ref<B>?>      // an array whose objects are owned too
+    peer: Ref<B>?                   // not owned: shared, locked on its own
+}
+```
+
+`owns` is allowed on a `Ref<T>` of a Gort struct, an `Array<T>`, or an optional of one; on anything else it is an error (`err/owns_bad_type.gort`).
+
+**Rules** (all checked):
+
+| | Rule | Test |
+|---|---|---|
+| store | what an owned field is given must be new: `new`, `null`, or a call that returns a new object. Storing a handle that something else holds is an error, in an assignment or in `new A { b: other }` | `err/owns_store_alias.gort`, `err/owns_literal_alias.gort` |
+| use in place | an owned field is used in place: `a.b.n`, `a.xs[i]`, `a.xs.length`, compared with `null`, or given to a function that only reads or writes it in place (it never keeps, returns or passes on the handle). It cannot be copied into a variable, stored, returned, captured or sliced | `err/owns_copy_out.gort`, `err/owns_return.gort` |
+| cover | `sync (writes a)` covers `a` and everything it owns, through owned fields, arrays and the objects in them, at any depth | `ok/owns_cover.gort` |
+| summaries | a callee's requirement stops at an owned edge: `bump(a)` that writes `a.b.n` through an owned `b` needs `sync (writes a)`, not `a.b` | `err/owns_caller_needs_owner.gort` |
+| no block on the child | a block naming an owned child (`sync (writes a.b)`) is not accepted as a lock for it: it would take a lock nobody else takes | `err/owns_block_on_child.gort` |
+
+The cost is granularity: the whole owned tree is one lock, so two threads cannot work on `a.b` and `a.xs` at the same time. A child that two parents must hold is not owned; it keeps the explicit paths of section 5.3. There is no move yet (taking an owned child out to give it to another owner), so replacing an owned child means storing a new one.
+
+### 5.6 `spawn` and publishing
 
 A `Ref` passed to `spawn`, sent in a message, stored in a global or a non-local object, or captured by a closure that is, is **published**: from then on it is no longer local on any path. A module-level `let` holds an object published at startup; a module-level `var` is local to each vthread.
 

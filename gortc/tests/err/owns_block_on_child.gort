@@ -1,0 +1,11 @@
+// error: writing `B.n` needs `sync (writes a)`
+// a block on the owned child takes a lock nobody else takes: the owner's lock is the one that counts
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+let shared: Ref<A> = new A { b: new B { n: 1 } }
+fn getA(): Ref<A> { return shared }
+fn main() {
+    let a = getA()
+    sync (writes a.b) { a.b.n = 2 }
+}

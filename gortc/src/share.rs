@@ -15,7 +15,8 @@
 //!   incoming reference).
 
 use crate::hir::*;
-use crate::sema::{escapes, param_writes, place_name, same_place, visit_block, visit_expr, walk_stmts};
+use crate::ast::BinOp;
+use crate::sema::{children, escapes, param_writes, place_name, same_place, visit_block, visit_expr, walk_stmts};
 use std::collections::{HashMap, HashSet};
 
 pub struct Finding {
@@ -38,6 +39,52 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     let writes = param_writes(prog);
     let (mutable, arr_mutable, garr_mutable) = mutable_fields(prog, &writes);
     let borrowed: Vec<Vec<bool>> = prog.fns.iter().map(|f| f.borrowed.clone()).collect();
+    // array parameters the function only reads or writes in place: it never keeps, returns or passes on the handle (an extern function borrows
+    // for the call). Only such a parameter may be given an owned array.
+    let mut taken = vec![false; prog.fns.len()];
+    for f in &prog.fns {
+        if let Some(b) = &f.body {
+            visit_block(b, &mut |e| visit_expr(e, &mut |x| if let EK::FnRef(id, _) | EK::Lambda(id, _) = &x.kind { taken[*id] = true; }));
+        }
+    }
+    // (the compiler's own `escapes` counts every use of a handle; an array is mostly indexed, so this one allows indexing, length and a call
+    // to another function that only uses its array parameter in place)
+    fn arr_escapes(e: &TExpr, pid: VarId, ok: &[Vec<bool>]) -> bool {
+        let is_p = |x: &TExpr| matches!(strip(x).kind, EK::Var(v) if v == pid);
+        match &e.kind {
+            EK::Var(v) if *v == pid => true,
+            EK::Index(b, i) if is_p(b) => arr_escapes(i, pid, ok),
+            EK::Len(b) if is_p(b) => false,
+            EK::RtCall(n, args) if matches!(*n, "appendArr" | "appendOne" | "grow" | "moveWithin") && args.first().map_or(false, |a| is_p(a)) => args[1..].iter().any(|a| arr_escapes(a, pid, ok)),
+            EK::Call(f, args) => args.iter().enumerate().any(|(i, a)| if is_p(a) { !ok[*f].get(i).copied().unwrap_or(false) } else { arr_escapes(a, pid, ok) }),
+            EK::Method(f, r, args) => arr_escapes(r, pid, ok) || args.iter().enumerate().any(|(i, a)| if is_p(a) { !ok[*f].get(i).copied().unwrap_or(false) } else { arr_escapes(a, pid, ok) }),
+            _ => children(e).into_iter().any(|c| arr_escapes(c, pid, ok)),
+        }
+    }
+    let mut arr_ok: Vec<Vec<bool>> = prog.fns.iter().enumerate().map(|(i, f)| {
+        f.param_tys.iter().map(|t| matches!(t, Ty::Arr(_)) && (f.is_extern || (f.body.is_some() && !taken[i]))).collect()
+    }).collect();
+    loop {
+        let mut changed = false;
+        for (i, f) in prog.fns.iter().enumerate() {
+            let Some(body) = &f.body else { continue };
+            for k in 0..arr_ok[i].len() {
+                if !arr_ok[i][k] || f.is_extern {
+                    continue;
+                }
+                let Some(pid) = f.params.get(k) else { continue };
+                let mut esc = false;
+                visit_block(body, &mut |e| if arr_escapes(e, *pid, &arr_ok) { esc = true; });
+                if esc {
+                    arr_ok[i][k] = false;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
@@ -52,7 +99,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, arr_ok: &arr_ok, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
             cx.block(body);
             fresh_out[fid] = matches!(f.ret, Ty::Ref(_) | Ty::Arr(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
@@ -242,6 +289,8 @@ struct Cx<'a> {
     arr_mutable: &'a HashSet<(usize, usize)>,
     /// global arrays changed in place somewhere
     garr_mutable: &'a HashSet<usize>,
+    /// array parameters that are only used in place
+    arr_ok: &'a [Vec<bool>],
     needs: &'a [Vec<u8>],
     /// functions whose result is a new object nothing else refers to
     fresh: &'a [bool],
@@ -391,6 +440,7 @@ impl<'a> Cx<'a> {
     }
 
     fn stmt(&mut self, s: &TStmt) {
+        self.o2_stmt(s);
         match &s.kind {
             TS::Let(id, e) => {
                 self.expr(e, s.line, Need::Read);
@@ -497,6 +547,108 @@ impl<'a> Cx<'a> {
         }
     }
 
+    // ---- owned fields (docs/manual.md, section 5.6) ----
+
+    fn owned_handle(&self, e: &TExpr) -> bool {
+        let h = match &e.ty {
+            Ty::Ref(_) | Ty::Arr(_) => true,
+            Ty::Opt(i) => matches!(**i, Ty::Ref(_) | Ty::Arr(_)),
+            _ => false,
+        };
+        h && owned_place(self.prog, e)
+    }
+
+    /// O1: what an owned field is given must be new: nothing else may hold it.
+    fn owned_fresh(&self, e: &TExpr) -> bool {
+        match &strip(e).kind {
+            EK::Null | EK::Zero | EK::NewObj(..) | EK::NewArr(..) | EK::ArrLit(..) => true,
+            EK::Some(i) => self.owned_fresh(i),
+            EK::Cond(_, a, b) => self.owned_fresh(a) && self.owned_fresh(b),
+            _ => self.is_fresh_value(e),
+        }
+    }
+
+    fn o1_store(&mut self, target: &TExpr, v: &TExpr, line: u32) {
+        let t = strip(target);
+        if self.owned_handle(t) && !self.owned_fresh(v) {
+            let msg = format!("`{}` is owned by its struct: it must be given a new object (`new`, a call that returns a new one, or null), not a handle that something else holds", self.name_of(t));
+            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+        }
+    }
+
+    /// O2: an owned field is used in place (`g.b.n`, `g.xs[i]`, `g.xs.length`, passed to a parameter that only reads it); the handle itself is
+    /// never copied out, stored, returned or captured, since the struct's lock covers the object only while the struct holds it.
+    fn o2(&mut self, e: &TExpr, in_place: bool, line: u32) {
+        let st = strip(e);
+        if !in_place && self.owned_handle(st) {
+            let msg = format!("`{}` is owned by its struct and cannot be copied out, stored, returned or captured; use it in place (`a.xs[i]`, `a.xs.length`, `a.child.field`) or give it to a function that only reads it", self.name_of(st));
+            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+        }
+        match &st.kind {
+            EK::Field(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) | EK::IsNull(b) => self.o2(b, true, line),
+            EK::Index(b, i) => {
+                self.o2(b, true, line);
+                self.o2(i, false, line);
+            }
+            EK::Binary(BinOp::Eq | BinOp::Ne, a, b) => {
+                self.o2(a, true, line);
+                self.o2(b, true, line);
+            }
+            EK::Borrow(x) | EK::BoxVal(x) => self.o2(x, in_place, line),
+            EK::Call(f, args) => {
+                for (i, a) in args.iter().enumerate() {
+                    let ok = self.borrowed[*f].get(i).copied().unwrap_or(false) || self.arr_ok[*f].get(i).copied().unwrap_or(false);
+                    self.o2(a, ok, line);
+                }
+            }
+            EK::Method(f, r, args) => {
+                self.o2(r, true, line);
+                for (i, a) in args.iter().enumerate() {
+                    let ok = self.borrowed[*f].get(i).copied().unwrap_or(false) || self.arr_ok[*f].get(i).copied().unwrap_or(false);
+                    self.o2(a, ok, line);
+                }
+            }
+            _ => {
+                for c in children(st) {
+                    self.o2(c, false, line);
+                }
+            }
+        }
+    }
+
+    /// The expressions a statement evaluates (not those of its nested blocks).
+    fn o2_stmt(&mut self, s: &TStmt) {
+        let line = s.line;
+        match &s.kind {
+            TS::Let(_, e) | TS::Return(Some(e)) | TS::Expr(e) | TS::SetGlobal(_, e) => self.o2(e, false, line),
+            TS::LetObj(_, _, fs) | TS::Throw(_, fs) => {
+                for (_, e) in fs {
+                    self.o2(e, false, line);
+                }
+            }
+            TS::Assign(t, v) | TS::AssignOp(_, t, v) => {
+                self.o2(v, false, line);
+                self.o1_store(t, v, line);
+                // the target is written, not read out; what it is reached through is used in place
+                match &strip(t).kind {
+                    EK::Field(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => self.o2(b, true, line),
+                    EK::Index(b, i) => {
+                        self.o2(b, true, line);
+                        self.o2(i, false, line);
+                    }
+                    _ => {}
+                }
+            }
+            TS::If(c, ..) | TS::While(c, _) => self.o2(c, false, line),
+            TS::Sync(ts, _) => {
+                for (_, t) in ts {
+                    self.o2(t, true, line);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// A block nested inside another block on a different object: two threads that nest the same two objects in opposite orders deadlock.
     /// One block naming both locks them in a fixed order, no matter how they are written.
     fn warn_nested(&mut self, targets: &[(bool, TExpr)], line: u32) {
@@ -537,6 +689,14 @@ impl<'a> Cx<'a> {
                     if let Some(s) = sid_of(&b.ty) {
                         if !self.prog.structs[s].is_extern && self.mutable.contains(&(s, *idx)) {
                             self.access(b, Need::Read, line, &format!("reading `{}.{}`", self.prog.structs[s].name, self.prog.structs[s].fields[*idx].name));
+                        }
+                    }
+                }
+                EK::StructLit(sid, fs) | EK::NewObj(sid, fs) => {
+                    for (idx, v) in fs {
+                        if self.prog.structs[*sid].fields[*idx].owned && !self.owned_fresh(v) {
+                            let msg = format!("`{}.{}` is owned by its struct: it must be given a new object (`new`, a call that returns a new one, or null), not a handle that something else holds", self.prog.structs[*sid].name, self.prog.structs[*sid].fields[*idx].name);
+                            self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
                         }
                     }
                 }
@@ -758,6 +918,12 @@ impl<'a> Cx<'a> {
             EK::Field(..) | EK::Global(_) | EK::Var(_) => {}
             _ => return,
         }
+        // an owned array belongs to the struct that holds it: that struct's lock covers it
+        if let EK::Field(b, idx) = &a.kind {
+            if field_owned(self.prog, b, *idx) {
+                return self.access(b, need, line, what);
+            }
+        }
         let Some(origin) = self.arr_origin(a) else { return };
         let key = self.arr_key(a);
         let mut weak: Option<String> = None;
@@ -835,6 +1001,8 @@ impl<'a> Cx<'a> {
     fn access_from(&mut self, p: &TExpr, via_ref: bool, need: Need, line: u32, what: &str) {
         // walk down to the root, collecting the places on the way
         let mut nodes: Vec<&TExpr> = Vec::new();
+        // a reference to an owned object is no new object: the owner's lock covers it
+        let via_ref = via_ref && !owned_place(self.prog, p);
         let mut hop = via_ref;
         let mut owner_expr: Option<&TExpr> = if via_ref { Some(p) } else { None };
         let mut n = p;
@@ -843,9 +1011,12 @@ impl<'a> Cx<'a> {
             match &n.kind {
                 EK::Field(b, _) | EK::Index(b, _) | EK::Len(b) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => n = b,
                 EK::Deref(b) => {
-                    hop = true;
-                    if owner_expr.is_none() {
-                        owner_expr = Some(b);
+                    // through an owned field the object belongs to the owner: not a hop to another object
+                    if !owned_place(self.prog, b) {
+                        hop = true;
+                        if owner_expr.is_none() {
+                            owner_expr = Some(b);
+                        }
                     }
                     n = b;
                 }
@@ -886,7 +1057,11 @@ impl<'a> Cx<'a> {
                 .or_else(|| nodes.iter().position(|x| !matches!(x.kind, EK::Deref(_)) && same_arr(x, t)))   // a place built from a summary has no explicit dereferences
                 .or_else(|| if same_place(n, t) { Some(nodes.len()) } else { None });
             let Some(j) = j else { continue };
-            let hops = nodes[..j].iter().filter(|x| matches!(x.kind, EK::Deref(_))).count() + usize::from(via_ref);
+            // a block on an owned object itself would lock a lock nobody else takes: the owner's block is the one that counts
+            if owned_place(self.prog, t) {
+                continue;
+            }
+            let hops = nodes[..j].iter().filter(|x| matches!(&x.kind, EK::Deref(i) if !owned_place(self.prog, i))).count() + usize::from(via_ref);
             if hops > 1 {
                 continue;
             }
@@ -936,6 +1111,20 @@ impl<'a> Cx<'a> {
             None => format!("{} needs `sync ({} {})`: the object is not local and is mutable", what, kw, owner),
         };
         self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+    }
+}
+
+/// Is field `idx` of the struct `base` points to or holds declared `owns`?
+fn field_owned(prog: &Program, base: &TExpr, idx: usize) -> bool {
+    sid_of(&base.ty).map_or(false, |s| prog.structs[s].fields[idx].owned)
+}
+
+/// Is `e` a place inside an owned subtree: an owned field, or an element of an owned array? The struct that owns it covers it with its lock.
+fn owned_place(prog: &Program, e: &TExpr) -> bool {
+    match &e.kind {
+        EK::Field(b, idx) => field_owned(prog, b, *idx),
+        EK::Index(b, _) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => owned_place(prog, b),
+        _ => false,
     }
 }
 

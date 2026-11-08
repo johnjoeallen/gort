@@ -223,7 +223,7 @@ impl<'a> Sema<'a> {
                         }
                         seen.push(fd.name.clone());
                         let ty = self.resolve_ty(&fd.ty);
-                        self.prog.structs[sid].fields.push(FieldInfo { name: fd.name.clone(), ty, default: fd.default.clone() });
+                        self.prog.structs[sid].fields.push(FieldInfo { name: fd.name.clone(), ty, owned: fd.owns, default: fd.default.clone() });
                     }
                 }
             }
@@ -283,6 +283,28 @@ impl<'a> Sema<'a> {
                     self.cur_file = self.prog.structs[o].file.clone();
                     let sn = self.prog.structs[o].name.clone();
                     self.error(line, 1, format!("`{}::{}` is declared but has no implementation", sn, n));
+                }
+            }
+        }
+        // `owns` marks a handle that only this struct holds
+        for sid in 0..self.prog.structs.len() {
+            for fi in 0..self.prog.structs[sid].fields.len() {
+                if !self.prog.structs[sid].fields[fi].owned {
+                    continue;
+                }
+                let mut t = self.prog.structs[sid].fields[fi].ty.clone();
+                if let Ty::Opt(i) = t {
+                    t = *i;
+                }
+                let ok = match &t {
+                    Ty::Ref(r) => !self.prog.structs[*r].is_extern,
+                    Ty::Arr(_) => true,
+                    _ => false,
+                };
+                if !ok {
+                    let (line, file, sn, fnm) = (self.prog.structs[sid].line, self.prog.structs[sid].file.clone(), self.prog.structs[sid].name.clone(), self.prog.structs[sid].fields[fi].name.clone());
+                    self.cur_file = file;
+                    self.error(line, 1, format!("`owns {}.{}`: only a Ref<T> of a Gort struct, an Array<T>, or an optional of one can be owned", sn, fnm));
                 }
             }
         }
@@ -561,7 +583,7 @@ impl<'a> Sema<'a> {
                 }
                 seen.push(fd.name.clone());
                 let ty = self.resolve_ty(&fd.ty);
-                self.prog.structs[sid].fields.push(FieldInfo { name: fd.name.clone(), ty, default: fd.default.clone() });
+                self.prog.structs[sid].fields.push(FieldInfo { name: fd.name.clone(), ty, owned: fd.owns, default: fd.default.clone() });
             }
         }
         let fake = ast::File { name: file.clone(), package: None, items: Vec::new() };
@@ -581,7 +603,7 @@ impl<'a> Sema<'a> {
         if sd.variants.is_empty() {
             self.error(sd.line, sd.col, format!("enum `{}` has no variants", sd.name));
         }
-        self.prog.structs[sid].fields.push(FieldInfo { name: "_tag".into(), ty: Ty::Int(IntTy::I32), default: None });
+        self.prog.structs[sid].fields.push(FieldInfo { name: "_tag".into(), ty: Ty::Int(IntTy::I32), owned: false, default: None });
         let mut seen: Vec<String> = Vec::new();
         for v in &sd.variants {
             if seen.contains(&v.name) {
@@ -602,7 +624,7 @@ impl<'a> Sema<'a> {
                     self.error(fty.line, fty.col, format!("an enum payload cannot be {}", n));
                 }
                 idxs.push(self.prog.structs[sid].fields.len());
-                self.prog.structs[sid].fields.push(FieldInfo { name: format!("{}_{}", v.name, fname), ty, default: None });
+                self.prog.structs[sid].fields.push(FieldInfo { name: format!("{}_{}", v.name, fname), ty, owned: false, default: None });
             }
             self.prog.structs[sid].variants.push(VariantInfo { name: v.name.clone(), fields: idxs });
         }

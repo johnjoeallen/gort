@@ -1,0 +1,27 @@
+// the lock on a struct covers what it owns: a child object, an array, and the objects in an array
+package t
+struct B { n: i64 }
+struct A {
+    owns b: Ref<B>
+    owns xs: Array<i64>
+    owns items: Array<Ref<B>?>
+    fn bump() {
+        self.b.n = self.b.n + 1
+        self.xs[0] = self.xs[0] + 1
+        self.items[0].n = self.items[0].n + 1
+    }
+    fn total(): i64 { return self.b.n + self.xs[0] + self.items[0].n }
+}
+let shared: Ref<A> = new A { b: new B { n: 1 }, xs: [1, 2], items: Ref<B>?[](2) }
+fn getA(): Ref<A> { return shared }
+fn add(a: Ref<A>, k: i64) {
+    a.b.n = a.b.n + k
+    a.xs[1] = a.xs[1] + k
+}
+fn sum(xs: Array<i64>): i64 { return xs[0] + xs[1] }
+fn main() {
+    let a = getA()
+    sync (writes a) { a.items[0] = new B { n: 10 } }
+    sync (writes a) { a.bump(); add(a, 5) }
+    sync (reads a) { println(str(a.total()) + " " + str(a.b.n) + " " + str(sum(a.xs)) + " " + str(a.items[0].n)) }
+}

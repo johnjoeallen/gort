@@ -1,0 +1,11 @@
+// error: `a.b` is owned by its struct and cannot be copied out, stored, returned or captured
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+fn peek(a: Ref<A>): i64 {
+    sync (reads a) {
+        let b = a.b
+        return b.n
+    }
+}
+fn main() { }
