@@ -1,0 +1,12 @@
+// `take` is a keyword only before a name on the same line; `[T; N]` is an array of N zeroed elements
+package t
+fn main() {
+    var i = 0
+    let take = 3
+    var st = 0
+    i += take
+    st = i + 1
+    let buf = [u8; 4]
+    buf[2] = 7
+    println(str(i) + " " + str(st) + " " + str(buf.length) + " " + str(buf[2]) + " " + str(buf[0]))
+}

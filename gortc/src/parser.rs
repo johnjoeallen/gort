@@ -829,7 +829,7 @@ impl Parser {
             return Ok(Expr { kind: ExprKind::Unary(UnOp::Not, Box::new(e)), line: t.line, col: t.col });
         }
         // `take` is a keyword only before a name (a variable may still be called `take`)
-        if self.is_kw("take") && matches!(self.peek_at(1).tok, Tok::Ident(_)) {
+        if self.is_kw("take") && matches!(self.peek_at(1).tok, Tok::Ident(_)) && self.peek_at(1).line == t.line {
             self.bump();
             let e = self.postfix()?;
             return Ok(Expr { kind: ExprKind::Take(Box::new(e)), line: t.line, col: t.col });
@@ -1119,6 +1119,15 @@ impl Parser {
                     }
                 }
                 Ok(mk(ExprKind::Lambda(Box::new(LambdaDecl { params, ret, body, idents }))))
+            }
+            // `[u8; 4096]`: an array of that many zeroed elements, the same as `new u8[4096]`
+            Tok::Sym("[") if matches!(self.peek_at(1).tok, Tok::Ident(_)) && matches!(self.peek_at(2).tok, Tok::Sym(";")) => {
+                self.bump();
+                let ty = self.type_expr()?;
+                self.expect_sym(";")?;
+                let len = self.expr()?;
+                self.expect_sym("]")?;
+                Ok(mk(ExprKind::NewArray(ty, Box::new(len))))
             }
             Tok::Sym("[") => {
                 self.bump();
