@@ -1,0 +1,16 @@
+// the caller holds the lock on an array reached through two objects, whether the callee is a function or a method
+package t
+struct B { xs: Array<i64> }
+struct A {
+    b: Ref<B>
+    fn bump() { self.b.xs[0] = self.b.xs[0] + 1 }
+    fn first(): i64 { return self.b.xs[0] }
+}
+let shared: Ref<A> = new A { b: new B { xs: [1, 2] } }
+fn get(): Ref<A> { return shared }
+fn add(a: Ref<A>, n: i64) { a.b.xs[1] = a.b.xs[1] + n }
+fn main() {
+    let a = get()
+    sync (writes a.b.xs) { a.bump(); add(a, 5) }
+    sync (reads a.b.xs) { println(str(a.first()) + " " + str(a.b.xs[1])) }
+}

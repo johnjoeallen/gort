@@ -130,8 +130,8 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 | `g.xs[i]`, `g.xs.length`, append, where `g` is shared and something changes `xs` in place | `sync (reads g.xs)` / `sync (writes g.xs)` |
 | `let xs = g.xs` then `xs[i] = v` | `sync (writes xs)` on the copy |
 | global array that something changes in place | a block naming it |
-| array field reached through this function's receiver or parameter (`self.xs`, `g.xs` for a parameter `g`) | the caller's block on that array: the callee's summary says which array fields it reads or writes, and a caller that does not hold the object locally must hold `sync (reads/writes g.xs)` |
-| array field reached deeper than the receiver or parameter (`self.child.xs`) | a block in this function |
+| array field reached through this function's receiver or parameter, at any depth of plain field steps (`self.xs`, `g.xs`, `a.b.xs`) | the caller's block on that array: the callee's summary records the field path it reads or writes, and a caller that does not hold the object locally must hold `sync (reads/writes a.b.xs)` |
+| array reached through an element (`self.items[i].xs`) | a block in this function |
 | array field of a struct held by value | nothing |
 
 `sync (writes g)` **does not cover `g.xs`**.
