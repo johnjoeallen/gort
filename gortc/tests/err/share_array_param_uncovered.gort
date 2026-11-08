@@ -1,4 +1,4 @@
-// error: passing it to `bump`, which writes through it, needs `sync (writes g)`
+// error: calling `bump`, which writes an array field of its argument, needs `sync (writes g.xs)`
 package t
 struct G { xs: Array<i64> }
 let shared: Ref<G> = new G { xs: [1, 2] }

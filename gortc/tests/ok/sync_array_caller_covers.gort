@@ -1,4 +1,4 @@
-// an array reached through a parameter or the receiver is covered by the caller's block on the holder
+// an array field reached through a parameter or the receiver: the caller holds a block on that array
 package t
 struct G {
     xs: Array<i64>
@@ -11,6 +11,6 @@ fn get(): Ref<G> { return shared }
 fn add(g: Ref<G>, n: i64) { g.xs[1] = g.xs[1] + n }
 fn main() {
     let g = get()
-    sync (writes g) { g.bump(); add(g, 10) }
-    sync (reads g) { println(str(g.first()) + " " + str(g.second())) }
+    sync (writes g.xs) { g.bump(); add(g, 10) }
+    sync (reads g.xs) { println(str(g.first()) + " " + str(g.second())) }
 }

@@ -1,5 +1,4 @@
-// error: `G.xs` is locked through its holder elsewhere (a receiver or parameter) and by a block on the array itself here
-// `bump` locks the holder, `viaCopy` locks the array itself: different locks, so the two could race. One style per array field.
+// `bump` reaches g.xs through its parameter and `viaCopy` through a copy of the handle; both need a block on the array itself, so the two exclude each other
 package t
 struct G { xs: Array<i64> }
 let shared: Ref<G> = new G { xs: [1, 2] }
@@ -12,7 +11,7 @@ fn viaCopy() {
 }
 fn main() {
     let g = get()
-    sync (writes g) { bump(g) }
+    sync (writes g.xs) { bump(g) }
     viaCopy()
     sync (reads g.xs) { println(str(g.xs[0])) }
 }

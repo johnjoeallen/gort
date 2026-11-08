@@ -1,4 +1,4 @@
-// error: calling `G.bump`, which writes its receiver, needs `sync (writes g)`
+// error: calling `bump`, which writes an array field of its argument, needs `sync (writes g.xs)`
 package t
 struct G {
     xs: Array<i64>

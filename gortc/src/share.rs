@@ -41,21 +41,22 @@ pub fn check(prog: &Program) -> Vec<Finding> {
     // needs[f][k]: what f needs its caller to hold for its receiver (k = 0) and parameter k - 1: 0 nothing, 1 a sync, 2 a mutate.
     // An access through a parameter that no block of f's own covers raises it; calls pass it on. Iterate until nothing grows.
     let mut needs: Vec<Vec<u8>> = prog.fns.iter().map(|f| vec![0; f.params.len() + 1]).collect();
-    let run = |needs: &Vec<Vec<u8>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<Style>) {
+    let mut fneeds: Vec<Vec<Vec<(usize, usize, u8)>>> = prog.fns.iter().map(|f| vec![Vec::new(); f.params.len() + 1]).collect();
+    let run = |needs: &Vec<Vec<u8>>, fneeds: &Vec<Vec<Vec<(usize, usize, u8)>>>, fresh: &Vec<bool>, report: bool| -> (Vec<Finding>, Vec<(FnId, usize, u8)>, Vec<bool>, Vec<FieldHit>) {
         let mut out: Vec<Finding> = Vec::new();
         let mut hits: Vec<(FnId, usize, u8)> = Vec::new();
         let mut fresh_out: Vec<bool> = vec![false; prog.fns.len()];
-        let mut styles_out: Vec<Style> = Vec::new();
+        let mut fhits_out: Vec<FieldHit> = Vec::new();
         for (fid, f) in prog.fns.iter().enumerate() {
             let Some(body) = &f.body else { continue };
             if f.name.starts_with("init ") || f.name.starts_with("__") {
                 continue;
             }
-            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), styles: Vec::new(), out: Vec::new(), hits: Vec::new() };
+            let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
             cx.block(body);
             fresh_out[fid] = matches!(f.ret, Ty::Ref(_) | Ty::Arr(_)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
-            styles_out.extend(cx.styles);
+            fhits_out.extend(cx.fhits);
             if report {
                 let mut seen: HashSet<(u32, String)> = HashSet::new();
                 for fi in cx.out {
@@ -65,12 +66,12 @@ pub fn check(prog: &Program) -> Vec<Finding> {
                 }
             }
         }
-        (out, hits, fresh_out, styles_out)
+        (out, hits, fresh_out, fhits_out)
     };
     // fresh results first: a function is fresh if every return gives back a new object nothing else refers to (or a fresh call's result)
     let mut fresh: Vec<bool> = vec![false; prog.fns.len()];
     loop {
-        let (_, _, f2, _) = run(&needs, &fresh, false);
+        let (_, _, f2, _) = run(&needs, &fneeds, &fresh, false);
         let mut changed = false;
         for i in 0..fresh.len() {
             if f2[i] && !fresh[i] {
@@ -83,8 +84,22 @@ pub fn check(prog: &Program) -> Vec<Finding> {
         }
     }
     loop {
-        let (_, hits, _, _) = run(&needs, &fresh, false);
+        let (_, hits, _, fh) = run(&needs, &fneeds, &fresh, false);
         let mut changed = false;
+        for h in fh {
+            let v = &mut fneeds[h.f][h.slot];
+            match v.iter_mut().find(|e| (e.0, e.1) == (h.sid, h.idx)) {
+                Some(e) if e.2 >= h.lvl => {}
+                Some(e) => {
+                    e.2 = h.lvl;
+                    changed = true;
+                }
+                None => {
+                    v.push((h.sid, h.idx, h.lvl));
+                    changed = true;
+                }
+            }
+        }
         for (f, k, l) in hits {
             if needs[f][k] < l {
                 needs[f][k] = l;
@@ -95,31 +110,16 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             break;
         }
     }
-    let (mut out, _, _, styles) = run(&needs, &fresh, true);
-    // one array, two locks: a block on the holder (a receiver or parameter, covered by the caller) and a block on the array itself do not
-    // exclude each other, so an array field must be locked one way throughout
-    let owner_keys: HashSet<(usize, usize)> = styles.iter().filter(|x| !x.direct).map(|x| x.key).collect();
-    let mut seen: HashSet<(usize, usize)> = HashSet::new();
-    for st in styles.iter().filter(|x| x.direct && owner_keys.contains(&x.key)) {
-        if seen.insert(st.key) {
-            let (sid, idx) = st.key;
-            out.push(Finding {
-                file: st.file.clone(),
-                line: st.line,
-                msg: format!("`{0}.{1}` is locked through its holder elsewhere (a receiver or parameter) and by a block on the array itself here; the two locks do not exclude each other: use `sync` on the holder everywhere, or on the array everywhere", prog.structs[sid].name, prog.structs[sid].fields[idx].name),
-                warn: false,
-            });
-        }
-    }
-    out
+    run(&needs, &fneeds, &fresh, true).0
 }
 
-/// How an access to an array field was covered: by a block on the array itself (`direct`) or by the caller's block on the holder.
-pub struct Style {
-    key: (usize, usize),
-    direct: bool,
-    line: u32,
-    file: String,
+/// An array field reached through a function's own receiver (slot 0) or parameter (slot k + 1) with no block of the function's own.
+pub struct FieldHit {
+    f: FnId,
+    slot: usize,
+    sid: usize,
+    idx: usize,
+    lvl: u8,
 }
 
 /// Fields written outside construction: `(struct, field index)`, and separately the array fields whose array is changed in place.
@@ -252,7 +252,9 @@ struct Cx<'a> {
     shared_arrs: HashMap<VarId, Option<usize>>,
     /// the array field a copied-out handle came from
     var_field: HashMap<VarId, (usize, usize)>,
-    styles: Vec<Style>,
+    /// array fields this function reached through its own receiver or parameter without a block of its own: the caller must hold one
+    fhits: Vec<FieldHit>,
+    fneeds: &'a [Vec<Vec<(usize, usize, u8)>>],
     out: Vec<Finding>,
     /// accesses through this function's own receiver or parameters that no block of its own covers: (function, slot, level)
     hits: Vec<(FnId, usize, u8)>,
@@ -549,6 +551,7 @@ impl<'a> Cx<'a> {
                     for (j, a) in args.iter().enumerate() {
                         self.call_arg(*fid, j + 1, a, line);
                     }
+                    self.field_needs(*fid, 0, r, line);
                     if let Some(s) = sid_of(&r.ty) {
                         if !self.prog.structs[s].is_extern {
                             let lvl = self.needs[*fid].first().copied().unwrap_or(0);
@@ -609,6 +612,7 @@ impl<'a> Cx<'a> {
             }
             return;
         }
+        self.field_needs(fid, slot, a, line);
         let Some(sid) = (match &a.ty {
             Ty::Ref(s) | Ty::Obj(s) => Some(*s),
             _ => None,
@@ -696,18 +700,20 @@ impl<'a> Cx<'a> {
                         _ => break,
                     }
                 }
+                // only a field of the receiver or parameter itself can be asked of the caller; a deeper one is this function's to lock
+                let direct = matches!(norm(b).kind, EK::SelfPlace | EK::Var(_));
                 match &n.kind {
-                    EK::SelfPlace => Some(Some(0)),
+                    EK::SelfPlace => if direct { Some(Some(0)) } else { Some(None) },
                     EK::Var(v) | EK::ObjRef(v) | EK::ObjPlace(v) => {
                         if !hop || self.locals.get(v) == Some(&false) {
                             None
-                        } else if let Some(k) = self.f().params.iter().position(|p| p == v) {
+                        } else if let (true, Some(k)) = (direct, self.f().params.iter().position(|p| p == v)) {
                             Some(Some(k + 1))
                         } else {
                             Some(None)
                         }
                     }
-                    _ => if hop { Some(None) } else { None },
+                    _ => if hop && !self.is_fresh_value(n) { Some(None) } else { None },
                 }
             }
             EK::Global(_) => Some(None),
@@ -743,24 +749,42 @@ impl<'a> Cx<'a> {
         let key = self.arr_key(a);
         let mut weak: Option<String> = None;
         for (m, t) in &self.open {
-            if same_place(a, t) {
+            if same_arr(a, t) {
                 if *m || !want_mutate {
-                    if let Some(key) = key {
-                        self.styles.push(Style { key, direct: true, line, file: self.f().file.clone() });
-                    }
                     return;
                 }
                 weak = Some(self.name_of(t));
             }
         }
         if let (None, Some(slot)) = (&weak, origin) {
-            if let Some(key) = key {
-                self.styles.push(Style { key, direct: false, line, file: self.f().file.clone() });
+            let lvl = if want_mutate { 2 } else { 1 };
+            match key {
+                // a field of the receiver or parameter: the caller must hold a block on that array
+                Some((sid, idx)) => self.fhits.push(FieldHit { f: self.fid, slot, sid, idx, lvl }),
+                // a parameter that is itself an array: the caller must hold a block on the argument
+                None => self.hits.push((self.fid, slot, lvl)),
             }
-            self.hits.push((self.fid, slot, if want_mutate { 2 } else { 1 }));
             return;
         }
         self.arr_error(a, want_mutate, weak, line, what);
+    }
+
+    /// The caller of `fid` must hold a block on each array field the callee reached through slot `slot` (0 the receiver, k + 1 parameter k).
+    fn field_needs(&mut self, fid: FnId, slot: usize, arg: &TExpr, line: u32) {
+        let needs: Vec<(usize, usize, u8)> = self.fneeds[fid].get(slot).cloned().unwrap_or_default();
+        if needs.is_empty() || self.is_fresh_value(arg) {
+            return;
+        }
+        let base = match &arg.kind {
+            EK::Borrow(i) | EK::BoxVal(i) if matches!(i.ty, Ty::Struct(_)) => &**i,
+            _ => arg,
+        };
+        for (sid, idx, lvl) in needs {
+            let fty = self.prog.structs[sid].fields[idx].ty.clone();
+            let place = TExpr { kind: EK::Field(Box::new(base.clone()), idx), ty: fty, line, lit: false };
+            let what = format!("calling `{}`, which {} an array field of its argument,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads" });
+            self.access_arr(&place, if lvl == 2 { Need::Write } else { Need::Read }, line, &what);
+        }
     }
 
     fn arr_error(&mut self, a: &TExpr, want_mutate: bool, weak: Option<String>, line: u32, what: &str) {
@@ -871,6 +895,23 @@ impl<'a> Cx<'a> {
             None => format!("{} needs `sync ({} {})`: the object is not local and is mutable", what, kw, owner),
         };
         self.out.push(Finding { file: self.f().file.clone(), line, msg, warn: false });
+    }
+}
+
+/// `e` without the wrappers that only change how a handle is held
+fn norm(mut e: &TExpr) -> &TExpr {
+    while let EK::BoxVal(i) | EK::Borrow(i) | EK::Deref(i) = &e.kind {
+        e = i;
+    }
+    e
+}
+
+/// Do two array places name the same array? (`g.xs` written with or without the implicit dereference is the same place.)
+fn same_arr(a: &TExpr, b: &TExpr) -> bool {
+    let (a, b) = (norm(a), norm(b));
+    match (&a.kind, &b.kind) {
+        (EK::Field(x, f), EK::Field(y, g)) => f == g && same_arr(x, y),
+        _ => same_place(a, b),
     }
 }
 

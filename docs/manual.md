@@ -130,7 +130,8 @@ An `Array<T>` is an object of its own with its own lock; a slice locks the array
 | `g.xs[i]`, `g.xs.length`, append, where `g` is shared and something changes `xs` in place | `sync (reads g.xs)` / `sync (writes g.xs)` |
 | `let xs = g.xs` then `xs[i] = v` | `sync (writes xs)` on the copy |
 | global array that something changes in place | a block naming it |
-| array reached through this function's receiver or parameter | the caller's block on the holder |
+| array field reached through this function's receiver or parameter (`self.xs`, `g.xs` for a parameter `g`) | the caller's block on that array: the callee's summary says which array fields it reads or writes, and a caller that does not hold the object locally must hold `sync (reads/writes g.xs)` |
+| array field reached deeper than the receiver or parameter (`self.child.xs`) | a block in this function |
 | array field of a struct held by value | nothing |
 
 `sync (writes g)` **does not cover `g.xs`**.
@@ -143,7 +144,7 @@ An `extern` function receives an array as a raw pointer and a length, `(void* p,
 
 The element type of an array that crosses into C (a variadic parameter such as `sources: Wakeup...` packs the call's arguments and is not checked) is a number, `bool`, or a plain struct made only of those (no `String`, `Ref`, `Array`, optional, enum, `cleanup()` or extern struct): anything else is a compile error (`err/extern_array_*.gort`). The checker cannot tell the two result cases apart, so an extern result is local only when every array argument is local; otherwise it is as shared as the arguments. Counts do not enter into it; the local/shared distinction matters only for `sync`.
 
-**One style per array field.** A field's array is locked through its holder (receiver and parameter accesses, covered by the caller) or by a block on the array itself, never both (**checked**: ``G.xs is locked through its holder elsewhere ... use sync on the holder everywhere, or on the array everywhere``, `err/share_array_mixed_locks.gort`). The two locks do not exclude each other, so mixing them could race.
+A block on the holder never stands in for a block on the array: `sync (writes g) { bump(g) }` is rejected when `bump` writes `g.xs`. So every access to one array, whether direct, through a callee, or through a copied-out handle, takes the array's own lock, and they exclude each other (`ok/sync_array_one_lock.gort`, `err/share_array_holder_block.gort`).
 
 Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
