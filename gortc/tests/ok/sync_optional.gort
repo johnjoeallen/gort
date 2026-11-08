@@ -1,0 +1,14 @@
+// an optional handle can be a sync target: it locks the object it points to
+package t
+struct Item { n: i64 }
+struct G { items: Array<Ref<Item>?> }
+let shared: Ref<G> = new G { items: Ref<Item>?[](2) }
+fn getG(): Ref<G> { return shared }
+fn main() {
+    let g = getG()
+    sync (writes g.items) { g.items[0] = new Item { n: 1 } }
+    var cur: Ref<Item>? = null
+    sync (reads g.items) { cur = g.items[0] }
+    sync (writes cur) { cur.n = 5 }
+    sync (reads cur) { println(str(cur.n)) }
+}

@@ -1,0 +1,8 @@
+// expect-exit: 101
+// stderr: null value used
+package t
+struct Item { n: i64 }
+fn main() {
+    var cur: Ref<Item>? = null
+    sync (writes cur) { println("never") }
+}

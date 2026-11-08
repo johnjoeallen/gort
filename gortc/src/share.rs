@@ -941,7 +941,7 @@ impl<'a> Cx<'a> {
 
 /// `e` without the wrappers that only change how a handle is held
 fn norm(mut e: &TExpr) -> &TExpr {
-    while let EK::BoxVal(i) | EK::Borrow(i) | EK::Deref(i) = &e.kind {
+    while let EK::BoxVal(i) | EK::Borrow(i) | EK::Deref(i) | EK::Unwrap(i) = &e.kind {
         e = i;
     }
     e

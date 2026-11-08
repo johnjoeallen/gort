@@ -1592,6 +1592,14 @@ impl<'a> Sema<'a> {
                     let kw = if *write { "writes" } else { "reads" };
                     let v = self.lower_expr(cx, target);
                     let v = self.decay(cx, v, (target.line, target.col));
+                    // an optional handle locks what it points to; null is the same NullValue failure as using it
+                    let v = match &v.ty {
+                        Ty::Opt(inner) if matches!(**inner, Ty::Ref(_) | Ty::Arr(_)) => {
+                            let (ty, line) = ((**inner).clone(), v.line);
+                            TExpr { kind: EK::Unwrap(Box::new(v)), ty, line, lit: false }
+                        }
+                        _ => v,
+                    };
                     match &v.ty {
                         Ty::Error => ok = false,
                         Ty::Ref(sid) if self.prog.structs[*sid].is_extern => {

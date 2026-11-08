@@ -98,7 +98,7 @@ Whether an object is shared is not written anywhere. The compiler decides where 
 sync (reads a, b; writes c) { ... }
 ```
 
-Each named object is listed under `reads` (shared with other readers; the body may not write through it) or `writes` (exclusive). All of them are locked together in one fixed order (by address), so the order written does not matter. Naming one object under both is an error. The target must be a `Ref<T>` or an `Array<T>`; an `extern` type needs no block (it synchronises itself).
+Each named object is listed under `reads` (shared with other readers; the body may not write through it) or `writes` (exclusive). All of them are locked together in one fixed order (by address), so the order written does not matter. Naming one object under both is an error. The target must be a `Ref<T>` or an `Array<T>`, or an optional one (`Ref<T>?`, `Array<T>?`), which locks what it points to and fails like any use of a null (`null value used`) when it is null (`ok/sync_optional.gort`, `trap/sync_null.gort`). So an element of an array of handles can be locked by copying it out under the array's lock and naming the copy: `sync (reads g.items) { cur = g.items[i] }` then `sync (writes cur) { cur.n = 5 }`; an `extern` type needs no block (it synchronises itself).
 
 * The lock is **re-entrant within a call tree**: a nested block on an object the thread already holds takes nothing and releases nothing. A `writes` entry inside a block that holds the object under `reads` upgrades in place.
 * A block is released on `return`, `break`, `continue` and `throw`.
