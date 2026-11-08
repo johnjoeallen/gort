@@ -1,0 +1,13 @@
+// an owned child can be given to a parameter that only reads or writes through it
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+fn read(b: Ref<B>): i64 { return b.n }
+fn bump(b: Ref<B>) { b.n = b.n + 1 }
+let shared: Ref<A> = new A { b: new B { n: 4 } }
+fn getA(): Ref<A> { return shared }
+fn main() {
+    let a = getA()
+    sync (writes a) { bump(a.b) }
+    sync (reads a) { println(str(read(a.b))) }
+}

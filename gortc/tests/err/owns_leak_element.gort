@@ -1,0 +1,9 @@
+// error: `a.items` is owned by its struct and cannot be copied out, stored, returned or captured
+// an object in an owned array is owned too
+package t
+struct B { n: i64 }
+struct Holder { keep: Ref<B>? }
+struct A { owns items: Array<Ref<B>?> }
+fn stash(h: Ref<Holder>, b: Ref<B>?) { h.keep = b }
+fn leak(a: Ref<A>, h: Ref<Holder>) { sync (reads a) { stash(h, a.items[0]) } }
+fn main() { }

@@ -1,0 +1,11 @@
+// error: expected Ref<B>, found B
+// a method cannot hand out `self` as a handle, so an owned object cannot leak through its own method
+package t
+struct Holder { keep: Ref<B>? }
+struct B {
+    n: i64
+    fn leak(h: Ref<Holder>) { h.keep = self }
+}
+struct A { owns b: Ref<B> }
+fn go(a: Ref<A>, h: Ref<Holder>) { sync (reads a) { a.b.leak(h) } }
+fn main() { }

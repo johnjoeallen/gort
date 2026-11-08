@@ -1,0 +1,8 @@
+// error: writing `B.n` needs `sync (writes a)`
+// a child cannot be captured by itself, only through its owner, and the lambda must then hold the owner's lock
+package t
+struct B { n: i64 }
+struct A { owns b: Ref<B> }
+extern fn startThread(body: fn())
+fn spawnOn(a: Ref<A>) { startThread(fn() { a.b.n = 1 }) }
+fn main() { }
