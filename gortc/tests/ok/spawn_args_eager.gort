@@ -1,0 +1,12 @@
+// the arguments of `spawn` are evaluated by the spawner, before the child starts
+package t
+extern fn spawnTask(body: fn())
+extern fn joinAll()
+fn show(n: i64) { println(str(n)) }
+fn main() {
+    var i: i64 = 1
+    spawn show(i + 1)
+    i = 100
+    joinAll()
+    println(str(i))
+}

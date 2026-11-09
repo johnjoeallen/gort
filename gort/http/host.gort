@@ -1,0 +1,11 @@
+// http/host.gort - what the code assumes the runtime and the host provide.
+package http
+import runtime
+
+let HELLO: String = "hello\n"
+
+extern fn leak(bytes: Array<u8>): Array<u8>              // keeps the bytes alive for the whole run
+extern fn log(e: IoError)                                // writes the failure to the log
+extern fn exit(code: i32)
+extern fn spawnWorker(core: usize, body: fn())           // starts a worker pinned to a core; `body` is its root
+extern fn spawnTask(body: fn())                          // `spawn call` is spawnTask(fn() { call }): runs it on its own thread

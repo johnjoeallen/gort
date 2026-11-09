@@ -187,6 +187,8 @@ This is how the prelude's `Map` grows: `rehash` does `let oldK = take keys` (and
 
 ### 5.6 `spawn` and publishing
 
+`spawn f(a, b)` evaluates `a` and `b` in the spawning function, before the child starts, and gives the child the values; only the callee is looked up in the child. So `spawn run(head.copy())` copies in the spawner. Literal arguments are left in place. The values are made by `let` statements placed before the statement that holds the `spawn`, so a `spawn` in a `while` condition or on the right of `&&` has its arguments evaluated every time that statement starts, not only when the `spawn` runs (`spawn` is meant to stand as a statement or call argument).
+
 A `Ref` passed to `spawn`, sent in a message, stored in a global or a non-local object, or captured by a closure that is, is **published**: from then on it is no longer local on any path. A module-level `let` holds an object published at startup; a module-level `var` is local to each vthread.
 
 ## 6. Parking, effects and `fn[nopark]`

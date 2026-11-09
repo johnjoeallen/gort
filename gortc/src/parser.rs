@@ -4,7 +4,7 @@ use crate::lexer::{lex, Tok, Token};
 
 pub fn parse_file(name: &str, src: &str) -> R<File> {
     let toks = lex(name, src)?;
-    let mut p = Parser { file: name.to_string(), toks, pos: 0, in_type_args: 0 };
+    let mut p = Parser { file: name.to_string(), toks, pos: 0, in_type_args: 0, pre: Vec::new(), spawns: 0 };
     p.file()
 }
 
@@ -13,6 +13,9 @@ struct Parser {
     toks: Vec<Token>,
     pos: usize,
     in_type_args: u32,
+    /// statements to run before the one being parsed: the arguments of a `spawn`, evaluated by the spawner
+    pre: Vec<Stmt>,
+    spawns: u32,
 }
 
 impl Parser {
@@ -397,6 +400,7 @@ impl Parser {
     fn block(&mut self) -> R<Block> {
         let open = self.expect_sym("{")?;
         let mut stmts = Vec::new();
+        let outer_pre = std::mem::take(&mut self.pre);
         loop {
             self.skip_semis();
             if self.eat_sym("}") {
@@ -406,8 +410,11 @@ impl Parser {
                 let t = self.cur().clone();
                 return self.err(&t, "unexpected end of file; missing '}'");
             }
-            stmts.push(self.stmt()?);
+            let st = self.stmt()?;
+            stmts.append(&mut self.pre);
+            stmts.push(st);
         }
+        self.pre = outer_pre;
         Ok(Block { stmts, line: open.line })
     }
 
@@ -805,12 +812,37 @@ impl Parser {
         if self.is_kw("spawn") {
             let start = self.pos;
             self.bump();
-            let call = self.unary()?;
+            let mut call = self.unary()?;
+            // the arguments are evaluated here, by the spawner, and the child gets the values (as in Go)
             let mut idents: Vec<String> = Vec::new();
-            for tk in &self.toks[start..self.pos] {
-                if let Tok::Ident(n) = &tk.tok {
-                    if !idents.contains(n) {
-                        idents.push(n.clone());
+            if let ExprKind::Call(callee, args) = &mut call.kind {
+                let mut root = &**callee;
+                loop {
+                    match &root.kind {
+                        ExprKind::Field(b, _) => root = b,
+                        ExprKind::TypeArgs(b, _) => root = b,
+                        _ => break,
+                    }
+                }
+                if let ExprKind::Ident(n) = &root.kind {
+                    idents.push(n.clone());
+                }
+                for a in args.iter_mut() {
+                    if matches!(a.kind, ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Str(_) | ExprKind::Char(_) | ExprKind::Bool(_)) {
+                        continue;
+                    }
+                    self.spawns += 1;
+                    let name = format!("__spawn{}", self.spawns);
+                    let init = std::mem::replace(a, Expr { kind: ExprKind::Ident(name.clone()), line: a.line, col: a.col });
+                    self.pre.push(Stmt { kind: StmtKind::Let { name: name.clone(), mutable: false, ty: None, init }, line: t.line, col: t.col });
+                    idents.push(name);
+                }
+            } else {
+                for tk in &self.toks[start..self.pos] {
+                    if let Tok::Ident(n) = &tk.tok {
+                        if !idents.contains(n) {
+                            idents.push(n.clone());
+                        }
                     }
                 }
             }
