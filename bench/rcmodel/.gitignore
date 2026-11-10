@@ -1,0 +1,5 @@
+# built artefacts and fetched tools
+c/build/
+tools/oha/
+tools/idle
+java/dependency-reduced-pom.xml

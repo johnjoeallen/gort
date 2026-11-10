@@ -1,0 +1,38 @@
+== C0-raw O2 : W1 walk() instructions touching the count at offset 0 of the object
+   W3 layer(): 0 count-updating instructions (static)
+== C1-local O2 : W1 walk() instructions touching the count at offset 0 of the object
+       2372:	dec    DWORD PTR [rbx]
+       2380:	inc    DWORD PTR [rdi]
+       238c:	dec    DWORD PTR [rbx]
+   W3 layer(): 24 count-updating instructions (static)
+== C2-flagged O2 : W1 walk() instructions touching the count at offset 0 of the object
+       23b6:	inc    DWORD PTR [rdi]
+       23c9:	dec    DWORD PTR [rbx]
+       23ea:	lock dec DWORD PTR [rbx]
+       2400:	lock inc DWORD PTR [rdi]
+   W3 layer(): 42 count-updating instructions (static)
+== C3-atomic O2 : W1 walk() instructions touching the count at offset 0 of the object
+       2381:	lock dec DWORD PTR [rbx]
+       2390:	lock inc DWORD PTR [rdi]
+   W3 layer(): 25 count-updating instructions (static)
+== C4-elided O2 : W1 walk() instructions touching the count at offset 0 of the object
+   W3 layer(): 2 count-updating instructions (static)
+== C0-raw O3 : W1 walk() instructions touching the count at offset 0 of the object
+   W3 layer(): 0 count-updating instructions (static)
+== C1-local O3 : W1 walk() instructions touching the count at offset 0 of the object
+       23c2:	dec    DWORD PTR [rbx]
+       23d0:	inc    DWORD PTR [rdi]
+       23dc:	dec    DWORD PTR [rbx]
+   W3 layer(): 23 count-updating instructions (static)
+== C2-flagged O3 : W1 walk() instructions touching the count at offset 0 of the object
+       2396:	inc    DWORD PTR [rdi]
+       23a9:	dec    DWORD PTR [rbx]
+       23ca:	lock dec DWORD PTR [rbx]
+       23e0:	lock inc DWORD PTR [rdi]
+   W3 layer(): 44 count-updating instructions (static)
+== C3-atomic O3 : W1 walk() instructions touching the count at offset 0 of the object
+       2371:	lock dec DWORD PTR [rbx]
+       2380:	lock inc DWORD PTR [rdi]
+   W3 layer(): 25 count-updating instructions (static)
+== C4-elided O3 : W1 walk() instructions touching the count at offset 0 of the object
+   W3 layer(): 4 count-updating instructions (static)
