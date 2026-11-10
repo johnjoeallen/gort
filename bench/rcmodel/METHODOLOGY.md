@@ -4,6 +4,11 @@ Run `./run_all.sh` (env `REPS`, `PHASES`, `COPTS`). Raw rows land in `results/ra
 (`run,workload,impl,variant,params,metric,value`); `tools/analyze.py` produces `results/summary.csv` and `results/tables.md`.
 `results/env.txt` records the machine, toolchain versions and the CPU governor.
 
+The published results come from `./run_performance.sh`, which sets the governor and EPP to `performance` for the whole run and restores the
+original settings on exit (needs passwordless sudo). `./run_java.sh` reruns only the Java benchmarks (W1-W5) with extra JVM flags
+(`JAVA_OPTS`, default `-Xmx1g`) into a separate directory (`OUT`, default `results_java1g/`); `PHASES` selects workloads. `tools/w5.py` honours
+`W5_ONLY` and `W5_JAVA_OPTS` for the same purpose.
+
 ## 1. The memory model, as emulated in C (`c/rc.h`, `c/rcm.c`)
 
 Object header (16 B): `rc`, `weak`, `shared` flag, `type`. One source file builds five variants with `-DMODE`:
@@ -76,14 +81,17 @@ and (2) are the standard "caller outlives callee" and "last use" cases.
   CCDs (cores 0-7 and 8-15), which changes cache-to-cache latency; this affects every implementation alike.
 * All implementations are pinned by an **affinity mask**, not one thread to one core, for equal treatment: Go and the JVM cannot
   pin individual threads without extra machinery.
-* **CPU frequency was not fixed.** The governor is `powersave` under `amd-pstate-epp` with boost on; I did not change system power
-  settings. Idle cores sit near 600 MHz and ramp under load, so each run begins with a warm-up and long runs are favoured.
-  Frequency differences between runs are a source of noise that the min/max columns expose.
+* **CPU frequency was not pinned.** The published run used the `performance` governor with EPP `performance` under `amd-pstate-epp` with boost on, set by
+  `run_performance.sh` and restored afterwards. An earlier full run used `powersave` / `balance_performance`; the two agree (median metric change
+  0.0-0.3% per workload, 30 of 1,098 metrics beyond 8%, mostly W2 at 16 threads and tail latencies). Boost was on in both, and idle cores ramp from
+  about 600 MHz under load, so each run begins with a warm-up and long runs are favoured. Frequency differences between runs remain a source of noise
+  that the min/max columns expose. Boost-off or a fixed clock was not tried.
 * `perf` is not installed (and `perf_event_paranoid=3`), so **cycles, instructions and cache-misses were not collected**.
   Cache-line bouncing is inferred from throughput scaling only.
 * Java: JDK as in `env.txt`, flags `-XX:+UseG1GC` or `-XX:+UseZGC` set explicitly (the JDK would silently pick SerialGC on a 1-CPU
-  mask). Heap sizing is the default. JMH 1.37 for W1/W2 (`-f 10 -wi 2 -i 3` for W1; W2 `-wi 1 -i 2`, 10 forks, ZGC W2 only at 1/8/16
-  threads to bound runtime). W3/W4: JIT pre-warm of 1.5M requests on a throwaway table (so the shared table's state evolution
+  mask). Heap sizing is the default in the main runs; `run_java.sh` repeats them with `-Xmx1g`. JMH 1.37 for W1/W2 (`-f 10 -wi 2 -i 3` for W1; W2 `-wi 1 -i 2`, 10 forks, G1 at 1/2/4/8/16 threads, ZGC W2 only at 1/8/16
+  threads to bound runtime). **Known defect, fixed:** the first two full runs produced no Java W2 rows, because `run_all.sh` split
+  its "name:flags:threads" argument list on `:`, which also occurs in `-XX:+UseG1GC`; the delimiter is now `|` and W2 Java was rerun afterwards. W3/W4: JIT pre-warm of 1.5M requests on a throwaway table (so the shared table's state evolution
   still matches the other languages), then the same discarded warm-up as C, then measurement. Worker threads are virtual threads.
 * Go: `testing.B`, `-count=10`, `-cpu T` for W2; W3/W4 with `GOMAXPROCS = workers` (default `GOGC=100`); an extra `Go-gogc400`
   row is reported as a sensitivity run, **not** as the Go baseline.
@@ -109,7 +117,7 @@ and (2) are the standard "caller outlives callee" and "last use" cases.
    request are in `results/tables.md`.
 4. **Shared-table synchronisation is not the same in every language.** C and Rust use striped locks (spinlock in C, `RwLock` in
    Rust, `RWMutex` in Go) because a refcounted reader needs the lock to make load+increment atomic. Java uses `ConcurrentHashMap`,
-   whose lock-free reads need no count at all. W2/W3 numbers therefore include a cost that Java does not pay and that is a consequence
+   whose lock-free reads need no count at all (the measured Java G1 hot_same throughput, 120 Mops/s against 4 for C2, shows the size of the effect). W2/W3 numbers therefore include a cost that Java does not pay and that is a consequence
    of the counted design, not of the flag or atomics. C0 raw in W2 keeps the lock for the same reason (it is the same table code);
    in W3 `table=private` vs `table=shared` for C0 measures that cost on its own.
 5. **Raw cannot free a replaced object that readers may hold.** C0 parks replaced W2/W3 objects on a per-thread list and frees
@@ -142,5 +150,5 @@ and (2) are the standard "caller outlives callee" and "last use" cases.
 * Fixed frequency / SMT-off runs, a second machine, NUMA effects (single-socket machine).
 * A real Gort compiler's output: the C is hand-written; the elisions in C4 were chosen by me, not found by a tool.
 * Real network I/O beyond loopback, TLS, or request payloads that vary in size.
-* W2 with C1 at more than one thread (unsound by construction), and Java W2 under ZGC at 2 and 4 threads (time).
+* W2 with C1 at more than one thread (unsound by construction), and Java W2 under ZGC at 2 and 4 threads (time; G1 W2 and ZGC at 1/8/16 were measured).
 * Anything about long-term fragmentation, memory returned to the OS, or tail latency under GC pressure beyond the W3 p99/p99.9.
