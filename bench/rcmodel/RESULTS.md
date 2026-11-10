@@ -81,20 +81,29 @@ hand-written spinlock table, the Go/Java sides pay GC and idiomatic locking (bia
 
 * **W1**: C0/C1/C2/C4 are all 0.73-0.98 ns/pass; C3 and C2-with-flag-set are 7.42; Go 0.87-0.92; Java 0.34-0.55 (JIT inlines/collapses
   the chain, so it is not the same work); Rust idiomatic 0.78-0.93; Rust Arc 7.8-8.0. Not-optimised-away check: `results/asm_check.txt`.
-* **W2**: every entry in W2 is shared, so C2 always takes the atomic path and C2 ≈ C3 ≈ Rust-Arc; single thread C2 30 Mops/s vs raw 123
-  (4x). Uniform keys scale (C2 216 Mops/s at 8 threads, 2.8x below raw); hot_diff scales almost linearly for everyone (C2 482 vs Go 493 at 16);
-  hot_same collapses for every implementation using a stripe lock (C 4-10 Mops/s at 16 threads); Go's RWMutex holds 63. **W2's C-vs-Go
-  gap in hot_same is a lock-design artefact, not evidence about counts.**
+* **W2**: every entry in W2 is shared, so C2 always takes the atomic path and C2 ≈ C3 ≈ Rust-Arc; single thread C2 30 Mops/s vs raw 122
+  (4x). Uniform keys scale (C2 216 Mops/s at 8 threads, 2.9x below raw's 616); hot_diff scales almost linearly for everyone (C2 482 vs Go 545,
+  Rust idiomatic 793, Java G1 1,602 at 16 threads); hot_same collapses for every implementation using a stripe lock (C 4-10 Mops/s at 16 threads);
+  Go's RWMutex holds 67, and Java G1, whose `ConcurrentHashMap` reads need no lock and no count, holds 120. Java W2 (G1 at 1/2/4/8/16 threads, ZGC at 1/8/16)
+  was missing from the first two runs (see erratum) and is included here; ZGC at 16 threads hot_diff is unstable (504 vs 1,435 Mops/s across two passes) and should not be used.
+  **W2's C-vs-Go and C-vs-Java gaps in hot_same are lock-design artefacts, not evidence about counts.**
 * **W3**: see 1.1. C3 (always atomic, 33 atomic incs per request) is 41% slower than C2 and only matches Go.
   Executed counting ops per request (C2, COUNT build): 33 incs (3 atomic: the shared-session clones), 39 decs, 6.1 mallocs.
   C4 cuts that to 1 inc and 7 decs (elision removes 97% of count traffic) and recovers 4 points (0.92 -> 0.96 of raw).
-* **W4**: single thread, C2 costs 23.0 ns/node/cycle vs raw 22.5 (+2%); traverse (passing Refs) 3.9 vs 3.6 ns. C3 29.9. Free cascade
-  9.6 ns/node, dominated by `free`. With 8 threads all C variants are memory-bound and the cost of counts is 12-14% (C2 74.9 vs C0 65.5 wall)
-  in traverse. Java G1 beats every C variant (18 vs 65-75 ns/node at 8 threads); Go and C2 are in the same range at 1 thread but Go uses more CPU.
+* **W4**: single thread, C2 costs 23.2 ns/node/cycle vs raw 22.2 (+4%); traverse (passing Refs) 3.9 vs 3.5 ns. C3 29.9. Free cascade
+  9.7 ns/node, dominated by `free`. With 8 threads all C variants are memory-bound and the cost of counts is about 14% (C2 74.6 vs C0 65.3 ns/node/cycle).
+  Java G1 beats every C variant (17 vs 65-77 ns/node at 8 threads, 46 with weak references); Go and C2 are in the same range at 1 thread (18 vs 23 wall)
+  but Go uses more CPU (38 vs 26 ns/node).
 * **W5**: all three C servers plateau at ~1.54M req/s with 100+ connections regardless of mode, **so the load generator (oha on 8 cores) is
-  the bottleneck and W5 cannot separate C0/C2/C3**; it only says "the Gort-model server is at least 1.75x Go (878k) and 2x Java (785k)
-  on this loopback test, with p99 56-70 µs vs Go 643 µs and Java 191 µs at 100 connections". Idle connections (10k): C server 47.5 B each,
-  Go 14.3 KB each (goroutine + buffers), Java not measurable (heap sizing swamps it, 19 B). Peak RSS: C 2.2 MB, Go 349 MB, Java 1.7-26 GB.
+  the bottleneck and W5 cannot separate C0/C2/C3**; it only says "the Gort-model server is at least 1.75x Go (876k) and 2x Java (786k)
+  on this loopback test, with p99 58-66 µs vs Go 647 µs and Java 190 µs at 100 connections". Idle connections (10k): C server 47.9 B each,
+  Go 14.2 KB each (goroutine + buffers), Java not measurable (heap sizing swamps it, 4-17 B). Peak RSS: C 2.2 MB, Go 343 MB, Java 1.7-26 GB.
+* **Sensitivity checks** (not part of the pre-registered measure):
+  *Governor*: the whole suite was run under `powersave` and then `performance`; median metric change 0.0-0.3% per workload, 30 of 1,098 metrics beyond 8%
+  (W2 at 16 threads, a Java G1 8-thread W4 configuration, tail latencies); no verdict or scorecard entry changed.
+  *Java heap capped at 1 GB* (`results_java1g/`, no out-of-memory failures): W3 at 8 workers G1 21.5 -> 16.8 and ZGC 17.3 -> 15.5 Mreq/s, so C2 is 1.86x G1 and 2.0x ZGC;
+  RSS 1.27 GB -> 0.70 GB (G1) and 8.6 GB -> 1.1 GB (ZGC); W4 at 8 threads G1 +34-87% and ZGC +208-279% ns/node; W5 throughput unchanged (within 1%) with peak RSS
+  down 56% (G1) and 96% (ZGC); W1 within 1.5%; W2 G1 within about 7%. The Java comparison therefore flatters Java when its heap is left uncapped.
 
 ## 1.4 The three biggest sources of error or bias
 
@@ -103,14 +112,15 @@ hand-written spinlock table, the Go/Java sides pay GC and idiomatic locking (bia
    explains W4 (Java 5x faster than C there) and W3's Go-over-C ratio. Also, a real handler is heavier than 0.2 µs, which would pull all
    ratios toward 1 (`work=8`: C2/Go falls from 1.71 to 1.30).
 2. **The shared-table synchronisation differs per language.** Counted readers of a shared table need load+increment to be atomic, so
-   the C/Rust/Go versions take a stripe lock, while Java reads a `ConcurrentHashMap` with no lock and no count. My C lock is an exclusive spinlock;
+   the C/Rust/Go versions take a stripe lock, while Java reads a `ConcurrentHashMap` with no lock and no count (W2 hot_same: Java G1 120 Mops/s vs C2 4). My C lock is an exclusive spinlock;
    Go and Rust use reader-writer locks. This is why hot_same results are not comparable across languages and why Rust idiomatic is
    slower than C2 in W3. A refcounted design genuinely needs something like this (hazard pointers, RCU or a lock), so it is a cost of the model,
    but my particular lock is not a fair stand-in for what Gort would ship.
 3. **C2 and C4 are hand-defined.** What counts as a "pass" (I count every call argument and every field load into a local, plus store-into-field
    as clone+drop) decides C2's traffic (33 incs/request); C4's elisions were chosen by me and are an upper bound on what an optimiser recovers.
    Under a different convention C2 would look better or worse, but the W3 result has headroom: even C3, with *all* counts atomic, ties Go.
-   (W5 adds a fourth issue: the load generator saturated before the C servers did.)
+   (W5 adds a fourth issue: the load generator saturated before the C servers did. A fifth, found late: Java was run with the default heap, which
+   let it use 1.3 GB (G1) to 8.6 GB (ZGC) in W3; capping it at 1 GB makes the C-vs-Java ratios more favourable to C, see 1.3.)
 
 ## 1.5 Where Gort's overhead really comes from
 
@@ -121,16 +131,16 @@ objects that really are shared**: ~3.7 ns each, uncontended, so a design that fl
 ~7.4 ns per pass, 10x a local pass (W1 shared=1, W2 single thread 4x below raw, C3 in W3 0.59x of C2); the thing to minimise is the number of
 *flagged* objects and the number of passes of them, not the flag test; (2) **contention on hot shared objects and shared-table reads**: counted readers must
 synchronise (a lock or equivalent) in order to clone safely, and a single hot object collapses to a few Mops/s for any implementation that does so
-(W2 hot_same, where raw C collapses too); (3) **per-object malloc/free with a cascading destructor**, which is not a counting cost but is where a
+(W2 hot_same, where raw C collapses too; Java avoids it only because `ConcurrentHashMap` reads need no count); (3) **per-object malloc/free with a cascading destructor**, which is not a counting cost but is where a
 refcounting runtime loses to a bump-allocating generational GC (W4: Java G1 5x faster; W4 C free ≈ 10 ns/node), and which a Gort runtime could attack with a better
 allocator or arenas. For request-shaped server code with request-local objects, the model is viable by the pre-registered measure;
 the open risks are shared mutable state and allocation-heavy graphs, not the pass traffic.
 
 ## 1.6 Not measured
 
-CPU counters (no `perf`); fixed frequency or SMT-off runs; any second machine; a real Gort compiler (the C is hand-written and C4's elisions are
-mine); real network beyond loopback and any C-server difference in W5 (generator-limited); W2 with C1 at >1 thread (unsound) and Java ZGC W2 at 2 and 4 (still not run; Java W2 otherwise now measured, see erratum)
-threads; Rust `rust-box` with a weak parent (not expressible); RSS for Java as a measure of live data (heap sizing dominates); queueing latency
+CPU counters (no `perf`); fixed-frequency (boost off) or SMT-off runs (the governor was varied, powersave vs performance, but boost stayed on); any second machine; a real Gort compiler (the C is hand-written and C4's elisions are
+mine); real network beyond loopback and any C-server difference in W5 (generator-limited); W2 with C1 at >1 thread (unsound) and Java ZGC W2 at 2 and 4
+threads (Java G1 W2 and ZGC W2 at 1/8/16 were rerun after the fix; see erratum); Rust `rust-box` with a weak parent (not expressible); RSS for Java as a measure of live data (heap sizing dominates; the 1 GB run bounds it but does not measure live data); queueing latency
 under offered load (all latencies are closed-loop service times); verification of Go/Java escape analysis behaviour (assumed from design, see METHODOLOGY.md).
 
 ---
