@@ -1,94 +1,104 @@
-[10:41:05] build
-[10:41:21] W1 C
-[10:52:35] W1 Go
-[10:53:19] W1 Java g1
-[10:55:54] W1 Java zgc
-[10:58:35] W1 Rust
-[10:59:02] W2 C
-[11:09:14] W2 Go
-[11:13:02] W2 Java g1 t=+UseG1GC:1
-[11:13:02] W2 Java g1 t=2
-[11:13:02] W2 Java g1 t=4
-[11:13:02] W2 Java g1 t=8
-[11:13:02] W2 Java g1 t=16
-[11:13:02] W2 Java zgc t=+UseZGC:1
-[11:13:02] W2 Java zgc t=8
-[11:13:03] W2 Java zgc t=16
-[11:13:03] W2 Rust
-[11:14:53] W3 rep 1 T=1
-[11:15:30] W3 rep 1 T=4
-[11:15:43] W3 rep 1 T=8
-[11:15:54] W3 rep 2 T=1
-[11:16:31] W3 rep 2 T=4
-[11:16:45] W3 rep 2 T=8
-[11:16:56] W3 rep 3 T=1
-[11:17:33] W3 rep 3 T=4
-[11:17:46] W3 rep 3 T=8
-[11:17:57] W3 rep 4 T=1
-[11:18:35] W3 rep 4 T=4
-[11:18:48] W3 rep 4 T=8
-[11:18:59] W3 rep 5 T=1
-[11:19:36] W3 rep 5 T=4
-[11:19:50] W3 rep 5 T=8
-[11:20:01] W3 rep 6 T=1
-[11:20:38] W3 rep 6 T=4
-[11:20:51] W3 rep 6 T=8
-[11:21:02] W3 rep 7 T=1
-[11:21:39] W3 rep 7 T=4
-[11:21:53] W3 rep 7 T=8
-[11:22:03] W3 rep 8 T=1
-[11:22:41] W3 rep 8 T=4
-[11:22:54] W3 rep 8 T=8
-[11:23:05] W3 rep 9 T=1
-[11:23:42] W3 rep 9 T=4
-[11:23:56] W3 rep 9 T=8
-[11:24:07] W3 rep 10 T=1
-[11:24:44] W3 rep 10 T=4
-[11:24:58] W3 rep 10 T=8
-[11:25:08] W3 work=8 rep 1
-[11:25:17] W3 work=8 rep 2
-[11:25:25] W3 work=8 rep 3
-[11:25:34] W3 work=8 rep 4
-[11:25:42] W3 work=8 rep 5
-[11:25:52] W4 rep 1 T=1 weak=0
-[11:25:54] W4 rep 1 T=1 weak=1
-[11:25:56] W4 rep 1 T=8 weak=0
-[11:26:00] W4 rep 1 T=8 weak=1
-[11:26:05] W4 rep 2 T=1 weak=0
-[11:26:07] W4 rep 2 T=1 weak=1
-[11:26:09] W4 rep 2 T=8 weak=0
-[11:26:13] W4 rep 2 T=8 weak=1
-[11:26:18] W4 rep 3 T=1 weak=0
-[11:26:20] W4 rep 3 T=1 weak=1
-[11:26:22] W4 rep 3 T=8 weak=0
-[11:26:27] W4 rep 3 T=8 weak=1
-[11:26:31] W4 rep 4 T=1 weak=0
-[11:26:33] W4 rep 4 T=1 weak=1
-[11:26:35] W4 rep 4 T=8 weak=0
-[11:26:39] W4 rep 4 T=8 weak=1
-[11:26:44] W4 rep 5 T=1 weak=0
-[11:26:46] W4 rep 5 T=1 weak=1
-[11:26:48] W4 rep 5 T=8 weak=0
-[11:26:53] W4 rep 5 T=8 weak=1
-[11:26:57] W4 rep 6 T=1 weak=0
-[11:26:59] W4 rep 6 T=1 weak=1
-[11:27:01] W4 rep 6 T=8 weak=0
-[11:27:06] W4 rep 6 T=8 weak=1
-[11:27:10] W4 rep 7 T=1 weak=0
-[11:27:12] W4 rep 7 T=1 weak=1
-[11:27:14] W4 rep 7 T=8 weak=0
-[11:27:19] W4 rep 7 T=8 weak=1
-[11:27:23] W4 rep 8 T=1 weak=0
-[11:27:25] W4 rep 8 T=1 weak=1
-[11:27:27] W4 rep 8 T=8 weak=0
-[11:27:32] W4 rep 8 T=8 weak=1
-[11:27:36] W4 rep 9 T=1 weak=0
-[11:27:38] W4 rep 9 T=1 weak=1
-[11:27:40] W4 rep 9 T=8 weak=0
-[11:27:45] W4 rep 9 T=8 weak=1
-[11:27:49] W4 rep 10 T=1 weak=0
-[11:27:51] W4 rep 10 T=1 weak=1
-[11:27:53] W4 rep 10 T=8 weak=0
-[11:27:58] W4 rep 10 T=8 weak=1
-[11:28:02] done phases: env build w1 w2 w3 w4
-[12:00:50] done phases: w5
+[13:10:57] build
+[13:11:03] W1 C
+[13:22:18] W1 Go
+[13:22:56] W1 Java g1
+[13:25:31] W1 Java zgc
+[13:28:12] W1 Rust
+[13:28:39] W2 C
+[13:38:56] W2 Go
+[13:42:42] W2 Java g1 t=+UseG1GC:1
+[13:42:42] W2 Java g1 t=2
+[13:42:42] W2 Java g1 t=4
+[13:42:42] W2 Java g1 t=8
+[13:42:42] W2 Java g1 t=16
+[13:42:42] W2 Java zgc t=+UseZGC:1
+[13:42:42] W2 Java zgc t=8
+[13:42:42] W2 Java zgc t=16
+[13:42:42] W2 Rust
+[13:44:31] W3 rep 1 T=1
+[13:45:09] W3 rep 1 T=4
+[13:45:22] W3 rep 1 T=8
+[13:45:34] W3 rep 2 T=1
+[13:46:11] W3 rep 2 T=4
+[13:46:24] W3 rep 2 T=8
+[13:46:35] W3 rep 3 T=1
+[13:47:13] W3 rep 3 T=4
+[13:47:26] W3 rep 3 T=8
+[13:47:38] W3 rep 4 T=1
+[13:48:15] W3 rep 4 T=4
+[13:48:29] W3 rep 4 T=8
+[13:48:39] W3 rep 5 T=1
+[13:49:17] W3 rep 5 T=4
+[13:49:30] W3 rep 5 T=8
+[13:49:41] W3 rep 6 T=1
+[13:50:18] W3 rep 6 T=4
+[13:50:32] W3 rep 6 T=8
+[13:50:43] W3 rep 7 T=1
+[13:51:20] W3 rep 7 T=4
+[13:51:33] W3 rep 7 T=8
+[13:51:44] W3 rep 8 T=1
+[13:52:21] W3 rep 8 T=4
+[13:52:35] W3 rep 8 T=8
+[13:52:46] W3 rep 9 T=1
+[13:53:23] W3 rep 9 T=4
+[13:53:36] W3 rep 9 T=8
+[13:53:47] W3 rep 10 T=1
+[13:54:25] W3 rep 10 T=4
+[13:54:38] W3 rep 10 T=8
+[13:54:49] W3 work=8 rep 1
+[13:54:58] W3 work=8 rep 2
+[13:55:06] W3 work=8 rep 3
+[13:55:15] W3 work=8 rep 4
+[13:55:23] W3 work=8 rep 5
+[13:55:33] W4 rep 1 T=1 weak=0
+[13:55:34] W4 rep 1 T=1 weak=1
+[13:55:36] W4 rep 1 T=8 weak=0
+[13:55:41] W4 rep 1 T=8 weak=1
+[13:55:46] W4 rep 2 T=1 weak=0
+[13:55:47] W4 rep 2 T=1 weak=1
+[13:55:49] W4 rep 2 T=8 weak=0
+[13:55:54] W4 rep 2 T=8 weak=1
+[13:55:59] W4 rep 3 T=1 weak=0
+[13:56:00] W4 rep 3 T=1 weak=1
+[13:56:02] W4 rep 3 T=8 weak=0
+[13:56:07] W4 rep 3 T=8 weak=1
+[13:56:12] W4 rep 4 T=1 weak=0
+[13:56:14] W4 rep 4 T=1 weak=1
+[13:56:15] W4 rep 4 T=8 weak=0
+[13:56:20] W4 rep 4 T=8 weak=1
+[13:56:25] W4 rep 5 T=1 weak=0
+[13:56:27] W4 rep 5 T=1 weak=1
+[13:56:29] W4 rep 5 T=8 weak=0
+[13:56:33] W4 rep 5 T=8 weak=1
+[13:56:38] W4 rep 6 T=1 weak=0
+[13:56:40] W4 rep 6 T=1 weak=1
+[13:56:42] W4 rep 6 T=8 weak=0
+[13:56:46] W4 rep 6 T=8 weak=1
+[13:56:51] W4 rep 7 T=1 weak=0
+[13:56:53] W4 rep 7 T=1 weak=1
+[13:56:55] W4 rep 7 T=8 weak=0
+[13:56:59] W4 rep 7 T=8 weak=1
+[13:57:04] W4 rep 8 T=1 weak=0
+[13:57:06] W4 rep 8 T=1 weak=1
+[13:57:08] W4 rep 8 T=8 weak=0
+[13:57:12] W4 rep 8 T=8 weak=1
+[13:57:17] W4 rep 9 T=1 weak=0
+[13:57:19] W4 rep 9 T=1 weak=1
+[13:57:21] W4 rep 9 T=8 weak=0
+[13:57:25] W4 rep 9 T=8 weak=1
+[13:57:30] W4 rep 10 T=1 weak=0
+[13:57:32] W4 rep 10 T=1 weak=1
+[13:57:34] W4 rep 10 T=8 weak=0
+[13:57:38] W4 rep 10 T=8 weak=1
+[14:29:26] done phases: env build w1 w2 w3 w4 w5 analyze
+[15:06:46] java opts:  
+[15:06:46] W2 Java g1 t=1
+[15:08:21] W2 Java g1 t=2
+[15:09:55] W2 Java g1 t=4
+[15:11:28] W2 Java g1 t=8
+[15:13:01] W2 Java g1 t=16
+[15:14:34] W2 Java zgc t=1
+[15:16:18] W2 Java zgc t=8
+[15:18:10] W2 Java zgc t=16
+[15:19:59] run_java finished
+[15:20:00] restored governor=powersave epp=balance_performance

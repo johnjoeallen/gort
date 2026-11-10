@@ -3,3 +3,6 @@ c/build/
 tools/oha/
 tools/idle
 java/dependency-reduced-pom.xml
+go/rcm_go
+go/server_go
+*.out

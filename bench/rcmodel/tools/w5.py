@@ -16,6 +16,10 @@ SERVERS = {   # (impl, variant) -> command
     ("java", "Java-g1"): ["java", "-XX:+UseG1GC", "-Dsun.net.httpserver.maxIdleConnections=100000", "-Dsun.net.httpserver.idleInterval=3600", "-cp", JAR, "rcm.Server", str(PORT)],
     ("java", "Java-zgc"): ["java", "-XX:+UseZGC", "-Dsun.net.httpserver.maxIdleConnections=100000", "-Dsun.net.httpserver.idleInterval=3600", "-cp", JAR, "rcm.Server", str(PORT)],
 }
+# optional: W5_ONLY=java restricts the servers; W5_JAVA_OPTS="-Xmx1g" adds JVM flags (both used by run_java.sh)
+if os.environ.get("W5_ONLY"): SERVERS = {k: v for k, v in SERVERS.items() if k[0] == os.environ["W5_ONLY"]}
+for k in SERVERS:
+    if k[0] == "java": SERVERS[k] = ["java"] + os.environ.get("W5_JAVA_OPTS", "").split() + SERVERS[k][1:]
 CONFIGS = [(10, 0), (100, 0), (1000, 0), (100, 10000)]   # (active connections, idle connections)
 def rss(pid, key="VmRSS"):
     for l in open(f"/proc/{pid}/status"):

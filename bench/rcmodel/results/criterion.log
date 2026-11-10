@@ -4,49 +4,51 @@ Benchmarking w1/idiomatic/depth=1
 Benchmarking w1/idiomatic/depth=1: Warming up for 1.0000 s
 Benchmarking w1/idiomatic/depth=1: Collecting 10 samples in estimated 3.0000 s (3.2B iterations)
 Benchmarking w1/idiomatic/depth=1: Analyzing
-w1/idiomatic/depth=1    time:   [929.30 ps 930.60 ps 932.26 ps]
-Found 3 outliers among 10 measurements (30.00%)
-  1 (10.00%) low severe
-  2 (20.00%) high severe
+w1/idiomatic/depth=1    time:   [929.96 ps 930.06 ps 930.19 ps]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
 
 Benchmarking w1/arc/depth=1
 Benchmarking w1/arc/depth=1: Warming up for 1.0000 s
 Benchmarking w1/arc/depth=1: Collecting 10 samples in estimated 3.0000 s (377M iterations)
 Benchmarking w1/arc/depth=1: Analyzing
-w1/arc/depth=1          time:   [7.9673 ns 7.9680 ns 7.9691 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+w1/arc/depth=1          time:   [7.9610 ns 7.9749 ns 8.0067 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low severe
+  1 (10.00%) high severe
 
 Benchmarking w1/idiomatic/depth=4
 Benchmarking w1/idiomatic/depth=4: Warming up for 1.0000 s
-Benchmarking w1/idiomatic/depth=4: Collecting 10 samples in estimated 3.0000 s (878M iterations)
+Benchmarking w1/idiomatic/depth=4: Collecting 10 samples in estimated 3.0000 s (913M iterations)
 Benchmarking w1/idiomatic/depth=4: Analyzing
-w1/idiomatic/depth=4    time:   [3.2704 ns 3.2707 ns 3.2714 ns]
+w1/idiomatic/depth=4    time:   [3.2722 ns 3.2786 ns 3.2851 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high severe
 
 Benchmarking w1/arc/depth=4
 Benchmarking w1/arc/depth=4: Warming up for 1.0000 s
 Benchmarking w1/arc/depth=4: Collecting 10 samples in estimated 3.0000 s (95M iterations)
 Benchmarking w1/arc/depth=4: Analyzing
-w1/arc/depth=4          time:   [31.493 ns 31.499 ns 31.502 ns]
-Found 2 outliers among 10 measurements (20.00%)
+w1/arc/depth=4          time:   [31.488 ns 31.490 ns 31.494 ns]
+Found 3 outliers among 10 measurements (30.00%)
   1 (10.00%) low severe
   1 (10.00%) low mild
+  1 (10.00%) high severe
 
 Benchmarking w1/idiomatic/depth=16
 Benchmarking w1/idiomatic/depth=16: Warming up for 1.0000 s
 Benchmarking w1/idiomatic/depth=16: Collecting 10 samples in estimated 3.0000 s (245M iterations)
 Benchmarking w1/idiomatic/depth=16: Analyzing
-w1/idiomatic/depth=16   time:   [12.253 ns 12.415 ns 12.549 ns]
+w1/idiomatic/depth=16   time:   [12.437 ns 12.505 ns 12.594 ns]
 Found 3 outliers among 10 measurements (30.00%)
-  1 (10.00%) low severe
-  1 (10.00%) low mild
-  1 (10.00%) high mild
+  2 (20.00%) low severe
+  1 (10.00%) high severe
 
 Benchmarking w1/arc/depth=16
 Benchmarking w1/arc/depth=16: Warming up for 1.0000 s
 Benchmarking w1/arc/depth=16: Collecting 10 samples in estimated 3.0000 s (24M iterations)
 Benchmarking w1/arc/depth=16: Analyzing
-w1/arc/depth=16         time:   [124.83 ns 124.85 ns 124.88 ns]
+w1/arc/depth=16         time:   [124.85 ns 124.86 ns 124.87 ns]
 Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
 
@@ -54,10 +56,10 @@ Found 1 outliers among 10 measurements (10.00%)
      Running benches/micro.rs (target/release/deps/micro-0aa53f78acc3a8f7)
 Benchmarking w2/idiomatic/uniform/t=1
 Benchmarking w2/idiomatic/uniform/t=1: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/uniform/t=1: Collecting 10 samples in estimated 3.0000 s (183M iterations)
+Benchmarking w2/idiomatic/uniform/t=1: Collecting 10 samples in estimated 3.0000 s (184M iterations)
 Benchmarking w2/idiomatic/uniform/t=1: Analyzing
 w2/idiomatic/uniform/t=1
-                        time:   [16.352 ns 16.355 ns 16.359 ns]
+                        time:   [16.324 ns 16.325 ns 16.328 ns]
 Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
 
@@ -65,41 +67,42 @@ Benchmarking w2/arc/uniform/t=1
 Benchmarking w2/arc/uniform/t=1: Warming up for 500.00 ms
 Benchmarking w2/arc/uniform/t=1: Collecting 10 samples in estimated 3.0000 s (80M iterations)
 Benchmarking w2/arc/uniform/t=1: Analyzing
-w2/arc/uniform/t=1      time:   [37.676 ns 37.699 ns 37.723 ns]
-Found 3 outliers among 10 measurements (30.00%)
-  1 (10.00%) low mild
-  2 (20.00%) high severe
+w2/arc/uniform/t=1      time:   [37.666 ns 37.685 ns 37.698 ns]
 
 Benchmarking w2/idiomatic/hot_same/t=1
 Benchmarking w2/idiomatic/hot_same/t=1: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_same/t=1: Collecting 10 samples in estimated 3.0000 s (188M iterations)
 Benchmarking w2/idiomatic/hot_same/t=1: Analyzing
 w2/idiomatic/hot_same/t=1
-                        time:   [15.908 ns 15.911 ns 15.914 ns]
+                        time:   [15.919 ns 15.921 ns 15.924 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
 
 Benchmarking w2/arc/hot_same/t=1
 Benchmarking w2/arc/hot_same/t=1: Warming up for 500.00 ms
 Benchmarking w2/arc/hot_same/t=1: Collecting 10 samples in estimated 3.0000 s (81M iterations)
 Benchmarking w2/arc/hot_same/t=1: Analyzing
-w2/arc/hot_same/t=1     time:   [37.238 ns 37.241 ns 37.243 ns]
+w2/arc/hot_same/t=1     time:   [37.221 ns 37.255 ns 37.315 ns]
 Found 2 outliers among 10 measurements (20.00%)
-  1 (10.00%) low severe
-  1 (10.00%) high severe
+  2 (20.00%) high severe
 
 Benchmarking w2/idiomatic/hot_diff/t=1
 Benchmarking w2/idiomatic/hot_diff/t=1: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_diff/t=1: Collecting 10 samples in estimated 3.0000 s (188M iterations)
 Benchmarking w2/idiomatic/hot_diff/t=1: Analyzing
 w2/idiomatic/hot_diff/t=1
-                        time:   [15.907 ns 15.908 ns 15.909 ns]
+                        time:   [15.921 ns 15.925 ns 15.930 ns]
+Found 4 outliers among 10 measurements (40.00%)
+  1 (10.00%) low severe
+  1 (10.00%) low mild
+  2 (20.00%) high severe
 
 Benchmarking w2/arc/hot_diff/t=1
 Benchmarking w2/arc/hot_diff/t=1: Warming up for 500.00 ms
 Benchmarking w2/arc/hot_diff/t=1: Collecting 10 samples in estimated 3.0000 s (81M iterations)
 Benchmarking w2/arc/hot_diff/t=1: Analyzing
-w2/arc/hot_diff/t=1     time:   [37.245 ns 37.273 ns 37.313 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high severe
+w2/arc/hot_diff/t=1     time:   [37.212 ns 37.219 ns 37.231 ns]
 
     Finished `bench` profile [optimized] target(s) in 0.01s
      Running benches/micro.rs (target/release/deps/micro-0aa53f78acc3a8f7)
@@ -108,48 +111,53 @@ Benchmarking w2/idiomatic/uniform/t=2: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/uniform/t=2: Collecting 10 samples in estimated 3.0000 s (164M iterations)
 Benchmarking w2/idiomatic/uniform/t=2: Analyzing
 w2/idiomatic/uniform/t=2
-                        time:   [18.303 ns 18.324 ns 18.352 ns]
+                        time:   [18.237 ns 18.250 ns 18.284 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
 
 Benchmarking w2/arc/uniform/t=2
 Benchmarking w2/arc/uniform/t=2: Warming up for 500.00 ms
 Benchmarking w2/arc/uniform/t=2: Collecting 10 samples in estimated 3.0000 s (77M iterations)
 Benchmarking w2/arc/uniform/t=2: Analyzing
-w2/arc/uniform/t=2      time:   [38.916 ns 38.920 ns 38.925 ns]
+w2/arc/uniform/t=2      time:   [38.921 ns 38.982 ns 39.077 ns]
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low severe
+  2 (20.00%) high severe
 
 Benchmarking w2/idiomatic/hot_same/t=2
 Benchmarking w2/idiomatic/hot_same/t=2: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_same/t=2: Collecting 10 samples in estimated 3.0000 s (42M iterations)
 Benchmarking w2/idiomatic/hot_same/t=2: Analyzing
 w2/idiomatic/hot_same/t=2
-                        time:   [70.808 ns 71.145 ns 71.413 ns]
+                        time:   [71.299 ns 71.505 ns 71.813 ns]
 Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low severe
+  1 (10.00%) low mild
 
 Benchmarking w2/arc/hot_same/t=2
 Benchmarking w2/arc/hot_same/t=2: Warming up for 500.00 ms
 Benchmarking w2/arc/hot_same/t=2: Collecting 10 samples in estimated 3.0000 s (22M iterations)
 Benchmarking w2/arc/hot_same/t=2: Analyzing
-w2/arc/hot_same/t=2     time:   [138.78 ns 138.92 ns 138.99 ns]
-Found 2 outliers among 10 measurements (20.00%)
-  2 (20.00%) low severe
+w2/arc/hot_same/t=2     time:   [138.85 ns 139.07 ns 139.26 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
 
 Benchmarking w2/idiomatic/hot_diff/t=2
 Benchmarking w2/idiomatic/hot_diff/t=2: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_diff/t=2: Collecting 10 samples in estimated 3.0000 s (186M iterations)
 Benchmarking w2/idiomatic/hot_diff/t=2: Analyzing
 w2/idiomatic/hot_diff/t=2
-                        time:   [15.928 ns 15.941 ns 15.965 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [16.121 ns 16.206 ns 16.430 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low severe
+  1 (10.00%) high severe
 
 Benchmarking w2/arc/hot_diff/t=2
 Benchmarking w2/arc/hot_diff/t=2: Warming up for 500.00 ms
-Benchmarking w2/arc/hot_diff/t=2: Collecting 10 samples in estimated 3.0000 s (80M iterations)
+Benchmarking w2/arc/hot_diff/t=2: Collecting 10 samples in estimated 3.0000 s (76M iterations)
 Benchmarking w2/arc/hot_diff/t=2: Analyzing
-w2/arc/hot_diff/t=2     time:   [37.241 ns 37.256 ns 37.270 ns]
-Found 3 outliers among 10 measurements (30.00%)
-  1 (10.00%) low mild
-  1 (10.00%) high mild
+w2/arc/hot_diff/t=2     time:   [37.436 ns 37.503 ns 37.569 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low severe
   1 (10.00%) high severe
 
     Finished `bench` profile [optimized] target(s) in 0.01s
@@ -159,38 +167,38 @@ Benchmarking w2/idiomatic/uniform/t=4: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/uniform/t=4: Collecting 10 samples in estimated 3.0000 s (143M iterations)
 Benchmarking w2/idiomatic/uniform/t=4: Analyzing
 w2/idiomatic/uniform/t=4
-                        time:   [21.025 ns 21.033 ns 21.044 ns]
-Found 3 outliers among 10 measurements (30.00%)
+                        time:   [20.876 ns 20.910 ns 20.937 ns]
+Found 2 outliers among 10 measurements (20.00%)
   1 (10.00%) low mild
-  2 (20.00%) high severe
+  1 (10.00%) high mild
 
 Benchmarking w2/arc/uniform/t=4
 Benchmarking w2/arc/uniform/t=4: Warming up for 500.00 ms
-Benchmarking w2/arc/uniform/t=4: Collecting 10 samples in estimated 3.0000 s (72M iterations)
+Benchmarking w2/arc/uniform/t=4: Collecting 10 samples in estimated 3.0000 s (74M iterations)
 Benchmarking w2/arc/uniform/t=4: Analyzing
-w2/arc/uniform/t=4      time:   [40.438 ns 40.624 ns 41.077 ns]
-Found 2 outliers among 10 measurements (20.00%)
-  2 (20.00%) high severe
+w2/arc/uniform/t=4      time:   [40.346 ns 40.742 ns 41.447 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
 
 Benchmarking w2/idiomatic/hot_same/t=4
 Benchmarking w2/idiomatic/hot_same/t=4: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_same/t=4: Collecting 10 samples in estimated 3.0000 s (14M iterations)
 Benchmarking w2/idiomatic/hot_same/t=4: Analyzing
 w2/idiomatic/hot_same/t=4
-                        time:   [213.82 ns 214.30 ns 215.07 ns]
+                        time:   [214.98 ns 215.91 ns 216.97 ns]
 
 Benchmarking w2/arc/hot_same/t=4
 Benchmarking w2/arc/hot_same/t=4: Warming up for 500.00 ms
 Benchmarking w2/arc/hot_same/t=4: Collecting 10 samples in estimated 3.0000 s (7.3M iterations)
 Benchmarking w2/arc/hot_same/t=4: Analyzing
-w2/arc/hot_same/t=4     time:   [407.41 ns 408.33 ns 409.71 ns]
+w2/arc/hot_same/t=4     time:   [408.67 ns 409.55 ns 410.36 ns]
 
 Benchmarking w2/idiomatic/hot_diff/t=4
 Benchmarking w2/idiomatic/hot_diff/t=4: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/hot_diff/t=4: Collecting 10 samples in estimated 3.0000 s (186M iterations)
+Benchmarking w2/idiomatic/hot_diff/t=4: Collecting 10 samples in estimated 3.0000 s (176M iterations)
 Benchmarking w2/idiomatic/hot_diff/t=4: Analyzing
 w2/idiomatic/hot_diff/t=4
-                        time:   [16.148 ns 16.236 ns 16.526 ns]
+                        time:   [15.941 ns 15.998 ns 16.073 ns]
 Found 2 outliers among 10 measurements (20.00%)
   2 (20.00%) high severe
 
@@ -198,101 +206,93 @@ Benchmarking w2/arc/hot_diff/t=4
 Benchmarking w2/arc/hot_diff/t=4: Warming up for 500.00 ms
 Benchmarking w2/arc/hot_diff/t=4: Collecting 10 samples in estimated 3.0000 s (80M iterations)
 Benchmarking w2/arc/hot_diff/t=4: Analyzing
-w2/arc/hot_diff/t=4     time:   [37.477 ns 37.536 ns 37.738 ns]
-Found 2 outliers among 10 measurements (20.00%)
-  1 (10.00%) high mild
-  1 (10.00%) high severe
+w2/arc/hot_diff/t=4     time:   [37.317 ns 37.401 ns 37.442 ns]
 
     Finished `bench` profile [optimized] target(s) in 0.01s
      Running benches/micro.rs (target/release/deps/micro-0aa53f78acc3a8f7)
 Benchmarking w2/idiomatic/uniform/t=8
 Benchmarking w2/idiomatic/uniform/t=8: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/uniform/t=8: Collecting 10 samples in estimated 3.0000 s (117M iterations)
+Benchmarking w2/idiomatic/uniform/t=8: Collecting 10 samples in estimated 3.0000 s (118M iterations)
 Benchmarking w2/idiomatic/uniform/t=8: Analyzing
 w2/idiomatic/uniform/t=8
-                        time:   [25.325 ns 25.462 ns 25.621 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [25.167 ns 25.256 ns 25.404 ns]
 
 Benchmarking w2/arc/uniform/t=8
 Benchmarking w2/arc/uniform/t=8: Warming up for 500.00 ms
 Benchmarking w2/arc/uniform/t=8: Collecting 10 samples in estimated 3.0000 s (68M iterations)
 Benchmarking w2/arc/uniform/t=8: Analyzing
-w2/arc/uniform/t=8      time:   [43.926 ns 43.943 ns 43.967 ns]
+w2/arc/uniform/t=8      time:   [43.913 ns 44.079 ns 44.307 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
 
 Benchmarking w2/idiomatic/hot_same/t=8
 Benchmarking w2/idiomatic/hot_same/t=8: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_same/t=8: Collecting 10 samples in estimated 3.0000 s (4.5M iterations)
 Benchmarking w2/idiomatic/hot_same/t=8: Analyzing
 w2/idiomatic/hot_same/t=8
-                        time:   [651.97 ns 653.31 ns 654.73 ns]
+                        time:   [658.70 ns 661.24 ns 663.67 ns]
 
 Benchmarking w2/arc/hot_same/t=8
 Benchmarking w2/arc/hot_same/t=8: Warming up for 500.00 ms
-Benchmarking w2/arc/hot_same/t=8: Collecting 10 samples in estimated 3.0001 s (2.7M iterations)
+Benchmarking w2/arc/hot_same/t=8: Collecting 10 samples in estimated 3.0000 s (2.7M iterations)
 Benchmarking w2/arc/hot_same/t=8: Analyzing
-w2/arc/hot_same/t=8     time:   [1.1026 µs 1.1059 µs 1.1083 µs]
+w2/arc/hot_same/t=8     time:   [1.1168 µs 1.1178 µs 1.1197 µs]
 
 Benchmarking w2/idiomatic/hot_diff/t=8
 Benchmarking w2/idiomatic/hot_diff/t=8: Warming up for 500.00 ms
 Benchmarking w2/idiomatic/hot_diff/t=8: Collecting 10 samples in estimated 3.0000 s (182M iterations)
 Benchmarking w2/idiomatic/hot_diff/t=8: Analyzing
 w2/idiomatic/hot_diff/t=8
-                        time:   [16.181 ns 16.208 ns 16.272 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high severe
+                        time:   [16.191 ns 16.217 ns 16.277 ns]
 
 Benchmarking w2/arc/hot_diff/t=8
 Benchmarking w2/arc/hot_diff/t=8: Warming up for 500.00 ms
-Benchmarking w2/arc/hot_diff/t=8: Collecting 10 samples in estimated 3.0000 s (80M iterations)
+Benchmarking w2/arc/hot_diff/t=8: Collecting 10 samples in estimated 3.0000 s (79M iterations)
 Benchmarking w2/arc/hot_diff/t=8: Analyzing
-w2/arc/hot_diff/t=8     time:   [37.536 ns 38.202 ns 39.128 ns]
-Found 2 outliers among 10 measurements (20.00%)
-  2 (20.00%) high severe
+w2/arc/hot_diff/t=8     time:   [37.548 ns 37.557 ns 37.566 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
 
     Finished `bench` profile [optimized] target(s) in 0.01s
      Running benches/micro.rs (target/release/deps/micro-0aa53f78acc3a8f7)
 Benchmarking w2/idiomatic/uniform/t=16
 Benchmarking w2/idiomatic/uniform/t=16: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/uniform/t=16: Collecting 10 samples in estimated 3.0000 s (41M iterations)
+Benchmarking w2/idiomatic/uniform/t=16: Collecting 10 samples in estimated 3.0000 s (43M iterations)
 Benchmarking w2/idiomatic/uniform/t=16: Analyzing
 w2/idiomatic/uniform/t=16
-                        time:   [71.234 ns 72.476 ns 73.775 ns]
+                        time:   [53.505 ns 56.522 ns 61.456 ns]
 
 Benchmarking w2/arc/uniform/t=16
 Benchmarking w2/arc/uniform/t=16: Warming up for 500.00 ms
-Benchmarking w2/arc/uniform/t=16: Collecting 10 samples in estimated 3.0000 s (34M iterations)
+Benchmarking w2/arc/uniform/t=16: Collecting 10 samples in estimated 3.0000 s (35M iterations)
 Benchmarking w2/arc/uniform/t=16: Analyzing
-w2/arc/uniform/t=16     time:   [78.614 ns 80.041 ns 81.660 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+w2/arc/uniform/t=16     time:   [82.655 ns 86.280 ns 89.543 ns]
 
 Benchmarking w2/idiomatic/hot_same/t=16
 Benchmarking w2/idiomatic/hot_same/t=16: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/hot_same/t=16: Collecting 10 samples in estimated 3.0001 s (1.4M iterations)
+Benchmarking w2/idiomatic/hot_same/t=16: Collecting 10 samples in estimated 3.0000 s (1.4M iterations)
 Benchmarking w2/idiomatic/hot_same/t=16: Analyzing
 w2/idiomatic/hot_same/t=16
-                        time:   [2.1302 µs 2.1386 µs 2.1510 µs]
-Found 3 outliers among 10 measurements (30.00%)
-  2 (20.00%) low mild
-  1 (10.00%) high severe
+                        time:   [2.1312 µs 2.1365 µs 2.1411 µs]
 
 Benchmarking w2/arc/hot_same/t=16
 Benchmarking w2/arc/hot_same/t=16: Warming up for 500.00 ms
-Benchmarking w2/arc/hot_same/t=16: Collecting 10 samples in estimated 3.0001 s (1.0M iterations)
+Benchmarking w2/arc/hot_same/t=16: Collecting 10 samples in estimated 3.0000 s (1.0M iterations)
 Benchmarking w2/arc/hot_same/t=16: Analyzing
-w2/arc/hot_same/t=16    time:   [2.8895 µs 2.8934 µs 2.8975 µs]
+w2/arc/hot_same/t=16    time:   [2.8906 µs 2.9005 µs 2.9182 µs]
 
 Benchmarking w2/idiomatic/hot_diff/t=16
 Benchmarking w2/idiomatic/hot_diff/t=16: Warming up for 500.00 ms
-Benchmarking w2/idiomatic/hot_diff/t=16: Collecting 10 samples in estimated 3.0000 s (145M iterations)
+Benchmarking w2/idiomatic/hot_diff/t=16: Collecting 10 samples in estimated 3.0000 s (138M iterations)
 Benchmarking w2/idiomatic/hot_diff/t=16: Analyzing
 w2/idiomatic/hot_diff/t=16
-                        time:   [17.094 ns 18.722 ns 21.681 ns]
+                        time:   [17.402 ns 18.687 ns 20.328 ns]
 
 Benchmarking w2/arc/hot_diff/t=16
 Benchmarking w2/arc/hot_diff/t=16: Warming up for 500.00 ms
-Benchmarking w2/arc/hot_diff/t=16: Collecting 10 samples in estimated 3.0000 s (63M iterations)
+Benchmarking w2/arc/hot_diff/t=16: Collecting 10 samples in estimated 3.0000 s (69M iterations)
 Benchmarking w2/arc/hot_diff/t=16: Analyzing
-w2/arc/hot_diff/t=16    time:   [41.061 ns 44.068 ns 49.349 ns]
+w2/arc/hot_diff/t=16    time:   [38.645 ns 39.637 ns 41.331 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 

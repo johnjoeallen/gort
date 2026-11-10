@@ -57,7 +57,7 @@ if has w2; then
       emit $r taskset -c $(cpus $T) $CB/rcm_${v}_O2 w2 threads=$T mode=$m ops=3000000
     done; done; done; done
   say "W2 Go"; for T in 1 2 4 8 16; do (cd "$D/go" && taskset -c $(cpus $T) go test -run XXX -bench 'W2' -cpu $T -count=$REPS -benchtime=1s ./... 2>>"$ERR") | python3 -I "$D/tools/parse_go.py" W2 $T Go-gc >> "$RAW"; done
-  for gc in "g1:$G1:1 2 4 8 16" "zgc:$ZGC:1 8 16"; do IFS=: read n f ts <<< "$gc"; for T in $ts; do
+  for gc in "g1|$G1|1 2 4 8 16" "zgc|$ZGC|1 8 16"; do IFS="|" read n f ts <<< "$gc"; for T in $ts; do
     say "W2 Java $n t=$T"; taskset -c $(cpus $T) java -jar $JAR jmh 'Micro.w2' -t $T -f $REPS -wi 1 -w 1 -i 2 -r 1 -jvmArgsAppend "$f" -rf json -rff "$R/jmh_w2_${n}_$T.json" >> "$R/jmh.log" 2>&1
     python3 -I "$D/tools/parse_jmh.py" "$R/jmh_w2_${n}_$T.json" Java-$n >> "$RAW"
   done; done
