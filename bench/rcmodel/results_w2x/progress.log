@@ -1,0 +1,9 @@
+[09:08:21] build
+[09:08:22] hot_same x threads x work
+[09:12:43] rep 1
+[09:17:04] rep 2
+[09:21:25] rep 3
+[09:25:46] rep 4
+[09:30:06] rep 5
+[09:30:06] hot_diff reference, T=16
+[09:31:57] done

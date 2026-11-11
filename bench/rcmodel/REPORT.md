@@ -264,7 +264,8 @@ Additional limits:
 2. **Design to minimise flagged objects and passes of flagged objects**, not the flag test. A shared object passed freely costs about 7.4 ns per
    pass versus about 0.75 ns for a local one.
 3. **Do not ship the benchmark's shared-table lock.** Shared mutable state is the largest open risk. Evaluate a reader-friendly scheme (RCU, hazard
-   pointers, or reader-writer stripes) and repeat W2 hot_same against it.
+   pointers, or reader-writer stripes) and repeat W2 hot_same against it. **Done: see `REPORT_W2SYNC.md`.** Borrowed reads under
+   asymmetric-fence hazard pointers reach 219 Mops/s on hot_same at 16 threads (lock: 3.0; lock-free but counted: 12.0), with bounded garbage. Against Go, Java and Rust under one protocol (`REPORT_W2X.md`), this is at parity with the best lock-free reads from about 1 µs of handler work up.
 4. **Attack allocation, not counting.** Per-object `free` with a cascading destructor is where Java G1 won by 5x. Candidate work: a bump or arena
    allocator for request-local objects, and batch freeing.
 5. **Compiler-level elision is a modest gain** (about 4 points of raw throughput here) and optional. It is not what makes the model viable.

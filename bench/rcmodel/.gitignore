@@ -6,3 +6,4 @@ java/dependency-reduced-pom.xml
 go/rcm_go
 go/server_go
 *.out
+go/w2x/w2x_go
