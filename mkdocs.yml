@@ -49,6 +49,7 @@ nav:
       - Compiled modules and linking: architecture/modules.md
       - Dispatch and external code: architecture/dispatch-and-ffi.md
       - Evaluation plan: architecture/benchmarks.md
+      - Contention budget: architecture/contention.md
       - Open decisions: architecture/open-decisions.md
       - The compiler: architecture/compiler.md
       - Changes and contradictions: architecture/changes.md

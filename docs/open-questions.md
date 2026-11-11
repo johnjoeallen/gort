@@ -14,6 +14,7 @@
 ## Not yet built or measured
 
 - Any compiler, and therefore any module file, effect inference or generated continuation code. Everything here is hand-written C beside `.gort` source.
+- Contention: run Gort's spin-then-park `sync` lock in the W2 harness with and without work, and measure tail latency near the lock ceiling. See [contention budget](architecture/contention.md#6-open).
 - The multi-object lock retry, and a sharded store to exercise it.
 - Incremental table resize and key-expiry accuracy in mini-redis.
 - A Rust or Go mini-redis for a baseline.

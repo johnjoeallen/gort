@@ -9,6 +9,7 @@ This section extends [`gort-design.md`](https://github.com/johnjoeallen/gort/blo
 | [Compiled modules and linking](modules.md) | The module format, the three information tiers, ABI and IR boundaries, incremental versus optimised builds, recompilation rules |
 | [Dynamic dispatch and external code](dispatch-and-ffi.md) | Interfaces, function values, generics, C interop, blocking foreign calls, callbacks, dynamic loading |
 | [Evaluation plan](benchmarks.md) | How Gort is compared with Go and Java virtual threads, and with Rust async as a reference ceiling |
+| [Contention budget](contention.md) | When the choice of lock for shared state matters: lock ceilings, pools, worked examples |
 | [Open decisions](open-decisions.md) | Unresolved questions, alternatives, recommended direction |
 | [The compiler](compiler.md) | What is built (slice 0), the choices made, the next slices |
 | [Changes and contradictions](changes.md) | What this update changed in the existing design, and what it contradicted |
