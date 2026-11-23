@@ -1,0 +1,89 @@
+// http-mid/server.gort - one request at a time per connection, one listener per worker, shared state behind sync.
+package http
+import runtime
+
+// An error answer the server ends the connection after.
+fn reject(conn: Conn, code: u16, message: String) throws IoError {
+    let resp = respond(code, message, false, false)
+    writeAll(conn, resp.bytes)
+}
+
+// Serves one connection until the client leaves or the server ends it.
+fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig): Ending throws IoError {
+    var input = Reader.of(conn, cfg)
+    var ending = Ending.ClientClosed
+    while (true) {
+        var req: Request?
+        try {
+            req = input.nextRequest()                        // parks while idle or mid-request
+        } catch (e: TooLarge) {
+            reject(conn, 431, "headers too large\n")
+            ending = Ending.ServerRejected
+            break
+        } catch (e: BadRequest) {
+            reject(conn, 400, "bad request\n")
+            ending = Ending.ServerRejected
+            break
+        }
+        if (req == null) break                               // the client closed the connection
+        var body = Array<u8>()
+        if (req.contentLength > 0) {
+            try {
+                body = input.readBody(req.contentLength)
+            } catch (e: BodyTooLarge) {
+                reject(conn, 413, "payload too large\n")
+                ending = Ending.ServerRejected
+                break
+            }
+        }
+        let resp = dispatch(req, body, store, routes)
+        writeAll(conn, resp.bytes)                           // parks if the send buffer is full
+        if (!resp.keepAlive) { ending = Ending.ServerClosed; break }
+        input.releaseIfDrained()
+    }
+    return ending
+}
+
+// The root of a connection's vthread: a reset or a failed write ends this connection only.
+fn runConnection(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig) {
+    var ending = Ending.ClientClosed
+    try {
+        ending = handleSequential(conn, store, routes, cfg)
+    } catch (e: IoError) {
+        log(e)
+    }
+    // Closing a socket that still holds unread input makes the kernel send a RESET that can destroy the response. So when the SERVER ends
+    // a connection it is handed to a lingering closer: always after an error answer, and after a plain Connection: close only if input is unread.
+    switch (ending) {
+        ClientClosed   -> {}
+        ServerClosed   -> { if (conn.hasUnread()) conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+        ServerRejected -> { conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+    }
+}
+
+fn serve(listener: Listener, store: shared Store, routes: shared Route, cfg: shared ServerConfig) throws IoError {   // one per worker
+    while (true) {
+        let conn = listener.accept()                         // parks until a client arrives
+        spawn runConnection(conn, store, routes, cfg)        // `conn` moves into the new vthread
+    }
+}
+
+// Started as: server --port=8080 --workers=4. Fields left out keep these defaults.
+struct Config { port: u16 = 8080, workers: usize = 1 }
+
+fn main(config: Config) {
+    let port = config.port
+    shared Store store = newStore()
+    shared Route routes = buildRoutes()
+    shared ServerConfig cfg = new ServerConfig()
+    for (core in 0..config.workers) {
+        spawnWorker(core, fn() {                             // the worker's root: throws nothing
+            try {
+                serve(Listener.bindReusePort(port), store, routes, cfg)
+            } catch (e: IoError) {
+                log(e)
+                exit(1)
+            }
+        })
+    }
+}

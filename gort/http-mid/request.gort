@@ -1,0 +1,85 @@
+// http-mid/request.gort - turning the bytes of a request head into a Request.
+package http
+
+fn isSpace(c: u8): bool { return c == 32 || c == 9 }
+
+fn lowerByte(c: u8): u8 { return (c >= 65 && c <= 90) ? c + 32 : c }
+
+// The index of the first `ch` in b[from..], or b.length if there is none.
+fn indexOf(b: Array<u8>, ch: u8, from: usize): usize {
+    var i = from
+    while (i < b.length && b[i] != ch) { i += 1 }
+    return i
+}
+
+// Does the header line `line` (without its CR LF) start with `name` (lower case, ending in ':'), ignoring case?
+fn headerIs(line: Array<u8>, name: Array<u8>): bool {
+    if (line.length < name.length) return false
+    var i = 0
+    while (i < name.length) {
+        if (lowerByte(line[i]) != name[i]) return false
+        i += 1
+    }
+    return true
+}
+
+// Where the value of a header line starts: after its name and any spaces.
+fn valueStart(line: Array<u8>, nameLen: usize): usize {
+    var i = nameLen
+    while (i < line.length && isSpace(line[i])) { i += 1 }
+    return i
+}
+
+// A decimal number, or null if there is anything else in it.
+fn parseUsize(b: Array<u8>): usize? {
+    if (b.length == 0 || b.length > 12) return null
+    var v: usize = 0
+    var i = 0
+    while (i < b.length) {
+        if (b[i] < 48 || b[i] > 57) return null
+        v = v * 10 + ((b[i] - 48) as usize)
+        i += 1
+    }
+    return v
+}
+
+// Parses `head`, the bytes of the request line and the headers up to and including the blank line.
+fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
+    // request line: METHOD SP target SP HTTP/1.x
+    let eol = indexOf(head, 10, 0)
+    if (eol >= head.length || eol < 2) throw BadRequest()
+    let sp1 = indexOf(head, 32, 0)
+    let sp2 = indexOf(head, 32, sp1 + 1)
+    if (sp1 == 0 || sp2 >= eol || sp2 == sp1 + 1) throw BadRequest()
+    let method = head[0..sp1].toString()
+    let target = head[sp1 + 1..sp2]
+    let q = indexOf(target, 63, 0)                        // '?'
+    let path = target[0..q].toString()
+    let query = (q < target.length) ? target[q + 1..target.length].toString() : ""
+    if (path.length == 0 || !path.startsWith("/")) throw BadRequest()
+    // HTTP/1.1 keeps the connection open unless told otherwise; HTTP/1.0 closes unless told otherwise
+    let version = head[sp2 + 1..eol - 1]
+    let http10 = !(version.length == 8 && version[7] == 49)
+    var keepAlive = !http10                                       // "HTTP/1.1"
+    var contentLength: usize = 0
+    let nameCL = "content-length:".toBytes()
+    let nameConn = "connection:".toBytes()
+    var pos = eol + 1
+    while (pos < head.length) {
+        let e = indexOf(head, 10, pos)
+        if (e >= head.length) break
+        let line = head[pos..e - 1]                       // without the CR
+        if (line.length == 0) break                       // the blank line
+        if (headerIs(line, nameCL)) {
+            let n = parseUsize(line[valueStart(line, nameCL.length)..line.length])
+            if (n == null) throw BadRequest()
+            contentLength = n
+        } else if (headerIs(line, nameConn)) {
+            let v = line[valueStart(line, nameConn.length)..line.length]
+            if (v.length >= 5 && lowerByte(v[0]) == 99) keepAlive = false         // "close"
+            if (v.length >= 10 && lowerByte(v[0]) == 107) keepAlive = true         // "keep-alive"
+        }
+        pos = e + 1
+    }
+    return Request { method: method, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, headEnd: headEnd }
+}

@@ -1,0 +1,12 @@
+// http-mid/store.gort - the state every worker and every connection shares.
+package http
+
+struct Store {
+    kv: shared Map<String, String>       // the key-value data behind /kv/:key
+    requests: u64 = 0                    // every request handled, by any worker
+    writes: u64 = 0                      // successful PUT and DELETE
+}
+
+fn newStore(): shared Store {
+    return new Store { kv: new Map<String, String> {} }
+}

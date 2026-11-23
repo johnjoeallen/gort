@@ -1411,6 +1411,13 @@ impl<'a> FnGen<'a> {
                     self.register_temp(&t, format!("gort_arr_release({});", t));
                     return Val { c: t.clone(), own: Some(t) };
                 }
+                if *name == "toStr" {
+                    // a String made of a copy of the bytes (the array's used length)
+                    let t = self.tmp();
+                    self.line(format!("gort_str* {} = gort_str_make({}->data, {}->len);", t, a.c, a.c));
+                    self.register_temp(&t, format!("gort_str_release({});", t));
+                    return Val { c: t.clone(), own: Some(t) };
+                }
                 if *name == "capacity" {
                     return Val::plain(format!("(({})->cap)", a.c));
                 }

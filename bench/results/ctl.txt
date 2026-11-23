@@ -1,0 +1,404 @@
+RESULT work=alloc layout=H body=16 atomic=0 n=1500000 fill_ns=6.41 free_random_ns=10.58 churn_pair_ns=12.23 rss_full_kb=51836
+RESULT work=alloc layout=D body=16 atomic=0 n=1500000 fill_ns=4.40 free_random_ns=7.89 churn_pair_ns=14.50 rss_full_kb=40008
+RESULT work=alloc layout=C body=16 atomic=0 n=1500000 fill_ns=4.53 free_random_ns=8.13 churn_pair_ns=14.81 rss_full_kb=44292
+RESULT work=alloc layout=B body=16 atomic=0 n=1500000 fill_ns=8.47 free_random_ns=19.96 churn_pair_ns=35.09 rss_full_kb=68076
+RESULT work=alloc layout=H body=64 atomic=0 n=1500000 fill_ns=12.30 free_random_ns=16.56 churn_pair_ns=25.75 rss_full_kb=122880
+RESULT work=alloc layout=D body=64 atomic=0 n=1500000 fill_ns=11.56 free_random_ns=11.98 churn_pair_ns=28.78 rss_full_kb=111072
+RESULT work=alloc layout=C body=64 atomic=0 n=1500000 fill_ns=11.56 free_random_ns=12.12 churn_pair_ns=28.78 rss_full_kb=116120
+RESULT work=alloc layout=B body=64 atomic=0 n=1500000 fill_ns=15.26 free_random_ns=27.27 churn_pair_ns=58.18 rss_full_kb=138996
+RESULT work=alloc layout=H body=256 atomic=0 n=1500000 fill_ns=39.69 free_random_ns=27.21 churn_pair_ns=25.40 rss_full_kb=407052
+RESULT work=alloc layout=D body=256 atomic=0 n=1500000 fill_ns=38.32 free_random_ns=22.44 churn_pair_ns=57.25 rss_full_kb=395248
+RESULT work=alloc layout=C body=256 atomic=0 n=1500000 fill_ns=39.28 free_random_ns=23.39 churn_pair_ns=56.97 rss_full_kb=407664
+RESULT work=alloc layout=B body=256 atomic=0 n=1500000 fill_ns=42.88 free_random_ns=39.52 churn_pair_ns=90.49 rss_full_kb=422532
+RESULT work=access layout=H body=64 atomic=0 n=2000 seq_ns=0.369 random_ns=0.311 chase_ns=2.547 cseq_ns=0.331 crandom_ns=0.292 cchase_ns=2.548 count_only_ns=0.368 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=0 n=2000 seq_ns=0.335 random_ns=0.308 chase_ns=2.578 cseq_ns=0.303 crandom_ns=0.303 cchase_ns=2.549 count_only_ns=0.325 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=0 n=2000 seq_ns=0.341 random_ns=0.299 chase_ns=2.541 cseq_ns=0.333 crandom_ns=0.300 cchase_ns=2.540 count_only_ns=0.342 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=0 n=2000 seq_ns=0.412 random_ns=0.527 chase_ns=4.457 cseq_ns=0.397 crandom_ns=0.525 cchase_ns=4.456 count_only_ns=0.294 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=0 n=100000 seq_ns=0.533 random_ns=0.697 chase_ns=10.554 cseq_ns=0.512 crandom_ns=0.689 cchase_ns=10.522 count_only_ns=0.789 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=0 n=100000 seq_ns=0.463 random_ns=0.669 chase_ns=10.390 cseq_ns=0.455 crandom_ns=0.704 cchase_ns=10.364 count_only_ns=1.038 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=0 n=100000 seq_ns=0.463 random_ns=0.661 chase_ns=10.421 cseq_ns=0.454 crandom_ns=0.658 cchase_ns=10.417 count_only_ns=1.835 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=0 n=100000 seq_ns=0.613 random_ns=1.259 chase_ns=21.370 cseq_ns=0.621 crandom_ns=1.254 cchase_ns=21.363 count_only_ns=0.750 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=0 n=1500000 seq_ns=1.199 random_ns=2.870 chase_ns=36.327 cseq_ns=1.108 crandom_ns=2.715 cchase_ns=37.378 count_only_ns=2.859 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=0 n=1500000 seq_ns=1.035 random_ns=2.845 chase_ns=37.559 cseq_ns=0.888 crandom_ns=2.660 cchase_ns=33.894 count_only_ns=1.587 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=0 n=1500000 seq_ns=1.058 random_ns=2.846 chase_ns=41.813 cseq_ns=0.901 crandom_ns=2.689 cchase_ns=34.165 count_only_ns=3.504 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=0 n=1500000 seq_ns=1.440 random_ns=4.940 chase_ns=87.822 cseq_ns=1.317 crandom_ns=4.892 cchase_ns=89.965 count_only_ns=1.272 mapped_mb=135.6
+RESULT work=access layout=H body=48 atomic=0 n=100000 seq_ns=0.458 random_ns=0.669 chase_ns=10.410 cseq_ns=0.452 crandom_ns=0.659 cchase_ns=10.410 count_only_ns=0.764 mapped_mb=6.5
+RESULT work=access layout=D body=48 atomic=0 n=100000 seq_ns=0.361 random_ns=0.715 chase_ns=9.897 cseq_ns=0.367 crandom_ns=0.714 cchase_ns=9.904 count_only_ns=1.275 mapped_mb=5.7
+RESULT work=access layout=C body=48 atomic=0 n=100000 seq_ns=0.360 random_ns=0.669 chase_ns=9.934 cseq_ns=0.358 crandom_ns=0.666 cchase_ns=9.942 count_only_ns=1.902 mapped_mb=5.7
+RESULT work=access layout=B body=48 atomic=0 n=100000 seq_ns=0.505 random_ns=1.189 chase_ns=19.996 cseq_ns=0.500 crandom_ns=1.183 cchase_ns=20.010 count_only_ns=0.723 mapped_mb=7.6
+RESULT work=access layout=H body=48 atomic=0 n=1500000 seq_ns=0.986 random_ns=2.640 chase_ns=33.728 cseq_ns=0.896 crandom_ns=2.678 cchase_ns=34.124 count_only_ns=2.773 mapped_mb=96.7
+RESULT work=access layout=D body=48 atomic=0 n=1500000 seq_ns=0.669 random_ns=2.359 chase_ns=20.686 cseq_ns=0.593 crandom_ns=2.228 cchase_ns=20.923 count_only_ns=1.842 mapped_mb=85.1
+RESULT work=access layout=C body=48 atomic=0 n=1500000 seq_ns=0.662 random_ns=2.302 chase_ns=20.123 cseq_ns=0.592 crandom_ns=2.250 cchase_ns=19.947 count_only_ns=3.300 mapped_mb=85.1
+RESULT work=access layout=B body=48 atomic=0 n=1500000 seq_ns=1.164 random_ns=4.883 chase_ns=64.893 cseq_ns=1.060 crandom_ns=4.651 cchase_ns=65.057 count_only_ns=1.287 mapped_mb=112.6
+RESULT work=access layout=H body=72 atomic=0 n=100000 seq_ns=0.556 random_ns=0.720 chase_ns=11.100 cseq_ns=0.544 crandom_ns=0.717 cchase_ns=11.099 count_only_ns=0.787 mapped_mb=8.8
+RESULT work=access layout=D body=72 atomic=0 n=100000 seq_ns=0.494 random_ns=0.695 chase_ns=10.460 cseq_ns=0.491 crandom_ns=0.694 cchase_ns=10.483 count_only_ns=1.362 mapped_mb=8.0
+RESULT work=access layout=C body=72 atomic=0 n=100000 seq_ns=0.492 random_ns=0.694 chase_ns=10.512 cseq_ns=0.485 crandom_ns=0.677 cchase_ns=10.512 count_only_ns=1.927 mapped_mb=8.0
+RESULT work=access layout=B body=72 atomic=0 n=100000 seq_ns=0.656 random_ns=1.246 chase_ns=22.034 cseq_ns=0.644 crandom_ns=1.248 cchase_ns=22.044 count_only_ns=0.723 mapped_mb=9.9
+RESULT work=access layout=H body=72 atomic=0 n=1500000 seq_ns=1.332 random_ns=2.824 chase_ns=40.622 cseq_ns=1.178 crandom_ns=2.743 cchase_ns=39.174 count_only_ns=2.825 mapped_mb=131.3
+RESULT work=access layout=D body=72 atomic=0 n=1500000 seq_ns=1.198 random_ns=2.802 chase_ns=35.748 cseq_ns=1.010 crandom_ns=2.743 cchase_ns=35.711 count_only_ns=1.875 mapped_mb=119.8
+RESULT work=access layout=C body=72 atomic=0 n=1500000 seq_ns=1.169 random_ns=2.821 chase_ns=35.791 cseq_ns=0.984 crandom_ns=2.665 cchase_ns=35.929 count_only_ns=3.614 mapped_mb=119.8
+RESULT work=access layout=B body=72 atomic=0 n=1500000 seq_ns=1.636 random_ns=5.145 chase_ns=88.149 cseq_ns=1.408 crandom_ns=4.903 cchase_ns=86.499 count_only_ns=1.289 mapped_mb=147.2
+RESULT work=access layout=H body=64 atomic=1 n=2000 seq_ns=0.331 random_ns=0.301 chase_ns=2.551 cseq_ns=7.239 crandom_ns=7.237 cchase_ns=7.239 count_only_ns=3.619 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=1 n=2000 seq_ns=0.331 random_ns=0.311 chase_ns=2.540 cseq_ns=7.240 crandom_ns=7.244 cchase_ns=7.247 count_only_ns=3.619 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=1 n=2000 seq_ns=0.311 random_ns=0.305 chase_ns=2.540 cseq_ns=7.240 crandom_ns=7.246 cchase_ns=7.248 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=1 n=2000 seq_ns=0.406 random_ns=0.524 chase_ns=4.457 cseq_ns=7.240 crandom_ns=7.240 cchase_ns=7.247 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=1 n=100000 seq_ns=0.515 random_ns=0.690 chase_ns=10.548 cseq_ns=7.243 crandom_ns=7.243 cchase_ns=10.691 count_only_ns=3.715 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=1 n=100000 seq_ns=0.463 random_ns=0.669 chase_ns=10.407 cseq_ns=7.299 crandom_ns=7.317 cchase_ns=10.631 count_only_ns=3.667 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=1 n=100000 seq_ns=0.458 random_ns=0.666 chase_ns=10.372 cseq_ns=7.295 crandom_ns=7.411 cchase_ns=10.823 count_only_ns=3.951 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=1 n=100000 seq_ns=0.613 random_ns=1.254 chase_ns=21.367 cseq_ns=7.371 crandom_ns=7.262 cchase_ns=21.366 count_only_ns=3.629 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=1 n=1500000 seq_ns=1.290 random_ns=2.924 chase_ns=34.465 cseq_ns=7.263 crandom_ns=7.665 cchase_ns=44.875 count_only_ns=3.864 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=1 n=1500000 seq_ns=1.076 random_ns=2.668 chase_ns=32.952 cseq_ns=7.275 crandom_ns=8.063 cchase_ns=44.278 count_only_ns=3.666 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=1 n=1500000 seq_ns=1.048 random_ns=2.765 chase_ns=32.820 cseq_ns=7.275 crandom_ns=8.161 cchase_ns=44.969 count_only_ns=4.173 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=1 n=1500000 seq_ns=1.438 random_ns=5.024 chase_ns=86.018 cseq_ns=7.266 crandom_ns=9.197 cchase_ns=85.194 count_only_ns=3.649 mapped_mb=135.6
+RESULT work=alloc layout=B body=16 atomic=0 n=1500000 fill_ns=8.97 free_random_ns=21.44 churn_pair_ns=36.82 rss_full_kb=68140
+RESULT work=alloc layout=C body=16 atomic=0 n=1500000 fill_ns=4.86 free_random_ns=7.86 churn_pair_ns=14.26 rss_full_kb=44356
+RESULT work=alloc layout=D body=16 atomic=0 n=1500000 fill_ns=4.16 free_random_ns=7.62 churn_pair_ns=13.90 rss_full_kb=40008
+RESULT work=alloc layout=H body=16 atomic=0 n=1500000 fill_ns=5.47 free_random_ns=9.34 churn_pair_ns=12.42 rss_full_kb=51836
+RESULT work=alloc layout=B body=64 atomic=0 n=1500000 fill_ns=16.29 free_random_ns=27.23 churn_pair_ns=60.52 rss_full_kb=139080
+RESULT work=alloc layout=C body=64 atomic=0 n=1500000 fill_ns=12.31 free_random_ns=12.36 churn_pair_ns=29.07 rss_full_kb=116124
+RESULT work=alloc layout=D body=64 atomic=0 n=1500000 fill_ns=11.46 free_random_ns=11.93 churn_pair_ns=28.06 rss_full_kb=111092
+RESULT work=alloc layout=H body=64 atomic=0 n=1500000 fill_ns=13.11 free_random_ns=16.22 churn_pair_ns=22.35 rss_full_kb=122844
+RESULT work=alloc layout=B body=256 atomic=0 n=1500000 fill_ns=43.33 free_random_ns=40.68 churn_pair_ns=89.10 rss_full_kb=422532
+RESULT work=alloc layout=C body=256 atomic=0 n=1500000 fill_ns=40.30 free_random_ns=23.47 churn_pair_ns=58.60 rss_full_kb=407600
+RESULT work=alloc layout=D body=256 atomic=0 n=1500000 fill_ns=39.27 free_random_ns=22.25 churn_pair_ns=58.18 rss_full_kb=395312
+RESULT work=alloc layout=H body=256 atomic=0 n=1500000 fill_ns=40.29 free_random_ns=27.55 churn_pair_ns=25.52 rss_full_kb=407048
+RESULT work=access layout=B body=64 atomic=0 n=2000 seq_ns=0.411 random_ns=0.526 chase_ns=4.460 cseq_ns=0.408 crandom_ns=0.525 cchase_ns=4.459 count_only_ns=0.314 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=0 n=2000 seq_ns=0.340 random_ns=0.303 chase_ns=2.554 cseq_ns=0.332 crandom_ns=0.300 cchase_ns=2.540 count_only_ns=0.344 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=0 n=2000 seq_ns=0.313 random_ns=0.299 chase_ns=2.542 cseq_ns=0.340 crandom_ns=0.302 cchase_ns=2.542 count_only_ns=0.324 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=0 n=2000 seq_ns=0.343 random_ns=0.293 chase_ns=2.552 cseq_ns=0.350 crandom_ns=0.292 cchase_ns=2.551 count_only_ns=0.368 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=0 n=100000 seq_ns=0.634 random_ns=1.278 chase_ns=21.340 cseq_ns=0.629 crandom_ns=1.252 cchase_ns=21.338 count_only_ns=0.745 mapped_mb=9.1
+RESULT work=access layout=C body=64 atomic=0 n=100000 seq_ns=0.466 random_ns=0.686 chase_ns=10.373 cseq_ns=0.460 crandom_ns=0.659 cchase_ns=10.367 count_only_ns=1.838 mapped_mb=7.2
+RESULT work=access layout=D body=64 atomic=0 n=100000 seq_ns=0.459 random_ns=0.670 chase_ns=10.394 cseq_ns=0.460 crandom_ns=0.719 cchase_ns=10.402 count_only_ns=1.075 mapped_mb=7.2
+RESULT work=access layout=H body=64 atomic=0 n=100000 seq_ns=0.526 random_ns=0.695 chase_ns=10.589 cseq_ns=0.511 crandom_ns=0.678 cchase_ns=10.581 count_only_ns=0.793 mapped_mb=8.0
+RESULT work=access layout=B body=64 atomic=0 n=1500000 seq_ns=1.398 random_ns=5.054 chase_ns=85.225 cseq_ns=1.314 crandom_ns=4.860 cchase_ns=85.557 count_only_ns=1.214 mapped_mb=135.6
+RESULT work=access layout=C body=64 atomic=0 n=1500000 seq_ns=1.007 random_ns=2.809 chase_ns=32.755 cseq_ns=0.885 crandom_ns=2.646 cchase_ns=32.566 count_only_ns=3.492 mapped_mb=108.3
+RESULT work=access layout=D body=64 atomic=0 n=1500000 seq_ns=1.095 random_ns=2.782 chase_ns=32.307 cseq_ns=0.898 crandom_ns=2.624 cchase_ns=32.250 count_only_ns=1.587 mapped_mb=108.3
+RESULT work=access layout=H body=64 atomic=0 n=1500000 seq_ns=1.173 random_ns=2.831 chase_ns=35.497 cseq_ns=1.089 crandom_ns=2.722 cchase_ns=37.557 count_only_ns=2.829 mapped_mb=119.8
+RESULT work=access layout=B body=48 atomic=0 n=100000 seq_ns=0.505 random_ns=1.190 chase_ns=19.996 cseq_ns=0.501 crandom_ns=1.188 cchase_ns=19.985 count_only_ns=0.716 mapped_mb=7.6
+RESULT work=access layout=C body=48 atomic=0 n=100000 seq_ns=0.361 random_ns=0.665 chase_ns=9.905 cseq_ns=0.356 crandom_ns=0.650 cchase_ns=9.889 count_only_ns=1.869 mapped_mb=5.7
+RESULT work=access layout=D body=48 atomic=0 n=100000 seq_ns=0.359 random_ns=0.661 chase_ns=9.917 cseq_ns=0.370 crandom_ns=0.660 cchase_ns=9.901 count_only_ns=1.340 mapped_mb=5.7
+RESULT work=access layout=H body=48 atomic=0 n=100000 seq_ns=0.459 random_ns=0.729 chase_ns=10.375 cseq_ns=0.460 crandom_ns=0.729 cchase_ns=10.382 count_only_ns=0.810 mapped_mb=6.5
+RESULT work=access layout=B body=48 atomic=0 n=1500000 seq_ns=1.111 random_ns=4.905 chase_ns=63.776 cseq_ns=1.034 crandom_ns=4.655 cchase_ns=63.462 count_only_ns=1.249 mapped_mb=112.6
+RESULT work=access layout=C body=48 atomic=0 n=1500000 seq_ns=0.636 random_ns=2.336 chase_ns=19.774 cseq_ns=0.579 crandom_ns=2.311 cchase_ns=19.640 count_only_ns=3.349 mapped_mb=85.1
+RESULT work=access layout=D body=48 atomic=0 n=1500000 seq_ns=0.664 random_ns=2.354 chase_ns=20.220 cseq_ns=0.578 crandom_ns=2.336 cchase_ns=20.062 count_only_ns=1.821 mapped_mb=85.1
+RESULT work=access layout=H body=48 atomic=0 n=1500000 seq_ns=0.987 random_ns=2.662 chase_ns=33.735 cseq_ns=0.884 crandom_ns=2.622 cchase_ns=33.685 count_only_ns=2.790 mapped_mb=96.7
+RESULT work=access layout=B body=72 atomic=0 n=100000 seq_ns=0.647 random_ns=1.261 chase_ns=22.015 cseq_ns=0.645 crandom_ns=1.246 cchase_ns=22.028 count_only_ns=0.735 mapped_mb=9.9
+RESULT work=access layout=C body=72 atomic=0 n=100000 seq_ns=0.495 random_ns=0.693 chase_ns=10.473 cseq_ns=0.488 crandom_ns=0.689 cchase_ns=10.477 count_only_ns=1.968 mapped_mb=8.0
+RESULT work=access layout=D body=72 atomic=0 n=100000 seq_ns=0.491 random_ns=0.727 chase_ns=10.447 cseq_ns=0.493 crandom_ns=0.726 cchase_ns=10.451 count_only_ns=1.305 mapped_mb=8.0
+RESULT work=access layout=H body=72 atomic=0 n=100000 seq_ns=0.552 random_ns=0.718 chase_ns=11.104 cseq_ns=0.541 crandom_ns=0.695 cchase_ns=11.101 count_only_ns=0.774 mapped_mb=8.8
+RESULT work=access layout=B body=72 atomic=0 n=1500000 seq_ns=1.593 random_ns=5.102 chase_ns=88.195 cseq_ns=1.396 crandom_ns=4.867 cchase_ns=87.415 count_only_ns=1.242 mapped_mb=147.2
+RESULT work=access layout=C body=72 atomic=0 n=1500000 seq_ns=1.152 random_ns=2.824 chase_ns=35.775 cseq_ns=0.969 crandom_ns=2.649 cchase_ns=36.050 count_only_ns=3.606 mapped_mb=119.8
+RESULT work=access layout=D body=72 atomic=0 n=1500000 seq_ns=1.141 random_ns=2.773 chase_ns=35.254 cseq_ns=1.015 crandom_ns=2.757 cchase_ns=34.728 count_only_ns=1.939 mapped_mb=119.8
+RESULT work=access layout=H body=72 atomic=0 n=1500000 seq_ns=1.374 random_ns=2.842 chase_ns=38.613 cseq_ns=1.173 crandom_ns=2.830 cchase_ns=38.347 count_only_ns=2.958 mapped_mb=131.3
+RESULT work=access layout=B body=64 atomic=1 n=2000 seq_ns=0.412 random_ns=0.526 chase_ns=4.460 cseq_ns=7.240 crandom_ns=7.239 cchase_ns=7.252 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=1 n=2000 seq_ns=0.338 random_ns=0.307 chase_ns=2.541 cseq_ns=7.241 crandom_ns=7.241 cchase_ns=7.231 count_only_ns=3.614 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=1 n=2000 seq_ns=0.344 random_ns=0.310 chase_ns=2.541 cseq_ns=7.238 crandom_ns=7.242 cchase_ns=7.245 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=1 n=2000 seq_ns=0.332 random_ns=0.307 chase_ns=2.546 cseq_ns=7.245 crandom_ns=7.237 cchase_ns=7.241 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=1 n=100000 seq_ns=0.612 random_ns=1.247 chase_ns=21.350 cseq_ns=7.363 crandom_ns=7.265 cchase_ns=21.355 count_only_ns=3.630 mapped_mb=9.1
+RESULT work=access layout=C body=64 atomic=1 n=100000 seq_ns=0.459 random_ns=0.682 chase_ns=10.397 cseq_ns=7.276 crandom_ns=7.377 cchase_ns=10.654 count_only_ns=3.943 mapped_mb=7.2
+RESULT work=access layout=D body=64 atomic=1 n=100000 seq_ns=0.462 random_ns=0.669 chase_ns=10.390 cseq_ns=7.295 crandom_ns=7.327 cchase_ns=10.592 count_only_ns=3.675 mapped_mb=7.2
+RESULT work=access layout=H body=64 atomic=1 n=100000 seq_ns=0.516 random_ns=0.696 chase_ns=10.541 cseq_ns=7.300 crandom_ns=7.260 cchase_ns=10.701 count_only_ns=3.707 mapped_mb=8.0
+RESULT work=access layout=B body=64 atomic=1 n=1500000 seq_ns=1.422 random_ns=5.127 chase_ns=86.118 cseq_ns=7.264 crandom_ns=9.201 cchase_ns=85.084 count_only_ns=3.655 mapped_mb=135.6
+RESULT work=access layout=C body=64 atomic=1 n=1500000 seq_ns=1.030 random_ns=2.832 chase_ns=33.202 cseq_ns=7.272 crandom_ns=8.433 cchase_ns=49.405 count_only_ns=4.191 mapped_mb=108.3
+RESULT work=access layout=D body=64 atomic=1 n=1500000 seq_ns=1.009 random_ns=2.908 chase_ns=34.554 cseq_ns=7.278 crandom_ns=8.070 cchase_ns=44.599 count_only_ns=3.669 mapped_mb=108.3
+RESULT work=access layout=H body=64 atomic=1 n=1500000 seq_ns=1.210 random_ns=2.850 chase_ns=35.143 cseq_ns=7.262 crandom_ns=7.646 cchase_ns=44.441 count_only_ns=3.875 mapped_mb=119.8
+RESULT work=alloc layout=H body=16 atomic=0 n=1500000 fill_ns=5.97 free_random_ns=9.82 churn_pair_ns=12.35 rss_full_kb=51836
+RESULT work=alloc layout=D body=16 atomic=0 n=1500000 fill_ns=4.21 free_random_ns=7.81 churn_pair_ns=13.78 rss_full_kb=40072
+RESULT work=alloc layout=C body=16 atomic=0 n=1500000 fill_ns=4.60 free_random_ns=8.08 churn_pair_ns=15.35 rss_full_kb=44416
+RESULT work=alloc layout=B body=16 atomic=0 n=1500000 fill_ns=8.86 free_random_ns=20.33 churn_pair_ns=34.97 rss_full_kb=68200
+RESULT work=alloc layout=H body=64 atomic=0 n=1500000 fill_ns=12.70 free_random_ns=16.62 churn_pair_ns=22.04 rss_full_kb=122880
+RESULT work=alloc layout=D body=64 atomic=0 n=1500000 fill_ns=11.31 free_random_ns=11.63 churn_pair_ns=27.85 rss_full_kb=111092
+RESULT work=alloc layout=C body=64 atomic=0 n=1500000 fill_ns=11.97 free_random_ns=12.28 churn_pair_ns=28.79 rss_full_kb=115996
+RESULT work=alloc layout=B body=64 atomic=0 n=1500000 fill_ns=15.77 free_random_ns=27.25 churn_pair_ns=59.62 rss_full_kb=139060
+RESULT work=alloc layout=H body=256 atomic=0 n=1500000 fill_ns=40.13 free_random_ns=27.15 churn_pair_ns=25.46 rss_full_kb=407028
+RESULT work=alloc layout=D body=256 atomic=0 n=1500000 fill_ns=37.72 free_random_ns=22.23 churn_pair_ns=60.26 rss_full_kb=395332
+RESULT work=alloc layout=C body=256 atomic=0 n=1500000 fill_ns=39.95 free_random_ns=24.39 churn_pair_ns=58.06 rss_full_kb=407600
+RESULT work=alloc layout=B body=256 atomic=0 n=1500000 fill_ns=43.15 free_random_ns=41.37 churn_pair_ns=91.49 rss_full_kb=422532
+RESULT work=access layout=H body=64 atomic=0 n=2000 seq_ns=0.322 random_ns=0.299 chase_ns=2.548 cseq_ns=0.353 crandom_ns=0.293 cchase_ns=2.548 count_only_ns=0.371 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=0 n=2000 seq_ns=0.325 random_ns=0.307 chase_ns=2.580 cseq_ns=0.342 crandom_ns=0.302 cchase_ns=2.549 count_only_ns=0.327 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=0 n=2000 seq_ns=0.333 random_ns=0.299 chase_ns=2.543 cseq_ns=0.323 crandom_ns=0.301 cchase_ns=2.542 count_only_ns=0.344 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=0 n=2000 seq_ns=0.409 random_ns=0.525 chase_ns=4.459 cseq_ns=0.408 crandom_ns=0.524 cchase_ns=4.459 count_only_ns=0.293 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=0 n=100000 seq_ns=0.534 random_ns=0.752 chase_ns=10.529 cseq_ns=0.520 crandom_ns=0.732 cchase_ns=10.526 count_only_ns=0.794 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=0 n=100000 seq_ns=0.460 random_ns=0.670 chase_ns=10.392 cseq_ns=0.454 crandom_ns=0.657 cchase_ns=10.398 count_only_ns=1.036 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=0 n=100000 seq_ns=0.463 random_ns=0.708 chase_ns=10.374 cseq_ns=0.459 crandom_ns=0.710 cchase_ns=10.370 count_only_ns=1.861 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=0 n=100000 seq_ns=0.612 random_ns=1.252 chase_ns=21.336 cseq_ns=0.610 crandom_ns=1.252 cchase_ns=21.342 count_only_ns=0.714 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=0 n=1500000 seq_ns=1.189 random_ns=2.841 chase_ns=34.953 cseq_ns=1.053 crandom_ns=2.671 cchase_ns=34.637 count_only_ns=2.827 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=0 n=1500000 seq_ns=1.117 random_ns=2.795 chase_ns=32.886 cseq_ns=0.889 crandom_ns=2.623 cchase_ns=32.827 count_only_ns=1.572 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=0 n=1500000 seq_ns=1.052 random_ns=2.801 chase_ns=33.400 cseq_ns=0.892 crandom_ns=2.625 cchase_ns=33.522 count_only_ns=3.461 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=0 n=1500000 seq_ns=1.455 random_ns=5.127 chase_ns=84.846 cseq_ns=1.325 crandom_ns=4.885 cchase_ns=84.825 count_only_ns=1.264 mapped_mb=135.6
+RESULT work=access layout=H body=48 atomic=0 n=100000 seq_ns=0.460 random_ns=0.673 chase_ns=10.423 cseq_ns=0.455 crandom_ns=0.671 cchase_ns=10.412 count_only_ns=0.777 mapped_mb=6.5
+RESULT work=access layout=D body=48 atomic=0 n=100000 seq_ns=0.360 random_ns=0.725 chase_ns=9.906 cseq_ns=0.358 crandom_ns=0.721 cchase_ns=9.876 count_only_ns=1.343 mapped_mb=5.7
+RESULT work=access layout=C body=48 atomic=0 n=100000 seq_ns=0.358 random_ns=0.722 chase_ns=9.881 cseq_ns=0.367 crandom_ns=0.716 cchase_ns=9.887 count_only_ns=1.861 mapped_mb=5.7
+RESULT work=access layout=B body=48 atomic=0 n=100000 seq_ns=0.504 random_ns=1.229 chase_ns=19.990 cseq_ns=0.518 crandom_ns=1.231 cchase_ns=19.986 count_only_ns=0.744 mapped_mb=7.6
+RESULT work=access layout=H body=48 atomic=0 n=1500000 seq_ns=1.019 random_ns=2.770 chase_ns=33.034 cseq_ns=0.893 crandom_ns=2.613 cchase_ns=32.713 count_only_ns=2.746 mapped_mb=96.7
+RESULT work=access layout=D body=48 atomic=0 n=1500000 seq_ns=0.681 random_ns=2.368 chase_ns=19.935 cseq_ns=0.590 crandom_ns=2.351 cchase_ns=19.710 count_only_ns=1.878 mapped_mb=85.1
+RESULT work=access layout=C body=48 atomic=0 n=1500000 seq_ns=0.642 random_ns=2.414 chase_ns=19.606 cseq_ns=0.589 crandom_ns=2.373 cchase_ns=19.869 count_only_ns=3.360 mapped_mb=85.1
+RESULT work=access layout=B body=48 atomic=0 n=1500000 seq_ns=1.151 random_ns=4.892 chase_ns=63.664 cseq_ns=1.034 crandom_ns=4.667 cchase_ns=63.275 count_only_ns=1.234 mapped_mb=112.6
+RESULT work=access layout=H body=72 atomic=0 n=100000 seq_ns=0.554 random_ns=0.718 chase_ns=11.086 cseq_ns=0.543 crandom_ns=0.717 cchase_ns=11.094 count_only_ns=0.816 mapped_mb=8.8
+RESULT work=access layout=D body=72 atomic=0 n=100000 seq_ns=0.493 random_ns=0.735 chase_ns=10.460 cseq_ns=0.492 crandom_ns=0.741 cchase_ns=10.449 count_only_ns=1.364 mapped_mb=8.0
+RESULT work=access layout=C body=72 atomic=0 n=100000 seq_ns=0.492 random_ns=0.739 chase_ns=10.482 cseq_ns=0.499 crandom_ns=0.733 cchase_ns=10.503 count_only_ns=1.988 mapped_mb=8.0
+RESULT work=access layout=B body=72 atomic=0 n=100000 seq_ns=0.649 random_ns=1.272 chase_ns=22.008 cseq_ns=0.648 crandom_ns=1.272 cchase_ns=21.991 count_only_ns=0.765 mapped_mb=9.9
+RESULT work=access layout=H body=72 atomic=0 n=1500000 seq_ns=1.288 random_ns=2.874 chase_ns=39.014 cseq_ns=1.155 crandom_ns=2.869 cchase_ns=38.834 count_only_ns=2.821 mapped_mb=131.3
+RESULT work=access layout=D body=72 atomic=0 n=1500000 seq_ns=1.146 random_ns=2.761 chase_ns=35.641 cseq_ns=0.979 crandom_ns=2.661 cchase_ns=35.726 count_only_ns=1.886 mapped_mb=119.8
+RESULT work=access layout=C body=72 atomic=0 n=1500000 seq_ns=1.166 random_ns=2.825 chase_ns=35.243 cseq_ns=1.014 crandom_ns=2.843 cchase_ns=35.170 count_only_ns=3.633 mapped_mb=119.8
+RESULT work=access layout=B body=72 atomic=0 n=1500000 seq_ns=1.516 random_ns=5.153 chase_ns=86.446 cseq_ns=1.393 crandom_ns=4.920 cchase_ns=86.447 count_only_ns=1.296 mapped_mb=147.2
+RESULT work=access layout=H body=64 atomic=1 n=2000 seq_ns=0.310 random_ns=0.296 chase_ns=2.554 cseq_ns=7.240 crandom_ns=7.239 cchase_ns=7.246 count_only_ns=3.621 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=1 n=2000 seq_ns=0.316 random_ns=0.305 chase_ns=2.543 cseq_ns=7.241 crandom_ns=7.243 cchase_ns=7.257 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=1 n=2000 seq_ns=0.312 random_ns=0.307 chase_ns=2.542 cseq_ns=7.240 crandom_ns=7.243 cchase_ns=7.244 count_only_ns=3.619 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=1 n=2000 seq_ns=0.405 random_ns=0.524 chase_ns=4.460 cseq_ns=7.241 crandom_ns=7.240 cchase_ns=7.240 count_only_ns=3.621 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=1 n=100000 seq_ns=0.517 random_ns=0.688 chase_ns=10.533 cseq_ns=7.314 crandom_ns=7.338 cchase_ns=10.698 count_only_ns=3.723 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=1 n=100000 seq_ns=0.464 random_ns=0.660 chase_ns=10.408 cseq_ns=7.293 crandom_ns=7.264 cchase_ns=10.633 count_only_ns=3.630 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=1 n=100000 seq_ns=0.460 random_ns=0.670 chase_ns=10.423 cseq_ns=7.304 crandom_ns=7.340 cchase_ns=10.714 count_only_ns=3.937 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=1 n=100000 seq_ns=0.614 random_ns=1.247 chase_ns=21.365 cseq_ns=7.378 crandom_ns=7.348 cchase_ns=21.370 count_only_ns=3.721 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=1 n=1500000 seq_ns=1.134 random_ns=2.630 chase_ns=33.950 cseq_ns=7.262 crandom_ns=7.658 cchase_ns=45.247 count_only_ns=3.859 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=1 n=1500000 seq_ns=1.011 random_ns=2.701 chase_ns=33.511 cseq_ns=7.277 crandom_ns=7.969 cchase_ns=44.074 count_only_ns=3.672 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=1 n=1500000 seq_ns=1.016 random_ns=2.788 chase_ns=35.077 cseq_ns=7.271 crandom_ns=8.051 cchase_ns=44.508 count_only_ns=4.190 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=1 n=1500000 seq_ns=1.421 random_ns=5.072 chase_ns=83.765 cseq_ns=7.266 crandom_ns=9.300 cchase_ns=85.652 count_only_ns=3.690 mapped_mb=135.6
+RESULT work=alloc layout=B body=16 atomic=0 n=1500000 fill_ns=9.02 free_random_ns=20.89 churn_pair_ns=36.12 rss_full_kb=68076
+RESULT work=alloc layout=C body=16 atomic=0 n=1500000 fill_ns=4.85 free_random_ns=8.22 churn_pair_ns=15.00 rss_full_kb=44416
+RESULT work=alloc layout=D body=16 atomic=0 n=1500000 fill_ns=4.24 free_random_ns=7.49 churn_pair_ns=13.92 rss_full_kb=40132
+RESULT work=alloc layout=H body=16 atomic=0 n=1500000 fill_ns=5.21 free_random_ns=9.03 churn_pair_ns=12.14 rss_full_kb=51836
+RESULT work=alloc layout=B body=64 atomic=0 n=1500000 fill_ns=15.55 free_random_ns=27.40 churn_pair_ns=58.29 rss_full_kb=139084
+RESULT work=alloc layout=C body=64 atomic=0 n=1500000 fill_ns=11.91 free_random_ns=12.22 churn_pair_ns=28.85 rss_full_kb=116120
+RESULT work=alloc layout=D body=64 atomic=0 n=1500000 fill_ns=11.36 free_random_ns=12.00 churn_pair_ns=27.70 rss_full_kb=111008
+RESULT work=alloc layout=H body=64 atomic=0 n=1500000 fill_ns=12.58 free_random_ns=16.09 churn_pair_ns=22.38 rss_full_kb=122756
+RESULT work=alloc layout=B body=256 atomic=0 n=1500000 fill_ns=42.99 free_random_ns=40.41 churn_pair_ns=91.08 rss_full_kb=422596
+RESULT work=alloc layout=C body=256 atomic=0 n=1500000 fill_ns=39.89 free_random_ns=24.29 churn_pair_ns=57.93 rss_full_kb=407664
+RESULT work=alloc layout=D body=256 atomic=0 n=1500000 fill_ns=38.85 free_random_ns=22.70 churn_pair_ns=58.95 rss_full_kb=395312
+RESULT work=alloc layout=H body=256 atomic=0 n=1500000 fill_ns=40.19 free_random_ns=28.31 churn_pair_ns=25.22 rss_full_kb=406964
+RESULT work=access layout=B body=64 atomic=0 n=2000 seq_ns=0.413 random_ns=0.526 chase_ns=4.462 cseq_ns=0.414 crandom_ns=0.525 cchase_ns=4.458 count_only_ns=0.293 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=0 n=2000 seq_ns=0.351 random_ns=0.303 chase_ns=2.555 cseq_ns=0.318 crandom_ns=0.300 cchase_ns=2.541 count_only_ns=0.354 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=0 n=2000 seq_ns=0.297 random_ns=0.300 chase_ns=2.542 cseq_ns=0.336 crandom_ns=0.300 cchase_ns=2.544 count_only_ns=0.326 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=0 n=2000 seq_ns=0.319 random_ns=0.293 chase_ns=2.553 cseq_ns=0.329 crandom_ns=0.292 cchase_ns=2.550 count_only_ns=0.368 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=0 n=100000 seq_ns=0.635 random_ns=1.270 chase_ns=21.401 cseq_ns=0.613 crandom_ns=1.246 cchase_ns=21.380 count_only_ns=0.724 mapped_mb=9.1
+RESULT work=access layout=C body=64 atomic=0 n=100000 seq_ns=0.465 random_ns=0.714 chase_ns=10.378 cseq_ns=0.458 crandom_ns=0.706 cchase_ns=10.391 count_only_ns=1.856 mapped_mb=7.2
+RESULT work=access layout=D body=64 atomic=0 n=100000 seq_ns=0.459 random_ns=0.673 chase_ns=10.442 cseq_ns=0.456 crandom_ns=0.670 cchase_ns=10.460 count_only_ns=1.086 mapped_mb=7.2
+RESULT work=access layout=H body=64 atomic=0 n=100000 seq_ns=0.523 random_ns=0.693 chase_ns=10.564 cseq_ns=0.509 crandom_ns=0.676 cchase_ns=10.591 count_only_ns=0.790 mapped_mb=8.0
+RESULT work=access layout=B body=64 atomic=0 n=1500000 seq_ns=1.382 random_ns=5.148 chase_ns=85.250 cseq_ns=1.308 crandom_ns=4.920 cchase_ns=85.335 count_only_ns=1.296 mapped_mb=135.6
+RESULT work=access layout=C body=64 atomic=0 n=1500000 seq_ns=1.046 random_ns=2.809 chase_ns=32.714 cseq_ns=0.916 crandom_ns=2.781 cchase_ns=32.983 count_only_ns=3.498 mapped_mb=108.3
+RESULT work=access layout=D body=64 atomic=0 n=1500000 seq_ns=1.059 random_ns=2.834 chase_ns=32.661 cseq_ns=0.914 crandom_ns=2.818 cchase_ns=33.088 count_only_ns=1.667 mapped_mb=108.3
+RESULT work=access layout=H body=64 atomic=0 n=1500000 seq_ns=1.198 random_ns=2.860 chase_ns=34.048 cseq_ns=1.088 crandom_ns=2.888 cchase_ns=34.706 count_only_ns=2.860 mapped_mb=119.8
+RESULT work=access layout=B body=48 atomic=0 n=100000 seq_ns=0.503 random_ns=1.219 chase_ns=20.035 cseq_ns=0.518 crandom_ns=1.234 cchase_ns=20.021 count_only_ns=0.718 mapped_mb=7.6
+RESULT work=access layout=C body=48 atomic=0 n=100000 seq_ns=0.362 random_ns=0.670 chase_ns=9.944 cseq_ns=0.358 crandom_ns=0.666 cchase_ns=9.933 count_only_ns=1.902 mapped_mb=5.7
+RESULT work=access layout=D body=48 atomic=0 n=100000 seq_ns=0.359 random_ns=0.664 chase_ns=9.951 cseq_ns=0.359 crandom_ns=0.664 cchase_ns=9.950 count_only_ns=1.271 mapped_mb=5.7
+RESULT work=access layout=H body=48 atomic=0 n=100000 seq_ns=0.461 random_ns=0.674 chase_ns=10.424 cseq_ns=0.457 crandom_ns=0.662 cchase_ns=10.439 count_only_ns=0.794 mapped_mb=6.5
+RESULT work=access layout=B body=48 atomic=0 n=1500000 seq_ns=1.121 random_ns=4.937 chase_ns=64.654 cseq_ns=1.074 crandom_ns=4.773 cchase_ns=63.855 count_only_ns=1.236 mapped_mb=112.6
+RESULT work=access layout=C body=48 atomic=0 n=1500000 seq_ns=0.649 random_ns=2.409 chase_ns=19.842 cseq_ns=0.580 crandom_ns=2.373 cchase_ns=19.792 count_only_ns=3.315 mapped_mb=85.1
+RESULT work=access layout=D body=48 atomic=0 n=1500000 seq_ns=0.665 random_ns=2.358 chase_ns=19.729 cseq_ns=0.590 crandom_ns=2.275 cchase_ns=19.836 count_only_ns=1.826 mapped_mb=85.1
+RESULT work=access layout=H body=48 atomic=0 n=1500000 seq_ns=1.058 random_ns=2.791 chase_ns=33.258 cseq_ns=0.888 crandom_ns=2.637 cchase_ns=32.492 count_only_ns=2.772 mapped_mb=96.7
+RESULT work=access layout=B body=72 atomic=0 n=100000 seq_ns=0.650 random_ns=1.275 chase_ns=22.028 cseq_ns=0.660 crandom_ns=1.273 cchase_ns=22.031 count_only_ns=0.718 mapped_mb=9.9
+RESULT work=access layout=C body=72 atomic=0 n=100000 seq_ns=0.495 random_ns=0.744 chase_ns=10.547 cseq_ns=0.487 crandom_ns=0.738 cchase_ns=10.470 count_only_ns=1.933 mapped_mb=8.0
+RESULT work=access layout=D body=72 atomic=0 n=100000 seq_ns=0.492 random_ns=0.693 chase_ns=10.497 cseq_ns=0.488 crandom_ns=0.691 cchase_ns=10.474 count_only_ns=1.313 mapped_mb=8.0
+RESULT work=access layout=H body=72 atomic=0 n=100000 seq_ns=0.553 random_ns=0.718 chase_ns=11.120 cseq_ns=0.544 crandom_ns=0.716 cchase_ns=11.106 count_only_ns=0.814 mapped_mb=8.8
+RESULT work=access layout=B body=72 atomic=0 n=1500000 seq_ns=1.500 random_ns=4.997 chase_ns=85.855 cseq_ns=1.431 crandom_ns=4.952 cchase_ns=87.337 count_only_ns=1.327 mapped_mb=147.2
+RESULT work=access layout=C body=72 atomic=0 n=1500000 seq_ns=1.160 random_ns=2.824 chase_ns=36.865 cseq_ns=0.986 crandom_ns=2.690 cchase_ns=35.840 count_only_ns=3.601 mapped_mb=119.8
+RESULT work=access layout=D body=72 atomic=0 n=1500000 seq_ns=1.110 random_ns=2.699 chase_ns=35.928 cseq_ns=0.982 crandom_ns=2.693 cchase_ns=35.518 count_only_ns=1.893 mapped_mb=119.8
+RESULT work=access layout=H body=72 atomic=0 n=1500000 seq_ns=1.342 random_ns=2.867 chase_ns=39.400 cseq_ns=1.145 crandom_ns=2.696 cchase_ns=39.275 count_only_ns=2.873 mapped_mb=131.3
+RESULT work=access layout=B body=64 atomic=1 n=2000 seq_ns=0.407 random_ns=0.528 chase_ns=4.461 cseq_ns=7.242 crandom_ns=7.242 cchase_ns=7.243 count_only_ns=3.621 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=1 n=2000 seq_ns=0.328 random_ns=0.305 chase_ns=2.543 cseq_ns=7.240 crandom_ns=7.251 cchase_ns=7.328 count_only_ns=3.626 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=1 n=2000 seq_ns=0.330 random_ns=0.309 chase_ns=2.546 cseq_ns=7.249 crandom_ns=7.263 cchase_ns=7.251 count_only_ns=3.618 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=1 n=2000 seq_ns=0.345 random_ns=0.313 chase_ns=2.545 cseq_ns=7.241 crandom_ns=7.240 cchase_ns=7.253 count_only_ns=3.631 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=1 n=100000 seq_ns=0.614 random_ns=1.269 chase_ns=21.438 cseq_ns=7.414 crandom_ns=7.277 cchase_ns=21.396 count_only_ns=3.630 mapped_mb=9.1
+RESULT work=access layout=C body=64 atomic=1 n=100000 seq_ns=0.460 random_ns=0.700 chase_ns=10.383 cseq_ns=7.289 crandom_ns=7.332 cchase_ns=10.723 count_only_ns=3.868 mapped_mb=7.2
+RESULT work=access layout=D body=64 atomic=1 n=100000 seq_ns=0.462 random_ns=0.669 chase_ns=10.430 cseq_ns=7.294 crandom_ns=7.283 cchase_ns=10.617 count_only_ns=3.674 mapped_mb=7.2
+RESULT work=access layout=H body=64 atomic=1 n=100000 seq_ns=0.517 random_ns=0.691 chase_ns=10.565 cseq_ns=7.305 crandom_ns=7.329 cchase_ns=10.729 count_only_ns=3.716 mapped_mb=8.0
+RESULT work=access layout=B body=64 atomic=1 n=1500000 seq_ns=1.432 random_ns=4.919 chase_ns=87.310 cseq_ns=7.268 crandom_ns=9.245 cchase_ns=86.151 count_only_ns=3.662 mapped_mb=135.6
+RESULT work=access layout=C body=64 atomic=1 n=1500000 seq_ns=1.030 random_ns=2.804 chase_ns=32.499 cseq_ns=7.269 crandom_ns=8.123 cchase_ns=43.990 count_only_ns=4.181 mapped_mb=108.3
+RESULT work=access layout=D body=64 atomic=1 n=1500000 seq_ns=1.048 random_ns=2.822 chase_ns=32.469 cseq_ns=7.266 crandom_ns=8.000 cchase_ns=44.390 count_only_ns=3.671 mapped_mb=108.3
+RESULT work=access layout=H body=64 atomic=1 n=1500000 seq_ns=1.196 random_ns=2.865 chase_ns=34.357 cseq_ns=7.267 crandom_ns=7.644 cchase_ns=43.523 count_only_ns=3.871 mapped_mb=119.8
+RESULT work=alloc layout=H body=16 atomic=0 n=1500000 fill_ns=6.02 free_random_ns=10.46 churn_pair_ns=12.08 rss_full_kb=51836
+RESULT work=alloc layout=D body=16 atomic=0 n=1500000 fill_ns=4.24 free_random_ns=7.90 churn_pair_ns=13.95 rss_full_kb=40096
+RESULT work=alloc layout=C body=16 atomic=0 n=1500000 fill_ns=4.69 free_random_ns=8.09 churn_pair_ns=14.74 rss_full_kb=44292
+RESULT work=alloc layout=B body=16 atomic=0 n=1500000 fill_ns=8.75 free_random_ns=20.35 churn_pair_ns=34.83 rss_full_kb=68200
+RESULT work=alloc layout=H body=64 atomic=0 n=1500000 fill_ns=13.24 free_random_ns=16.48 churn_pair_ns=22.30 rss_full_kb=122880
+RESULT work=alloc layout=D body=64 atomic=0 n=1500000 fill_ns=11.37 free_random_ns=11.65 churn_pair_ns=28.28 rss_full_kb=111024
+RESULT work=alloc layout=C body=64 atomic=0 n=1500000 fill_ns=12.06 free_random_ns=12.37 churn_pair_ns=28.89 rss_full_kb=116060
+RESULT work=alloc layout=B body=64 atomic=0 n=1500000 fill_ns=15.93 free_random_ns=28.28 churn_pair_ns=59.99 rss_full_kb=139060
+RESULT work=alloc layout=H body=256 atomic=0 n=1500000 fill_ns=41.37 free_random_ns=27.64 churn_pair_ns=25.57 rss_full_kb=407052
+RESULT work=alloc layout=D body=256 atomic=0 n=1500000 fill_ns=39.22 free_random_ns=22.13 churn_pair_ns=57.66 rss_full_kb=395376
+RESULT work=alloc layout=C body=256 atomic=0 n=1500000 fill_ns=41.14 free_random_ns=24.57 churn_pair_ns=61.43 rss_full_kb=407664
+RESULT work=alloc layout=B body=256 atomic=0 n=1500000 fill_ns=44.42 free_random_ns=42.26 churn_pair_ns=91.72 rss_full_kb=422532
+RESULT work=access layout=H body=64 atomic=0 n=2000 seq_ns=0.359 random_ns=0.311 chase_ns=2.551 cseq_ns=0.355 crandom_ns=0.292 cchase_ns=2.548 count_only_ns=0.371 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=0 n=2000 seq_ns=0.330 random_ns=0.307 chase_ns=2.580 cseq_ns=0.322 crandom_ns=0.303 cchase_ns=2.550 count_only_ns=0.383 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=0 n=2000 seq_ns=0.337 random_ns=0.299 chase_ns=2.541 cseq_ns=0.326 crandom_ns=0.300 cchase_ns=2.542 count_only_ns=0.344 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=0 n=2000 seq_ns=0.414 random_ns=0.527 chase_ns=4.459 cseq_ns=0.414 crandom_ns=0.525 cchase_ns=4.456 count_only_ns=0.296 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=0 n=100000 seq_ns=0.537 random_ns=0.688 chase_ns=10.575 cseq_ns=0.510 crandom_ns=0.677 cchase_ns=10.551 count_only_ns=0.792 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=0 n=100000 seq_ns=0.463 random_ns=0.665 chase_ns=10.400 cseq_ns=0.454 crandom_ns=0.658 cchase_ns=10.401 count_only_ns=1.040 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=0 n=100000 seq_ns=0.464 random_ns=0.669 chase_ns=10.428 cseq_ns=0.453 crandom_ns=0.666 cchase_ns=10.412 count_only_ns=1.822 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=0 n=100000 seq_ns=0.616 random_ns=1.257 chase_ns=21.382 cseq_ns=0.625 crandom_ns=1.256 cchase_ns=21.377 count_only_ns=0.747 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=0 n=1500000 seq_ns=1.196 random_ns=2.868 chase_ns=34.521 cseq_ns=1.064 crandom_ns=2.700 cchase_ns=35.358 count_only_ns=2.862 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=0 n=1500000 seq_ns=1.092 random_ns=2.810 chase_ns=33.410 cseq_ns=0.908 crandom_ns=2.632 cchase_ns=33.644 count_only_ns=1.582 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=0 n=1500000 seq_ns=1.074 random_ns=2.797 chase_ns=33.680 cseq_ns=0.896 crandom_ns=2.650 cchase_ns=32.753 count_only_ns=3.483 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=0 n=1500000 seq_ns=1.450 random_ns=4.886 chase_ns=85.220 cseq_ns=1.336 crandom_ns=4.886 cchase_ns=85.241 count_only_ns=1.212 mapped_mb=135.6
+RESULT work=access layout=H body=48 atomic=0 n=100000 seq_ns=0.459 random_ns=0.667 chase_ns=10.412 cseq_ns=0.457 crandom_ns=0.665 cchase_ns=10.397 count_only_ns=0.771 mapped_mb=6.5
+RESULT work=access layout=D body=48 atomic=0 n=100000 seq_ns=0.361 random_ns=0.663 chase_ns=9.888 cseq_ns=0.367 crandom_ns=0.662 cchase_ns=9.887 count_only_ns=1.314 mapped_mb=5.7
+RESULT work=access layout=C body=48 atomic=0 n=100000 seq_ns=0.358 random_ns=0.713 chase_ns=9.891 cseq_ns=0.372 crandom_ns=0.717 cchase_ns=9.885 count_only_ns=1.912 mapped_mb=5.7
+RESULT work=access layout=B body=48 atomic=0 n=100000 seq_ns=0.504 random_ns=1.191 chase_ns=20.000 cseq_ns=0.501 crandom_ns=1.205 cchase_ns=19.987 count_only_ns=0.719 mapped_mb=7.6
+RESULT work=access layout=H body=48 atomic=0 n=1500000 seq_ns=0.994 random_ns=2.781 chase_ns=32.295 cseq_ns=0.923 crandom_ns=2.776 cchase_ns=41.449 count_only_ns=2.790 mapped_mb=96.7
+RESULT work=access layout=D body=48 atomic=0 n=1500000 seq_ns=0.642 random_ns=2.372 chase_ns=19.934 cseq_ns=0.582 crandom_ns=2.230 cchase_ns=20.346 count_only_ns=1.822 mapped_mb=85.1
+RESULT work=access layout=C body=48 atomic=0 n=1500000 seq_ns=0.643 random_ns=2.339 chase_ns=19.894 cseq_ns=0.578 crandom_ns=2.257 cchase_ns=20.275 count_only_ns=3.306 mapped_mb=85.1
+RESULT work=access layout=B body=48 atomic=0 n=1500000 seq_ns=1.122 random_ns=4.641 chase_ns=63.845 cseq_ns=1.059 crandom_ns=4.620 cchase_ns=63.309 count_only_ns=1.203 mapped_mb=112.6
+RESULT work=access layout=H body=72 atomic=0 n=100000 seq_ns=0.554 random_ns=0.718 chase_ns=11.103 cseq_ns=0.543 crandom_ns=0.716 cchase_ns=11.083 count_only_ns=0.784 mapped_mb=8.8
+RESULT work=access layout=D body=72 atomic=0 n=100000 seq_ns=0.493 random_ns=0.742 chase_ns=10.515 cseq_ns=0.493 crandom_ns=0.733 cchase_ns=10.508 count_only_ns=1.302 mapped_mb=8.0
+RESULT work=access layout=C body=72 atomic=0 n=100000 seq_ns=0.493 random_ns=0.692 chase_ns=10.501 cseq_ns=0.488 crandom_ns=0.691 cchase_ns=10.502 count_only_ns=1.968 mapped_mb=8.0
+RESULT work=access layout=B body=72 atomic=0 n=100000 seq_ns=0.650 random_ns=1.269 chase_ns=22.011 cseq_ns=0.648 crandom_ns=1.266 cchase_ns=22.016 count_only_ns=0.714 mapped_mb=9.9
+RESULT work=access layout=H body=72 atomic=0 n=1500000 seq_ns=1.352 random_ns=2.842 chase_ns=39.026 cseq_ns=1.140 crandom_ns=2.635 cchase_ns=38.723 count_only_ns=2.840 mapped_mb=131.3
+RESULT work=access layout=D body=72 atomic=0 n=1500000 seq_ns=1.104 random_ns=2.692 chase_ns=36.511 cseq_ns=0.982 crandom_ns=2.682 cchase_ns=36.727 count_only_ns=1.904 mapped_mb=119.8
+RESULT work=access layout=C body=72 atomic=0 n=1500000 seq_ns=1.186 random_ns=2.809 chase_ns=35.862 cseq_ns=0.996 crandom_ns=2.643 cchase_ns=36.461 count_only_ns=3.600 mapped_mb=119.8
+RESULT work=access layout=B body=72 atomic=0 n=1500000 seq_ns=1.589 random_ns=5.089 chase_ns=87.583 cseq_ns=1.412 crandom_ns=4.929 cchase_ns=88.696 count_only_ns=1.213 mapped_mb=147.2
+RESULT work=access layout=H body=64 atomic=1 n=2000 seq_ns=0.333 random_ns=0.303 chase_ns=2.553 cseq_ns=7.239 crandom_ns=7.238 cchase_ns=7.233 count_only_ns=3.621 mapped_mb=0.2
+RESULT work=access layout=D body=64 atomic=1 n=2000 seq_ns=0.340 random_ns=0.309 chase_ns=2.546 cseq_ns=7.237 crandom_ns=7.245 cchase_ns=7.246 count_only_ns=3.620 mapped_mb=0.2
+RESULT work=access layout=C body=64 atomic=1 n=2000 seq_ns=0.323 random_ns=0.304 chase_ns=2.542 cseq_ns=7.242 crandom_ns=7.243 cchase_ns=7.244 count_only_ns=3.622 mapped_mb=0.2
+RESULT work=access layout=B body=64 atomic=1 n=2000 seq_ns=0.415 random_ns=0.525 chase_ns=4.458 cseq_ns=7.240 crandom_ns=7.244 cchase_ns=7.241 count_only_ns=3.621 mapped_mb=0.2
+RESULT work=access layout=H body=64 atomic=1 n=100000 seq_ns=0.516 random_ns=0.690 chase_ns=10.543 cseq_ns=7.292 crandom_ns=7.337 cchase_ns=10.738 count_only_ns=3.726 mapped_mb=8.0
+RESULT work=access layout=D body=64 atomic=1 n=100000 seq_ns=0.464 random_ns=0.685 chase_ns=10.411 cseq_ns=7.304 crandom_ns=7.327 cchase_ns=10.653 count_only_ns=3.682 mapped_mb=7.2
+RESULT work=access layout=C body=64 atomic=1 n=100000 seq_ns=0.460 random_ns=0.667 chase_ns=10.426 cseq_ns=7.287 crandom_ns=7.343 cchase_ns=10.934 count_only_ns=3.929 mapped_mb=7.2
+RESULT work=access layout=B body=64 atomic=1 n=100000 seq_ns=0.613 random_ns=1.251 chase_ns=21.415 cseq_ns=7.384 crandom_ns=7.352 cchase_ns=21.411 count_only_ns=3.731 mapped_mb=9.1
+RESULT work=access layout=H body=64 atomic=1 n=1500000 seq_ns=1.178 random_ns=2.861 chase_ns=35.118 cseq_ns=7.269 crandom_ns=7.644 cchase_ns=44.795 count_only_ns=3.890 mapped_mb=119.8
+RESULT work=access layout=D body=64 atomic=1 n=1500000 seq_ns=1.079 random_ns=2.815 chase_ns=33.710 cseq_ns=7.272 crandom_ns=8.007 cchase_ns=46.494 count_only_ns=3.675 mapped_mb=108.3
+RESULT work=access layout=C body=64 atomic=1 n=1500000 seq_ns=1.066 random_ns=2.667 chase_ns=34.029 cseq_ns=7.272 crandom_ns=8.165 cchase_ns=45.815 count_only_ns=4.177 mapped_mb=108.3
+RESULT work=access layout=B body=64 atomic=1 n=1500000 seq_ns=1.475 random_ns=5.063 chase_ns=86.257 cseq_ns=7.269 crandom_ns=9.086 cchase_ns=86.595 count_only_ns=3.653 mapped_mb=135.6
+RESULT work=access layout=H body=64 atomic=0 n=6000000 seq_ns=1.460 random_ns=4.092 chase_ns=87.371 cseq_ns=1.384 crandom_ns=3.868 cchase_ns=87.171 count_only_ns=4.328 mapped_mb=478.9
+RESULT work=access layout=D body=64 atomic=0 n=6000000 seq_ns=1.377 random_ns=4.141 chase_ns=85.892 cseq_ns=1.217 crandom_ns=4.153 cchase_ns=86.132 count_only_ns=5.289 mapped_mb=433.1
+RESULT work=access layout=C body=64 atomic=0 n=6000000 seq_ns=1.374 random_ns=3.823 chase_ns=85.763 cseq_ns=1.192 crandom_ns=3.861 cchase_ns=85.761 count_only_ns=6.693 mapped_mb=433.1
+RESULT work=access layout=B body=64 atomic=0 n=6000000 seq_ns=1.994 random_ns=8.075 chase_ns=163.541 cseq_ns=1.795 crandom_ns=7.665 cchase_ns=163.364 count_only_ns=4.079 mapped_mb=542.4
+RESULT work=access layout=H body=64 atomic=1 n=6000000 seq_ns=1.503 random_ns=4.073 chase_ns=87.620 cseq_ns=7.275 crandom_ns=8.812 cchase_ns=88.172 count_only_ns=4.660 mapped_mb=478.9
+RESULT work=access layout=D body=64 atomic=1 n=6000000 seq_ns=1.376 random_ns=3.902 chase_ns=85.851 cseq_ns=7.279 crandom_ns=13.003 cchase_ns=92.682 count_only_ns=5.682 mapped_mb=433.1
+RESULT work=access layout=C body=64 atomic=1 n=6000000 seq_ns=1.334 random_ns=3.734 chase_ns=85.744 cseq_ns=7.280 crandom_ns=13.680 cchase_ns=94.698 count_only_ns=6.817 mapped_mb=433.1
+RESULT work=access layout=B body=64 atomic=1 n=6000000 seq_ns=1.720 random_ns=7.596 chase_ns=163.321 cseq_ns=7.295 crandom_ns=16.714 cchase_ns=163.671 count_only_ns=4.517 mapped_mb=542.4
+RESULT work=mem layout=H body=16 atomic=0 n=2000000 rss_full_kb=69016 bytes_per_object=35.3 mapped_mb=67.4
+RESULT work=mem layout=D body=16 atomic=0 n=2000000 rss_full_kb=53328 bytes_per_object=27.3 mapped_mb=51.9
+RESULT work=mem layout=C body=16 atomic=0 n=2000000 rss_full_kb=58956 bytes_per_object=30.2 mapped_mb=51.9
+RESULT work=mem layout=B body=16 atomic=0 n=2000000 rss_full_kb=90668 bytes_per_object=46.4 mapped_mb=88.5
+RESULT work=mem layout=H body=48 atomic=0 n=2000000 rss_full_kb=132112 bytes_per_object=67.6 mapped_mb=128.9
+RESULT work=mem layout=D body=48 atomic=0 n=2000000 rss_full_kb=116240 bytes_per_object=59.5 mapped_mb=113.4
+RESULT work=mem layout=C body=48 atomic=0 n=2000000 rss_full_kb=124820 bytes_per_object=63.9 mapped_mb=113.4
+RESULT work=mem layout=B body=48 atomic=0 n=2000000 rss_full_kb=153724 bytes_per_object=78.7 mapped_mb=150.1
+RESULT work=mem layout=H body=64 atomic=0 n=2000000 rss_full_kb=163632 bytes_per_object=83.8 mapped_mb=159.7
+RESULT work=mem layout=D body=64 atomic=0 n=2000000 rss_full_kb=147904 bytes_per_object=75.7 mapped_mb=144.4
+RESULT work=mem layout=C body=64 atomic=0 n=2000000 rss_full_kb=154636 bytes_per_object=79.2 mapped_mb=144.4
+RESULT work=mem layout=B body=64 atomic=0 n=2000000 rss_full_kb=185280 bytes_per_object=94.9 mapped_mb=180.8
+RESULT work=mem layout=H body=72 atomic=0 n=2000000 rss_full_kb=179456 bytes_per_object=91.9 mapped_mb=175.1
+RESULT work=mem layout=D body=72 atomic=0 n=2000000 rss_full_kb=163572 bytes_per_object=83.7 mapped_mb=159.7
+RESULT work=mem layout=C body=72 atomic=0 n=2000000 rss_full_kb=179512 bytes_per_object=91.9 mapped_mb=159.7
+RESULT work=mem layout=B body=72 atomic=0 n=2000000 rss_full_kb=201068 bytes_per_object=102.9 mapped_mb=196.3
+RESULT work=mem layout=H body=256 atomic=0 n=2000000 rss_full_kb=542576 bytes_per_object=277.8 mapped_mb=529.7
+RESULT work=mem layout=D body=256 atomic=0 n=2000000 rss_full_kb=526968 bytes_per_object=269.8 mapped_mb=514.4
+RESULT work=mem layout=C body=256 atomic=0 n=2000000 rss_full_kb=543448 bytes_per_object=278.2 mapped_mb=514.4
+RESULT work=mem layout=B body=256 atomic=0 n=2000000 rss_full_kb=563328 bytes_per_object=288.4 mapped_mb=550.0
+RESULT work=weak layout=H body=64 atomic=0 n=2000000 rss_full_kb=163568 rss_dead_with_weak_kb=163568 rss_after_weak_dropped_kb=92
+RESULT work=weak layout=D body=64 atomic=0 n=2000000 rss_full_kb=147968 rss_dead_with_weak_kb=147968 rss_after_weak_dropped_kb=156
+RESULT work=weak layout=C body=64 atomic=0 n=2000000 rss_full_kb=154672 rss_dead_with_weak_kb=154672 rss_after_weak_dropped_kb=14448
+RESULT work=weak layout=B body=64 atomic=0 n=2000000 rss_full_kb=185280 rss_dead_with_weak_kb=53320 rss_after_weak_dropped_kb=160
+RESULT work=weak layout=H body=256 atomic=0 n=1000000 rss_full_kb=271356 rss_dead_with_weak_kb=271356 rss_after_weak_dropped_kb=168
+RESULT work=weak layout=D body=256 atomic=0 n=1000000 rss_full_kb=263548 rss_dead_with_weak_kb=263548 rss_after_weak_dropped_kb=168
+RESULT work=weak layout=C body=256 atomic=0 n=1000000 rss_full_kb=271724 rss_dead_with_weak_kb=271724 rss_after_weak_dropped_kb=8344
+RESULT work=weak layout=B body=256 atomic=0 n=1000000 rss_full_kb=281800 rss_dead_with_weak_kb=26816 rss_after_weak_dropped_kb=232
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=163692 rss_after_free_kb=163628 rss_after_pagerelease_kb=71936 pages_released=22923
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=147968 rss_after_free_kb=147968 rss_after_pagerelease_kb=83984 pages_released=15996
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=154632 rss_after_free_kb=154632 rss_after_pagerelease_kb=90692 pages_released=15985
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=185280 rss_after_free_kb=185280 rss_after_pagerelease_kb=110100 pages_released=18795
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=163568 rss_after_free_kb=163568 rss_after_pagerelease_kb=162920 pages_released=162
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=147968 rss_after_free_kb=147968 rss_after_pagerelease_kb=147800 pages_released=42
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=154612 rss_after_free_kb=154612 rss_after_pagerelease_kb=154444 pages_released=42
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=185216 rss_after_free_kb=185216 rss_after_pagerelease_kb=185036 pages_released=45
+RESULT work=retain layout=H body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271356 rss_after_free_kb=244988 rss_after_pagerelease_kb=52456 pages_released=48133
+RESULT work=retain layout=D body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=263608 rss_after_free_kb=239800 rss_after_pagerelease_kb=53216 pages_released=46646
+RESULT work=retain layout=C body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271724 rss_after_free_kb=247916 rss_after_pagerelease_kb=61332 pages_released=46646
+RESULT work=retain layout=B body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=281740 rss_after_free_kb=259844 rss_after_pagerelease_kb=73216 pages_released=46657
+RESULT work=access layout=B body=64 atomic=0 n=6000000 seq_ns=1.737 random_ns=7.828 chase_ns=163.584 cseq_ns=1.792 crandom_ns=7.679 cchase_ns=163.415 count_only_ns=4.111 mapped_mb=542.4
+RESULT work=access layout=C body=64 atomic=0 n=6000000 seq_ns=1.323 random_ns=4.121 chase_ns=85.210 cseq_ns=1.176 crandom_ns=4.127 cchase_ns=86.129 count_only_ns=6.927 mapped_mb=433.1
+RESULT work=access layout=D body=64 atomic=0 n=6000000 seq_ns=1.356 random_ns=4.051 chase_ns=85.472 cseq_ns=1.147 crandom_ns=3.852 cchase_ns=85.521 count_only_ns=5.008 mapped_mb=433.1
+RESULT work=access layout=H body=64 atomic=0 n=6000000 seq_ns=1.532 random_ns=3.920 chase_ns=87.150 cseq_ns=1.383 crandom_ns=3.928 cchase_ns=87.178 count_only_ns=4.342 mapped_mb=478.9
+RESULT work=access layout=B body=64 atomic=1 n=6000000 seq_ns=1.894 random_ns=7.873 chase_ns=163.344 cseq_ns=7.297 crandom_ns=16.663 cchase_ns=163.561 count_only_ns=4.510 mapped_mb=542.4
+RESULT work=access layout=C body=64 atomic=1 n=6000000 seq_ns=1.244 random_ns=3.898 chase_ns=85.369 cseq_ns=7.271 crandom_ns=13.785 cchase_ns=94.008 count_only_ns=7.200 mapped_mb=433.1
+RESULT work=access layout=D body=64 atomic=1 n=6000000 seq_ns=1.292 random_ns=3.905 chase_ns=85.333 cseq_ns=7.276 crandom_ns=13.010 cchase_ns=92.524 count_only_ns=5.819 mapped_mb=433.1
+RESULT work=access layout=H body=64 atomic=1 n=6000000 seq_ns=1.529 random_ns=4.177 chase_ns=87.849 cseq_ns=7.281 crandom_ns=9.160 cchase_ns=88.453 count_only_ns=4.679 mapped_mb=478.9
+RESULT work=mem layout=B body=16 atomic=0 n=2000000 rss_full_kb=90776 bytes_per_object=46.5 mapped_mb=88.5
+RESULT work=mem layout=C body=16 atomic=0 n=2000000 rss_full_kb=58956 bytes_per_object=30.2 mapped_mb=51.9
+RESULT work=mem layout=D body=16 atomic=0 n=2000000 rss_full_kb=53364 bytes_per_object=27.3 mapped_mb=51.9
+RESULT work=mem layout=H body=16 atomic=0 n=2000000 rss_full_kb=69016 bytes_per_object=35.3 mapped_mb=67.4
+RESULT work=mem layout=B body=48 atomic=0 n=2000000 rss_full_kb=153788 bytes_per_object=78.7 mapped_mb=150.1
+RESULT work=mem layout=C body=48 atomic=0 n=2000000 rss_full_kb=124880 bytes_per_object=63.9 mapped_mb=113.4
+RESULT work=mem layout=D body=48 atomic=0 n=2000000 rss_full_kb=116240 bytes_per_object=59.5 mapped_mb=113.4
+RESULT work=mem layout=H body=48 atomic=0 n=2000000 rss_full_kb=132176 bytes_per_object=67.7 mapped_mb=128.9
+RESULT work=mem layout=B body=64 atomic=0 n=2000000 rss_full_kb=185280 bytes_per_object=94.9 mapped_mb=180.8
+RESULT work=mem layout=C body=64 atomic=0 n=2000000 rss_full_kb=154672 bytes_per_object=79.2 mapped_mb=144.4
+RESULT work=mem layout=D body=64 atomic=0 n=2000000 rss_full_kb=148028 bytes_per_object=75.8 mapped_mb=144.4
+RESULT work=mem layout=H body=64 atomic=0 n=2000000 rss_full_kb=163692 bytes_per_object=83.8 mapped_mb=159.7
+RESULT work=mem layout=B body=72 atomic=0 n=2000000 rss_full_kb=201192 bytes_per_object=103.0 mapped_mb=196.3
+RESULT work=mem layout=C body=72 atomic=0 n=2000000 rss_full_kb=179388 bytes_per_object=91.8 mapped_mb=159.7
+RESULT work=mem layout=D body=72 atomic=0 n=2000000 rss_full_kb=163696 bytes_per_object=83.8 mapped_mb=159.7
+RESULT work=mem layout=H body=72 atomic=0 n=2000000 rss_full_kb=179456 bytes_per_object=91.9 mapped_mb=175.1
+RESULT work=mem layout=B body=256 atomic=0 n=2000000 rss_full_kb=563264 bytes_per_object=288.4 mapped_mb=550.0
+RESULT work=mem layout=C body=256 atomic=0 n=2000000 rss_full_kb=543360 bytes_per_object=278.2 mapped_mb=514.4
+RESULT work=mem layout=D body=256 atomic=0 n=2000000 rss_full_kb=526952 bytes_per_object=269.8 mapped_mb=514.4
+RESULT work=mem layout=H body=256 atomic=0 n=2000000 rss_full_kb=542592 bytes_per_object=277.8 mapped_mb=529.7
+RESULT work=weak layout=B body=64 atomic=0 n=2000000 rss_full_kb=185280 rss_dead_with_weak_kb=53320 rss_after_weak_dropped_kb=160
+RESULT work=weak layout=C body=64 atomic=0 n=2000000 rss_full_kb=154612 rss_dead_with_weak_kb=154612 rss_after_weak_dropped_kb=14388
+RESULT work=weak layout=D body=64 atomic=0 n=2000000 rss_full_kb=148028 rss_dead_with_weak_kb=148028 rss_after_weak_dropped_kb=216
+RESULT work=weak layout=H body=64 atomic=0 n=2000000 rss_full_kb=163568 rss_dead_with_weak_kb=163568 rss_after_weak_dropped_kb=92
+RESULT work=weak layout=B body=256 atomic=0 n=1000000 rss_full_kb=281676 rss_dead_with_weak_kb=26692 rss_after_weak_dropped_kb=108
+RESULT work=weak layout=C body=256 atomic=0 n=1000000 rss_full_kb=271724 rss_dead_with_weak_kb=271724 rss_after_weak_dropped_kb=8344
+RESULT work=weak layout=D body=256 atomic=0 n=1000000 rss_full_kb=263568 rss_dead_with_weak_kb=263568 rss_after_weak_dropped_kb=188
+RESULT work=weak layout=H body=256 atomic=0 n=1000000 rss_full_kb=271416 rss_dead_with_weak_kb=271416 rss_after_weak_dropped_kb=228
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=185280 rss_after_free_kb=185280 rss_after_pagerelease_kb=110100 pages_released=18795
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=154548 rss_after_free_kb=154548 rss_after_pagerelease_kb=90608 pages_released=15985
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=147988 rss_after_free_kb=147988 rss_after_pagerelease_kb=84004 pages_released=15996
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=163568 rss_after_free_kb=163504 rss_after_pagerelease_kb=71812 pages_released=22923
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=185304 rss_after_free_kb=185304 rss_after_pagerelease_kb=185124 pages_released=45
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=154672 rss_after_free_kb=154672 rss_after_pagerelease_kb=154504 pages_released=42
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=147920 rss_after_free_kb=147920 rss_after_pagerelease_kb=147752 pages_released=42
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=163656 rss_after_free_kb=163656 rss_after_pagerelease_kb=163008 pages_released=162
+RESULT work=retain layout=B body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=281692 rss_after_free_kb=259796 rss_after_pagerelease_kb=73168 pages_released=46657
+RESULT work=retain layout=C body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271724 rss_after_free_kb=247916 rss_after_pagerelease_kb=61332 pages_released=46646
+RESULT work=retain layout=D body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=263568 rss_after_free_kb=239760 rss_after_pagerelease_kb=53176 pages_released=46646
+RESULT work=retain layout=H body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271292 rss_after_free_kb=244924 rss_after_pagerelease_kb=52392 pages_released=48133
+RESULT work=access layout=H body=64 atomic=0 n=6000000 seq_ns=1.532 random_ns=4.062 chase_ns=87.440 cseq_ns=1.442 crandom_ns=3.921 cchase_ns=87.560 count_only_ns=4.354 mapped_mb=478.9
+RESULT work=access layout=D body=64 atomic=0 n=6000000 seq_ns=1.405 random_ns=4.096 chase_ns=85.998 cseq_ns=1.224 crandom_ns=3.902 cchase_ns=86.334 count_only_ns=5.183 mapped_mb=433.1
+RESULT work=access layout=C body=64 atomic=0 n=6000000 seq_ns=1.393 random_ns=4.212 chase_ns=85.389 cseq_ns=1.190 crandom_ns=3.945 cchase_ns=85.371 count_only_ns=7.077 mapped_mb=433.1
+RESULT work=access layout=B body=64 atomic=0 n=6000000 seq_ns=1.704 random_ns=8.089 chase_ns=164.011 cseq_ns=1.684 crandom_ns=7.746 cchase_ns=163.657 count_only_ns=4.150 mapped_mb=542.4
+RESULT work=access layout=H body=64 atomic=1 n=6000000 seq_ns=1.533 random_ns=3.929 chase_ns=87.604 cseq_ns=7.278 crandom_ns=8.908 cchase_ns=88.164 count_only_ns=4.634 mapped_mb=478.9
+RESULT work=access layout=D body=64 atomic=1 n=6000000 seq_ns=1.365 random_ns=4.146 chase_ns=85.468 cseq_ns=7.349 crandom_ns=12.891 cchase_ns=92.763 count_only_ns=5.798 mapped_mb=433.1
+RESULT work=access layout=C body=64 atomic=1 n=6000000 seq_ns=1.276 random_ns=4.081 chase_ns=85.458 cseq_ns=7.271 crandom_ns=13.671 cchase_ns=93.848 count_only_ns=7.122 mapped_mb=433.1
+RESULT work=access layout=B body=64 atomic=1 n=6000000 seq_ns=1.974 random_ns=8.081 chase_ns=162.859 cseq_ns=7.291 crandom_ns=16.574 cchase_ns=163.684 count_only_ns=4.476 mapped_mb=542.4
+RESULT work=mem layout=H body=16 atomic=0 n=2000000 rss_full_kb=69080 bytes_per_object=35.4 mapped_mb=67.4
+RESULT work=mem layout=D body=16 atomic=0 n=2000000 rss_full_kb=53240 bytes_per_object=27.3 mapped_mb=51.9
+RESULT work=mem layout=C body=16 atomic=0 n=2000000 rss_full_kb=59080 bytes_per_object=30.2 mapped_mb=51.9
+RESULT work=mem layout=B body=16 atomic=0 n=2000000 rss_full_kb=90668 bytes_per_object=46.4 mapped_mb=88.5
+RESULT work=mem layout=H body=48 atomic=0 n=2000000 rss_full_kb=132112 bytes_per_object=67.6 mapped_mb=128.9
+RESULT work=mem layout=D body=48 atomic=0 n=2000000 rss_full_kb=116304 bytes_per_object=59.5 mapped_mb=113.4
+RESULT work=mem layout=C body=48 atomic=0 n=2000000 rss_full_kb=124756 bytes_per_object=63.9 mapped_mb=113.4
+RESULT work=mem layout=B body=48 atomic=0 n=2000000 rss_full_kb=153848 bytes_per_object=78.8 mapped_mb=150.1
+RESULT work=mem layout=H body=64 atomic=0 n=2000000 rss_full_kb=163652 bytes_per_object=83.8 mapped_mb=159.7
+RESULT work=mem layout=D body=64 atomic=0 n=2000000 rss_full_kb=147904 bytes_per_object=75.7 mapped_mb=144.4
+RESULT work=mem layout=C body=64 atomic=0 n=2000000 rss_full_kb=154548 bytes_per_object=79.1 mapped_mb=144.4
+RESULT work=mem layout=B body=64 atomic=0 n=2000000 rss_full_kb=185340 bytes_per_object=94.9 mapped_mb=180.8
+RESULT work=mem layout=H body=72 atomic=0 n=2000000 rss_full_kb=179456 bytes_per_object=91.9 mapped_mb=175.1
+RESULT work=mem layout=D body=72 atomic=0 n=2000000 rss_full_kb=163636 bytes_per_object=83.8 mapped_mb=159.7
+RESULT work=mem layout=C body=72 atomic=0 n=2000000 rss_full_kb=179512 bytes_per_object=91.9 mapped_mb=159.7
+RESULT work=mem layout=B body=72 atomic=0 n=2000000 rss_full_kb=201068 bytes_per_object=102.9 mapped_mb=196.3
+RESULT work=mem layout=H body=256 atomic=0 n=2000000 rss_full_kb=542640 bytes_per_object=277.8 mapped_mb=529.7
+RESULT work=mem layout=D body=256 atomic=0 n=2000000 rss_full_kb=526952 bytes_per_object=269.8 mapped_mb=514.4
+RESULT work=mem layout=C body=256 atomic=0 n=2000000 rss_full_kb=543424 bytes_per_object=278.2 mapped_mb=514.4
+RESULT work=mem layout=B body=256 atomic=0 n=2000000 rss_full_kb=563328 bytes_per_object=288.4 mapped_mb=550.0
+RESULT work=weak layout=H body=64 atomic=0 n=2000000 rss_full_kb=163568 rss_dead_with_weak_kb=163568 rss_after_weak_dropped_kb=92
+RESULT work=weak layout=D body=64 atomic=0 n=2000000 rss_full_kb=147904 rss_dead_with_weak_kb=147904 rss_after_weak_dropped_kb=92
+RESULT work=weak layout=C body=64 atomic=0 n=2000000 rss_full_kb=154564 rss_dead_with_weak_kb=154564 rss_after_weak_dropped_kb=14340
+RESULT work=weak layout=B body=64 atomic=0 n=2000000 rss_full_kb=185280 rss_dead_with_weak_kb=53320 rss_after_weak_dropped_kb=160
+RESULT work=weak layout=H body=256 atomic=0 n=1000000 rss_full_kb=271416 rss_dead_with_weak_kb=271416 rss_after_weak_dropped_kb=228
+RESULT work=weak layout=D body=256 atomic=0 n=1000000 rss_full_kb=263484 rss_dead_with_weak_kb=263484 rss_after_weak_dropped_kb=104
+RESULT work=weak layout=C body=256 atomic=0 n=1000000 rss_full_kb=271724 rss_dead_with_weak_kb=271724 rss_after_weak_dropped_kb=8344
+RESULT work=weak layout=B body=256 atomic=0 n=1000000 rss_full_kb=281676 rss_dead_with_weak_kb=26692 rss_after_weak_dropped_kb=108
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=163632 rss_after_free_kb=163568 rss_after_pagerelease_kb=71876 pages_released=22923
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=147992 rss_after_free_kb=147992 rss_after_pagerelease_kb=84008 pages_released=15996
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=154548 rss_after_free_kb=154548 rss_after_pagerelease_kb=90608 pages_released=15985
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=100 survivors=19970 ok=1 rss_full_kb=185304 rss_after_free_kb=185304 rss_after_pagerelease_kb=110124 pages_released=18795
+RESULT work=retain layout=H body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=163692 rss_after_free_kb=163692 rss_after_pagerelease_kb=163044 pages_released=162
+RESULT work=retain layout=D body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=147988 rss_after_free_kb=147988 rss_after_pagerelease_kb=147820 pages_released=42
+RESULT work=retain layout=C body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=154672 rss_after_free_kb=154672 rss_after_pagerelease_kb=154504 pages_released=42
+RESULT work=retain layout=B body=64 atomic=0 n=2000000 keep_bp=1000 survivors=199806 ok=1 rss_full_kb=185216 rss_after_free_kb=185216 rss_after_pagerelease_kb=185036 pages_released=45
+RESULT work=retain layout=H body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271308 rss_after_free_kb=244940 rss_after_pagerelease_kb=52408 pages_released=48133
+RESULT work=retain layout=D body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=263484 rss_after_free_kb=239676 rss_after_pagerelease_kb=53092 pages_released=46646
+RESULT work=retain layout=C body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=271724 rss_after_free_kb=247916 rss_after_pagerelease_kb=61332 pages_released=46646
+RESULT work=retain layout=B body=256 atomic=0 n=1000000 keep_bp=100 survivors=9933 ok=1 rss_full_kb=281676 rss_after_free_kb=259780 rss_after_pagerelease_kb=73152 pages_released=46657

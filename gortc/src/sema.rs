@@ -3216,6 +3216,9 @@ impl<'a> Sema<'a> {
                     if b.ty == bytes_ty && name == "copy" && args.is_empty() {
                         return typed(EK::RtCall("toBytes", vec![b]), bytes_ty, line);
                     }
+                    if b.ty == bytes_ty && name == "toString" && args.is_empty() {
+                        return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
+                    }
                     if matches!(b.ty, Ty::Str) && name == "toBytes" && args.is_empty() {
                         return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared), line);
                     }

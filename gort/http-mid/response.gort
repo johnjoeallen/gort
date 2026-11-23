@@ -1,0 +1,30 @@
+// http-mid/response.gort - building responses.
+package http
+
+fn reasonPhrase(code: u16): String {
+    switch (code) {
+        200     -> { return "OK" }
+        201     -> { return "Created" }
+        204     -> { return "No Content" }
+        400     -> { return "Bad Request" }
+        404     -> { return "Not Found" }
+        405     -> { return "Method Not Allowed" }
+        413     -> { return "Payload Too Large" }
+        431     -> { return "Request Header Fields Too Large" }
+        default -> { return "Other" }
+    }
+}
+
+// A response with a body of bytes. `keepAlive` false adds `Connection: close`; an HTTP/1.0 client that asked to keep the connection is told it is kept.
+fn respondBytes(code: u16, contentType: String, body: Array<u8>, keepAlive: bool, http10: bool): ref Resp {
+    let head = "HTTP/1.1 " + code + " " + reasonPhrase(code) + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + body.length + "\r\n"
+             + (keepAlive ? (http10 ? "Connection: keep-alive\r\n" : "") : "Connection: close\r\n") + "\r\n"
+    var out = Array<u8>()
+    out.append(head.toBytes())
+    out.append(body)
+    return new Resp { bytes: out, keepAlive: keepAlive }
+}
+
+fn respond(code: u16, body: String, keepAlive: bool, http10: bool): ref Resp {
+    return respondBytes(code, "text/plain", body.toBytes(), keepAlive, http10)
+}

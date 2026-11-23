@@ -74,7 +74,7 @@ struct BodyDecoder {
     total: u64 = 0           // payload bytes delivered so far
     chunk: u64 = 0           // the size of the chunk being read
     trailer: usize = 0       // trailer bytes seen (capped)
-    digest: Crc32 = Crc32()
+    digest: ref Crc32 = Crc32()            // one decoder, one thread: no lock
     done: bool = false
 
     static fn of(framing: Framing, limit: u64): BodyDecoder {

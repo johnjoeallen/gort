@@ -1,0 +1,99 @@
+// http-mid/router.gort - the route table and the handlers.
+// A route is a method, a path (exact, or a prefix whose remainder is passed to the handler) and a function. The table is a list built once, from the
+// last route to the first, and never changed, so every worker reads it with no lock.
+package http
+
+struct Route {
+    method: String
+    path: String
+    exact: bool
+    handler: fn(Request, Array<u8>, shared Store, String): ref Resp
+    next: shared Route?
+}
+
+// ---------- handlers: (request, body, store, the part of the path after the prefix) ----------
+
+fn hHello(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+    return respond(200, "hello\n", req.keepAlive, req.http10)
+}
+
+fn hHealth(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+    return respond(200, "ok\n", req.keepAlive, req.http10)
+}
+
+fn hEcho(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+    return respondBytes(200, "application/octet-stream", body, req.keepAlive, req.http10)
+}
+
+fn hGet(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+    var found: String? = null
+    sync (reads store.kv) { found = store.kv.get(key) }
+    if (found == null) return respond(404, "no such key\n", req.keepAlive, req.http10)
+    return respond(200, found + "\n", req.keepAlive, req.http10)
+}
+
+fn hPut(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+    if (key.length == 0) return respond(400, "empty key\n", req.keepAlive, req.http10)
+    var existed = false
+    sync (writes store.kv) {
+        existed = store.kv.has(key)
+        store.kv.insert(key, body.toString())
+    }
+    sync (writes store) { store.writes += 1 }
+    if (existed) return respond(200, "replaced\n", req.keepAlive, req.http10)
+    return respond(201, "created\n", req.keepAlive, req.http10)
+}
+
+fn hDelete(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+    var existed = false
+    sync (writes store.kv) {
+        existed = store.kv.has(key)
+        store.kv.remove(key)
+    }
+    if (!existed) return respond(404, "no such key\n", req.keepAlive, req.http10)
+    sync (writes store) { store.writes += 1 }
+    return respond(204, "", req.keepAlive, req.http10)
+}
+
+fn hStats(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+    var keys: usize = 0
+    sync (reads store.kv) { keys = store.kv.count }
+    var requests: u64 = 0
+    var writes: u64 = 0
+    sync (reads store) { requests = store.requests; writes = store.writes }
+    return respond(200, "keys " + keys + "\nrequests " + requests + "\nwrites " + writes + "\n", req.keepAlive, req.http10)
+}
+
+// ---------- the table ----------
+
+fn buildRoutes(): shared Route {
+    shared Route r7 = new Route { method: "GET",    path: "/stats",  exact: true,  handler: hStats,  next: null }
+    shared Route r6 = new Route { method: "DELETE", path: "/kv/",    exact: false, handler: hDelete, next: r7 }
+    shared Route r5 = new Route { method: "PUT",    path: "/kv/",    exact: false, handler: hPut,    next: r6 }
+    shared Route r4 = new Route { method: "GET",    path: "/kv/",    exact: false, handler: hGet,    next: r5 }
+    shared Route r3 = new Route { method: "POST",   path: "/echo",   exact: true,  handler: hEcho,   next: r4 }
+    shared Route r2 = new Route { method: "GET",    path: "/health", exact: true,  handler: hHealth, next: r3 }
+    shared Route r1 = new Route { method: "GET",    path: "/",       exact: true,  handler: hHello,  next: r2 }
+    return r1
+}
+
+// Finds the route for a request and runs it: 404 if no path matches, 405 if the path matches but not the method.
+fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared Route): ref Resp {
+    sync (writes store) { store.requests += 1 }
+    var cur: shared Route? = routes
+    var pathSeen = false
+    while (cur != null) {
+        let matches = cur.exact ? (req.path == cur.path) : (req.path.startsWith(cur.path) && req.path.length > cur.path.length)
+        if (matches) {
+            if (req.method == cur.method) {
+                let rest = cur.exact ? "" : req.path.toBytes()[cur.path.length..req.path.length].toString()
+                let h = cur.handler
+                return h(req, body, store, rest)
+            }
+            pathSeen = true
+        }
+        cur = cur.next
+    }
+    if (pathSeen) return respond(405, "method not allowed\n", req.keepAlive, req.http10)
+    return respond(404, "not found\n", req.keepAlive, req.http10)
+}
