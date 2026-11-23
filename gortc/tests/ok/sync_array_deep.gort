@@ -1,6 +1,6 @@
 // the caller holds the lock on an array reached through two objects, whether the callee is a function or a method
 package t
-struct B { xs: Array<i64> }
+struct B { xs: shared Array<i64> }
 struct A {
     b: Ref<B>
     fn bump() { self.b.xs[0] = self.b.xs[0] + 1 }

@@ -10,3 +10,12 @@ fn writeAll(conn: Ref<Conn>, bytes: Array<u8>) throws IoError {
         rest = rest[n..]
     }
 }
+
+// The same for bytes that are shared between connections (a prebuilt response). A function cannot yet take either layout of array, so there are two.
+fn writeAllShared(conn: Ref<Conn>, bytes: shared Array<u8>) throws IoError {
+    var rest = bytes
+    while (rest.length > 0) {
+        let n = conn.send(rest)
+        rest = rest[n..]
+    }
+}

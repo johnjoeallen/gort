@@ -1,7 +1,7 @@
 // an array field reached through a parameter or the receiver: the caller holds a block on that array
 package t
 struct G {
-    xs: Array<i64>
+    xs: shared Array<i64>
     fn bump() { self.xs[0] = self.xs[0] + 1 }
     fn first(): i64 { return self.xs[0] }
     fn second(): i64 { return self.xs[1] }

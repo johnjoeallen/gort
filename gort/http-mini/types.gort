@@ -2,7 +2,7 @@
 package http
 import runtime
 
-struct Resp { bytes: Array<u8>, keepAlive: bool }       // built once at startup
+struct Resp { bytes: shared Array<u8>, keepAlive: bool }       // built once at startup
 struct Request { start: usize, end: usize }             // offsets of the head inside the reader's buffer, not a pointer
 
 exception TooLarge                                      // the header block does not fit in the buffer

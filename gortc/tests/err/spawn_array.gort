@@ -1,0 +1,5 @@
+// error: cannot be given to another thread
+package t
+extern fn go(body: fn())
+fn main() { Array<i64> a = [1]
+ go(fn() { println(a.length) }) }

@@ -1,7 +1,7 @@
 package t
 struct Account {
     balance: i64
-    log: Array<i64>
+    log: shared Array<i64>
     fn read(): i64 { return balance }
     fn add(n: i64) { balance = balance + n }
 }

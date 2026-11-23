@@ -1042,6 +1042,10 @@ impl<'a> Cx<'a> {
         while let EK::Unwrap(i) = &a.kind {
             a = strip(i);
         }
+        // an unshared array has no other holder by type (docs/sharing.md R5): reaching it never needs a block
+        if matches!(a.ty, Ty::Arr(_, Share::Plain)) {
+            return;
+        }
         let want_mutate = need == Need::Write;
         if let EK::Slice(b, ..) = &a.kind {
             return self.access_arr(b, need, line, what);

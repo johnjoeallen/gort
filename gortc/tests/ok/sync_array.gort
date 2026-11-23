@@ -1,5 +1,5 @@
 package t
-struct G { xs: Array<i64> }
+struct G { xs: shared Array<i64> }
 let shared: Ref<G> = new G { xs: [1, 2] }
 fn get(): Ref<G> { return shared }
 fn main() {

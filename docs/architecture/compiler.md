@@ -105,7 +105,7 @@ later as a diagnostic and an optimisation (it removes the check) without changin
 ## `ref`, `shared` and extern kinds (done)
 
 `Ty::Ref` and `Ty::Arr` carry a `Share`. A `ref T` object is a plain count and no lock (`gort_retain_p`, `G_T_release_p`), a `shared T` the atomic count and
-lock as before; arrays are always atomic for now. The rules, with the checks in `sema.rs` (`check_layouts`, `resolve_qualified`, the capture check in
+lock as before; arrays have the same two layouts (`gort_arr_retain_p`, `gort_arr_release_p`). The rules, with the checks in `sema.rs` (`check_layouts`, `resolve_qualified`, the capture check in
 `lower_lambda`) and `share.rs` (a `ref` object needs no block): [sharing](../sharing.md). `extern sync struct` promises the C code synchronises itself; a
 plain `extern struct` is checked like a Gort type, with `reads fn` and `writes fn` giving each method's use of its receiver (unmarked: writes). The runtime
 declarations are all `extern sync` except `Mapping` and `Crc32`.

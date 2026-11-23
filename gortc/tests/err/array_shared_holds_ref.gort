@@ -1,0 +1,4 @@
+// error: a shared array may hold only shared handles
+package t
+struct C { v: i64 }
+fn main() { shared Array<ref C?> a = Array<ref C?>() }

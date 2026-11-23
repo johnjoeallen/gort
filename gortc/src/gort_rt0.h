@@ -368,6 +368,23 @@ static gort_arr *gort_arr_new_d(size_t esize, size_t len, void (*edrop)(void *))
     return a;
 }
 static inline gort_arr *gort_arr_retain(gort_arr *a) { __atomic_fetch_add(&a->strong, 1, __ATOMIC_RELAXED); return a; }
+/* an unshared array (`Array<T>`, `ref`): one thread holds every handle, so no atomic count. A view of an unshared array is unshared. */
+#ifdef GORT_ATOMIC_REFS
+#define gort_arr_retain_p gort_arr_retain
+#define gort_arr_release_p gort_arr_release
+#else
+static inline gort_arr *gort_arr_retain_p(gort_arr *a) { a->strong++; return a; }
+static inline void gort_arr_release_p(gort_arr *a) {
+    if (--a->strong == 0) {
+        if (a->parent) gort_arr_release_p(a->parent);
+        else {
+            if (a->edrop) for (size_t i = 0; i < a->cap; i++) a->edrop((char *)a->data + i * a->esize);
+            free(a->data);
+        }
+        free(GORT_CTL(a)); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED);
+    }
+}
+#endif
 static inline void gort_arr_release(gort_arr *a) {
     if (__atomic_sub_fetch(&a->strong, 1, __ATOMIC_ACQ_REL) == 0) {
         if (a->parent) gort_arr_release(a->parent);

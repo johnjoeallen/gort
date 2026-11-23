@@ -7,7 +7,7 @@ package t
 struct B { n: i64 }
 struct A {
     b: Ref<B>
-    xs: Array<i64>
+    xs: shared Array<i64>
     peer: Ref<B>?
     leaked: Ref<B>?
 }

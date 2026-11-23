@@ -1,6 +1,6 @@
 // `bump` reaches g.xs through its parameter and `viaCopy` through a copy of the handle; both need a block on the array itself, so the two exclude each other
 package t
-struct G { xs: Array<i64> }
+struct G { xs: shared Array<i64> }
 let shared: Ref<G> = new G { xs: [1, 2] }
 fn get(): Ref<G> { return shared }
 fn bump(g: Ref<G>) { g.xs[0] = g.xs[0] + 1 }

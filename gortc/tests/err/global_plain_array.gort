@@ -1,0 +1,4 @@
+// error: it must be `shared`
+package t
+let xs: Array<i64> = [1, 2]
+fn main() { }

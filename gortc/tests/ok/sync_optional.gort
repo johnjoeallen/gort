@@ -1,7 +1,7 @@
 // an optional handle can be a sync target: it locks the object it points to
 package t
 struct Item { n: i64 }
-struct G { items: Array<Ref<Item>?> }
+struct G { items: shared Array<shared Item?> }
 let shared: Ref<G> = new G { items: Ref<Item>?[](2) }
 fn getG(): Ref<G> { return shared }
 fn main() {

@@ -277,14 +277,14 @@ impl<'a> Gen<'a> {
         match ty {
             Ty::Ref(t, sh) => format!("d->{0} = (G_{1}*)gort_retain{2}(s->{0});", fc, self.prog.structs[*t].name, sfx(sh)),
             Ty::Str => format!("d->{0} = gort_str_retain(s->{0});", fc),
-            Ty::Arr(_, _) => format!("d->{0} = gort_arr_retain(s->{0});", fc),
+            Ty::Arr(_, sh) => format!("d->{0} = gort_arr_retain{1}(s->{0});", fc, sfx(sh)),
             Ty::Struct(t) if self.prog.structs[*t].needs_drop => {
                 format!("G_{}_copy(&d->{}, &s->{});", self.prog.structs[*t].name, fc, fc)
             }
             Ty::Opt(i) if i.is_handle() => match &**i {
                 Ty::Ref(t, sh) => format!("d->{0} = s->{0} ? (G_{1}*)gort_retain{2}(s->{0}) : NULL;", fc, self.prog.structs[*t].name, sfx(sh)),
                 Ty::Str => format!("d->{0} = s->{0} ? gort_str_retain(s->{0}) : NULL;", fc),
-                _ => format!("d->{0} = s->{0} ? gort_arr_retain(s->{0}) : NULL;", fc),
+                _ => format!("d->{0} = s->{0} ? gort_arr_retain{1}(s->{0}) : NULL;", fc, asfx(i)),
             },
             Ty::Opt(i) if matches!(&**i, Ty::Struct(t) if self.prog.structs[*t].needs_drop) => {
                 let Ty::Struct(t) = &**i else { unreachable!() };
@@ -357,6 +357,15 @@ fn sfx(sh: &Share) -> &'static str {
     }
 }
 
+/// The suffix of an array handle's count functions, from the type of the handle (an optional array too).
+fn asfx(t: &Ty) -> &'static str {
+    match t {
+        Ty::Arr(_, sh) => sfx(sh),
+        Ty::Opt(i) => asfx(i),
+        _ => "",
+    }
+}
+
 fn ctype(prog: &Program, t: &Ty) -> String {
     match t {
         Ty::Unit => "void".into(),
@@ -383,7 +392,7 @@ fn drop_code(prog: &Program, t: &Ty, lv: &str) -> Option<String> {
     match t {
         Ty::Ref(s, sh) => Some(format!("G_{}_release{}({});", prog.structs[*s].name, sfx(sh), lv)),
         Ty::Str => Some(format!("gort_str_release({});", lv)),
-        Ty::Arr(_, _) => Some(format!("gort_arr_release({});", lv)),
+        Ty::Arr(_, sh) => Some(format!("gort_arr_release{}({});", sfx(sh), lv)),
         Ty::Exc => Some(format!("gort_exc_release(&{});", lv)),
         Ty::Opt(i) if i.is_handle() => drop_code(prog, i, lv).map(|d| format!("if ({}) {{ {} }}", lv, d)),
         Ty::Opt(i) => drop_code(prog, i, &format!("{}.v", lv)).map(|d| format!("if ({}.has) {{ {} }}", lv, d)),
@@ -593,7 +602,7 @@ impl<'a> FnGen<'a> {
             }
             Ty::Arr(_, _) => {
                 let t = self.tmp();
-                self.line(format!("gort_arr* {} = gort_arr_retain({});", t, v.c));
+                self.line(format!("gort_arr* {} = gort_arr_retain{}({});", t, asfx(ty), v.c));
                 t
             }
             Ty::Struct(s) if self.prog.structs[*s].needs_drop => {
@@ -614,7 +623,7 @@ impl<'a> FnGen<'a> {
                 let r = match &**i {
                     Ty::Ref(s, sh) => format!("(G_{}*)gort_retain{}({})", self.prog.structs[*s].name, sfx(sh), v.c),
                     Ty::Str => format!("gort_str_retain({})", v.c),
-                    _ => format!("gort_arr_retain({})", v.c),
+                    _ => format!("gort_arr_retain{}({})", asfx(i), v.c),
                 };
                 self.line(format!("{0} {1} = {2}; if ({1}) {1} = {3};", cty, t, v.c, r));
                 t
@@ -965,7 +974,7 @@ impl<'a> FnGen<'a> {
                             let sn = self.prog.structs[*sid].name.clone();
                             (format!("G_{}*", sn), format!("G_{}_release{}", sn, sfx(sh)))
                         }
-                        Ty::Arr(_, _) => ("gort_arr*".to_string(), "gort_arr_release".to_string()),
+                        Ty::Arr(_, sh) => ("gort_arr*".to_string(), format!("gort_arr_release{}", sfx(sh))),
                         _ => unreachable!(),
                     };
                     let is_arr = matches!(target.ty, Ty::Arr(_, _));
@@ -990,7 +999,9 @@ impl<'a> FnGen<'a> {
                             self.line(format!("gort_nn({});", r));
                         }
                     }
-                    if is_arr {
+                    if is_arr && matches!(target.ty, Ty::Arr(_, Share::Plain)) && !atomic_refs() {
+                        // an unshared array has no lock and no other holder: the block takes nothing for it
+                    } else if is_arr {
                         // a view locks the array it looks into
                         let l = self.tmp();
                         self.line(format!("void* {} = gort_arr_lockobj({});", l, r));
@@ -1227,7 +1238,7 @@ impl<'a> FnGen<'a> {
                 };
                 let t = self.tmp();
                 self.line(format!("gort_arr* {} = gort_arr_slice({}, sizeof({}), (size_t)({}), (size_t)({}));", t, av.c, el, lov, hiv));
-                self.register_temp(&t, format!("gort_arr_release({});", t));
+                self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                 Val { c: t.clone(), own: Some(t) }
             }
             EK::Len(a) => {
@@ -1408,13 +1419,13 @@ impl<'a> FnGen<'a> {
                 if *name == "toBytes" {
                     let t = self.tmp();
                     self.line(format!("gort_arr* {} = gort_arr_new(1, {}->len); memcpy({}->data, {}->data, {}->len);", t, a.c, t, a.c, a.c));
-                    self.register_temp(&t, format!("gort_arr_release({});", t));
+                    self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                     return Val { c: t.clone(), own: Some(t) };
                 }
                 if *name == "copyArr" {
                     let t = self.tmp();
                     self.line(format!("gort_arr* {0} = gort_arr_new({1}->esize, {1}->len); if ({1}->len) memcpy({0}->data, {1}->data, {1}->len * {1}->esize);", t, a.c));
-                    self.register_temp(&t, format!("gort_arr_release({});", t));
+                    self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                     return Val { c: t.clone(), own: Some(t) };
                 }
                 if *name == "toStr" {
@@ -1564,7 +1575,7 @@ impl<'a> FnGen<'a> {
                     }
                     None => self.line(format!("gort_arr* {} = gort_arr_new(sizeof({}), (size_t)({}));", t, cty, lv.c)),
                 }
-                self.register_temp(&t, format!("gort_arr_release({});", t));
+                self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                 Val { c: t.clone(), own: Some(t) }
             }
             EK::Null => {
@@ -1626,7 +1637,7 @@ impl<'a> FnGen<'a> {
                     }
                     None => self.line(format!("gort_arr* {} = gort_arr_new(sizeof({}), {});", t, cty, items.len())),
                 }
-                self.register_temp(&t, format!("gort_arr_release({});", t));
+                self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                 for (i, it) in items.iter().enumerate() {
                     let v = self.expr(it);
                     let o = self.own_value(v, &it.ty);
@@ -1744,7 +1755,7 @@ impl<'a> FnGen<'a> {
             if ext && matches!(a.ty, Ty::Arr(_, _)) {
                 // the extern function borrows the array: a count of our own keeps it alive until the statement ends
                 let h = self.copy_value(v, &a.ty);
-                self.register_temp(&h, format!("gort_arr_release({});", h));
+                self.register_temp(&h, format!("gort_arr_release{}({});", asfx(&a.ty), h));
                 cargs.push(format!("(void*){}->data, {}->len", h, h));
                 arr_args.push(h);
                 continue;

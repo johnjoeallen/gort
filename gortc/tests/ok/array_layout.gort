@@ -1,0 +1,32 @@
+package t
+// `Array<T>` is an unshared array (plain count, no lock); `shared Array<T>` has the atomic count and the lock. A new array takes the layout it is stored in.
+struct Cell { v: i64 }
+struct Bag { items: shared Array<i64>, owns owned: Array<i64>, n: i64 }
+fn sum(a: Array<i64>): i64 {
+    var t = 0
+    for (x in a) { t += x }
+    return t
+}
+fn sumShared(a: shared Array<i64>): i64 {
+    var t = 0
+    for (x in a) { t += x }
+    return t
+}
+fn main() {
+    var a: Array<i64> = [1, 2, 3]
+    a[0] = 10
+    println(sum(a))
+    sync (writes a) { a[1] = 20 }            // no lock for an unshared array
+    println(sum(a[1..3]))
+    shared Array<i64> s = [4, 5, 6]
+    sync (writes s) { s[0] = 40 }
+    println(sumShared(s))
+    println(sumShared(s[1..3]))
+    shared Bag b = new Bag { items: [7, 8], owned: [9], n: 2 }
+    sync (writes b) { b.n += 1 }
+    println(b.n)
+    shared Array<i64> c = s.copy()           // a copy keeps the layout
+    println(c.length)
+    Array<Ref<Cell>?> cells = Ref<Cell>?[](2)
+    println(cells.length)
+}

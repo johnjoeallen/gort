@@ -17,13 +17,13 @@ fn handleSequential(conn: Conn, table: shared ResponseTable, cfg: shared ServerC
         try {
             req = input.nextRequest()                        // parks while idle or mid-request
         } catch (e: TooLarge) {
-            writeAll(conn, table.headersTooLarge.bytes)
+            writeAllShared(conn, table.headersTooLarge.bytes)
             ending = Ending.ServerRejected
             break
         }
         if (req == null) break                               // the client closed the connection
         let resp = answer(input.head(req), table)
-        writeAll(conn, resp.bytes)                           // parks if the send buffer is full
+        writeAllShared(conn, resp.bytes)                           // parks if the send buffer is full
         if (!resp.keepAlive) { ending = Ending.ServerClosed; break }
         input.releaseIfDrained()
     }

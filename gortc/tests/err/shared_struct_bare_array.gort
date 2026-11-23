@@ -1,0 +1,4 @@
+// error: holds an unshared handle
+package t
+struct G { xs: Array<i64> }
+fn main() { shared G g = new G { xs: [1] } }

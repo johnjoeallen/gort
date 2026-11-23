@@ -1,4 +1,4 @@
-// error: a shared `Box` holds a `ref` handle in field `c`
+// error: a shared `Box` holds an unshared handle
 package t
 struct Cell { v: i64 }
 struct Box { c: ref Cell }

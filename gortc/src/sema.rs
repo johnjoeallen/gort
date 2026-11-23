@@ -828,7 +828,7 @@ impl<'a> Sema<'a> {
             Ty::Ref(_, Share::Plain) => true,
             Ty::Struct(s) | Ty::Obj(s) => self.prog.structs[*s].fields.iter().any(|f| self.has_plain(&f.ty, depth + 1)),
             Ty::Opt(i) => self.has_plain(i, depth + 1),
-            Ty::Arr(e, _) => self.has_plain(e, depth + 1),
+            Ty::Arr(_, Share::Plain) => true,
             _ => false,
         }
     }
@@ -839,7 +839,8 @@ impl<'a> Sema<'a> {
             return None;
         }
         for f in &self.prog.structs[sid].fields {
-            if self.has_plain(&f.ty, 0) {
+            // an `owns` field is reachable only through its struct, so the struct's lock covers it and a plain count is safe
+            if !f.owned && self.has_plain(&f.ty, 0) {
                 return Some(f.name.clone());
             }
         }
@@ -857,7 +858,7 @@ impl<'a> Sema<'a> {
                     let v = &f.vars[*id];
                     if v.converted && v.conv_share == Share::Shared {
                         if let Some(n) = self.plain_field(*sid, 0) {
-                            errs.push((st.line, format!("a shared `{}` holds a `ref` handle in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
+                            errs.push((st.line, format!("a shared `{}` holds an unshared handle (a `ref`, or an `Array` that is not `shared` or `owns`) in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
                         }
                     }
                 }
@@ -866,7 +867,7 @@ impl<'a> Sema<'a> {
                 visit_expr(e, &mut |x| {
                     if let (EK::NewObj(sid, _), Ty::Ref(_, Share::Shared)) = (&x.kind, &x.ty) {
                         if let Some(n) = self.plain_field(*sid, 0) {
-                            errs.push((x.line, format!("a shared `{}` holds a `ref` handle in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
+                            errs.push((x.line, format!("a shared `{}` holds an unshared handle (a `ref`, or an `Array` that is not `shared` or `owns`) in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
                         }
                     }
                 })
@@ -1040,7 +1041,7 @@ impl<'a> Sema<'a> {
         let mut param_tys = Vec::new();
         for p in &fd.params {
             let t = self.resolve_ty(&p.ty);
-            param_tys.push(if p.variadic && t != Ty::Error { Ty::Arr(Box::new(t), Share::Shared) } else { t });
+            param_tys.push(if p.variadic && t != Ty::Error { Ty::Arr(Box::new(t), Share::Plain) } else { t });
         }
         let ret = match &fd.ret {
             Some(t) => self.resolve_ty(t),
@@ -1333,7 +1334,7 @@ impl<'a> Sema<'a> {
             },
             "Array" => {
                 if self.elem_ok(&inner) {
-                    Ty::Arr(Box::new(inner), Share::Shared)
+                    Ty::Arr(Box::new(inner), Share::Plain)
                 } else {
                     let n = self.prog.type_name(&inner);
                     bad(self, format!("slice 1: an array element must be a scalar, an optional or a plain value, not {}", n))
@@ -1362,8 +1363,8 @@ impl<'a> Sema<'a> {
         }
         let msg = if t.fixed.is_some() {
             Some("`T[N]` is a run of values and takes no `ref` or `shared`; write `Array<shared T>` or `shared Array<..>`".to_string())
-        } else if q == ast::Qual::Ref && matches!(inner, Ty::Arr(..)) {
-            Some("`ref Array` is not built yet: arrays always have atomic counts and a lock; write `Array<..>` or `shared Array<..>`".to_string())
+        } else if q == ast::Qual::Shared && matches!(&inner, Ty::Arr(e, _) if self.has_plain(e, 0)) {
+            Some("a shared array may hold only shared handles, values, scalars and `String`: its elements include a `ref` handle or an unshared array".to_string())
         } else if q == ast::Qual::Ref && matches!(&inner, Ty::Ref(s, _) if self.prog.structs[*s].self_sync) {
             Some("an `extern sync` type is always atomic and takes no `ref`".to_string())
         } else if matches!(inner, Ty::Str) {
@@ -1379,7 +1380,8 @@ impl<'a> Sema<'a> {
             Ty::Struct(s) => Ty::Ref(s, if q == ast::Qual::Ref { Share::Plain } else { Share::Shared }),
             // an `extern` type is a shared handle unless it is written `ref`
             Ty::Ref(s, _) if q == ast::Qual::Ref => Ty::Ref(s, Share::Plain),
-            Ty::Ref(_, _) | Ty::Arr(_, _) => inner,
+            Ty::Arr(e, _) => Ty::Arr(e, if q == ast::Qual::Ref { Share::Plain } else { Share::Shared }),
+            Ty::Ref(_, _) => inner,
             other => {
                 let n = self.prog.type_name(&other);
                 self.error(t.line, t.col, format!("`shared` qualifies a handle, and {} is a value", n));
@@ -2171,6 +2173,22 @@ impl<'a> Sema<'a> {
                 te.ty = Ty::Ref(*t, *sh);
                 te
             }
+            // a new array (`new T[n]`, a literal, a copy) takes the layout of the array type it is stored in
+            (Ty::Arr(e1, _), Ty::Arr(e2, sh), EK::NewArr(..) | EK::ArrLit(..)) if e1 == e2 => {
+                let mut te = te;
+                te.ty = Ty::Arr(e2.clone(), *sh);
+                te
+            }
+            (Ty::Arr(e1, _), Ty::Arr(e2, sh), EK::RtCall(n, _)) if e1 == e2 && matches!(*n, "toBytes" | "copyArr") => {
+                let mut te = te;
+                te.ty = Ty::Arr(e2.clone(), *sh);
+                te
+            }
+            (Ty::Arr(e1, a), Ty::Arr(e2, b), _) if e1 == e2 && a != b => {
+                let (x, y) = if *b == Share::Plain { ("a shared", "an unshared") } else { ("an unshared", "a shared") };
+                self.error(at.0, at.1, format!("expected {}, found {}: {} array cannot be used as {} one; they are different layouts, so make the array {} where it is made", self.prog.type_name(target), self.prog.type_name(&te.ty), x, y, y.splitn(2, ' ').nth(1).unwrap()));
+                error_expr(te.line)
+            }
             (Ty::Ref(s, a), Ty::Ref(t, b), _) if s == t && a != b => {
                 let (x, y) = if *b == Share::Plain { ("shared", "ref") } else { ("ref", "shared") };
                 self.error(at.0, at.1, format!("expected {}, found {}: a `{}` handle cannot be used as a `{}` one; they are different layouts, so declare the object `{}` where it is made", self.prog.type_name(target), self.prog.type_name(&te.ty), x, y, x));
@@ -2417,7 +2435,7 @@ impl<'a> Sema<'a> {
                     return error_expr(line);
                 }
                 let l = self.coerce(cx, l, &Ty::Int(IntTy::Usize), (len.line, len.col));
-                typed(EK::NewArr(el.clone(), Box::new(l)), Ty::Arr(Box::new(el), Share::Shared), line)
+                typed(EK::NewArr(el.clone(), Box::new(l)), Ty::Arr(Box::new(el), Share::Plain), line)
             }
             ExprKind::Lambda(l) => match self.exp_here.clone() {
                 Some(t @ Ty::Fn(..)) => self.lower_lambda(cx, e, l, &t, false),
@@ -2461,7 +2479,7 @@ impl<'a> Sema<'a> {
                     let v = self.lower_expecting(cx, it, &el);
                     out.push(self.coerce(cx, v, &el, (it.line, it.col)));
                 }
-                typed(EK::ArrLit(el.clone(), out), Ty::Arr(Box::new(el), Share::Shared), line)
+                typed(EK::ArrLit(el.clone(), out), Ty::Arr(Box::new(el), Share::Plain), line)
             }
             ExprKind::Cast(x, ty) => {
                 let t = self.resolve_ty(ty);
@@ -2808,7 +2826,9 @@ impl<'a> Sema<'a> {
                 }
                 _ => v,
             };
-            let v = self.coerce(cx, v, t, (a.line, a.col));
+            // a runtime function sees an array as a pointer and a length, so either layout of array goes to it
+            let same_run = is_extern && matches!((&v.ty, t), (Ty::Arr(x, _), Ty::Arr(y, _)) if x == y);
+            let v = if same_run { v } else { self.coerce(cx, v, t, (a.line, a.col)) };
             if is_extern && matches!(t, Ty::Fn(..)) && v.ty != Ty::Error {
                 if !matches!(v.kind, EK::FnRef(..) | EK::Lambda(..)) {
                     self.error(a.line, a.col, "a runtime function takes a named function or an anonymous `fn(..) { }`, not a function-typed variable");
@@ -2996,9 +3016,9 @@ impl<'a> Sema<'a> {
             self.error(targs[0].line, targs[0].col, format!("json cannot decode this type: {}", m));
             return error_expr(line);
         }
-        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
+        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Plain);
         let b = self.lower_expecting(cx, &args[0], &bytes_ty);
-        let b = self.coerce(cx, b, &bytes_ty, (args[0].line, args[0].col));
+        let b = if is_bytes(&b.ty) { b } else { self.coerce(cx, b, &bytes_ty, (args[0].line, args[0].col)) };
         let lim = if args.len() == 2 {
             let ls = self.struct_ids.get("JsonLimits").copied().unwrap();
             let l = self.lower_expecting(cx, &args[1], &Ty::Struct(ls));
@@ -3119,14 +3139,13 @@ impl<'a> Sema<'a> {
                     // `String.toString(bytes)`: a String made of a copy of an Array<u8>. A function of String, not of Array, so other element types
                     // are not asked what they would print; more argument types can be added to it
                     if cx.lookup(tn).is_none() && tn == "String" {
-                        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
                         if name == "toString" && args.len() == 1 {
                             let b = self.lower_expr(cx, &args[0]);
                             let b = self.decay(cx, b, (args[0].line, args[0].col));
                             if b.ty == Ty::Error {
                                 return b;
                             }
-                            if b.ty == bytes_ty {
+                            if is_bytes(&b.ty) {
                                 return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
                             }
                             let n = self.prog.type_name(&b.ty);
@@ -3210,18 +3229,18 @@ impl<'a> Sema<'a> {
                         return typed(EK::RtCall("appendOne", vec![b, a0]), Ty::Unit, line);
                     }
                     // searching: String or Array<u8> receivers, a String or Array<u8> needle
-                    let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
-                    let byteish = matches!(b.ty, Ty::Str) || b.ty == bytes_ty;
+                    let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Plain);
+                    let byteish = matches!(b.ty, Ty::Str) || is_bytes(&b.ty);
                     if byteish && matches!(name.as_str(), "find" | "contains" | "startsWith" | "copyFrom") && args.len() == 1 {
                         let n = self.lower_expr(cx, &args[0]);
                         let n = self.decay(cx, n, (args[0].line, args[0].col));
-                        if n.ty != Ty::Str && n.ty != bytes_ty {
+                        if n.ty != Ty::Str && !is_bytes(&n.ty) {
                             if n.ty != Ty::Error {
                                 self.error(args[0].line, args[0].col, "expected a String or an Array<u8>");
                             }
                             return error_expr(line);
                         }
-                        if name == "copyFrom" && b.ty != bytes_ty {
+                        if name == "copyFrom" && !is_bytes(&b.ty) {
                             self.error(callee.line, callee.col, "only an Array<u8> can be copied into");
                             return error_expr(line);
                         }
@@ -3254,7 +3273,7 @@ impl<'a> Sema<'a> {
                         }
                     }
                     if matches!(b.ty, Ty::Str) && name == "toBytes" && args.is_empty() {
-                        return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared), line);
+                        return typed(EK::RtCall("toBytes", vec![b]), bytes_ty, line);
                     }
                     if matches!(b.ty, Ty::Arr(_, _)) && name == "grow" && args.is_empty() {
                         return typed(EK::RtCall("grow", vec![b]), Ty::Unit, line);
@@ -3969,4 +3988,9 @@ fn expr_mutates(e: &Expr, name: &str) -> bool {
         ExprKind::Cond(a, b, c) => ex(a) || ex(b) || ex(c),
         _ => false,
     }
+}
+
+/// An `Array<u8>` of either layout.
+fn is_bytes(t: &Ty) -> bool {
+    matches!(t, Ty::Arr(e, _) if **e == Ty::Int(IntTy::U8))
 }

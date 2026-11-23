@@ -1,0 +1,5 @@
+// error: a shared array cannot be used as an unshared one
+package t
+fn take(a: Array<i64>) { }
+fn main() { shared Array<i64> s = [1]
+ take(s) }

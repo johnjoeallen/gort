@@ -1,7 +1,7 @@
 // error: calling `bump`, which writes an array field of its argument, needs `sync (writes a.b.xs)`
 // a field reached through another object is asked of the caller, like a direct one
 package t
-struct B { xs: Array<i64> }
+struct B { xs: shared Array<i64> }
 struct A { b: Ref<B> }
 let shared: Ref<A> = new A { b: new B { xs: [1, 2] } }
 fn get(): Ref<A> { return shared }
