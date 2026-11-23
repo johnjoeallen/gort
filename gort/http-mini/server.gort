@@ -3,13 +3,13 @@ package http
 import runtime
 
 // GET / answers "hello"; any other request is a 404.
-fn answer(head: Array<u8>, table: Ref<ResponseTable>): Ref<Resp> {
+fn answer(head: Array<u8>, table: shared ResponseTable): shared Resp {
     if (head.startsWith("GET / ")) return table.ok
     return table.notFound
 }
 
 // Serves one connection until the client leaves or the server ends it.
-fn handleSequential(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>): Ending throws IoError {
+fn handleSequential(conn: Conn, table: shared ResponseTable, cfg: shared ServerConfig): Ending throws IoError {
     var input = Reader.of(conn, cfg)
     var ending = Ending.ClientClosed
     while (true) {
@@ -31,7 +31,7 @@ fn handleSequential(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig
 }
 
 // The root of a connection's vthread: a reset or a failed write ends this connection only.
-fn runConnection(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) {
+fn runConnection(conn: Conn, table: shared ResponseTable, cfg: shared ServerConfig) {
     var ending = Ending.ClientClosed
     try {
         ending = handleSequential(conn, table, cfg)
@@ -47,7 +47,7 @@ fn runConnection(conn: Conn, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) 
     }
 }
 
-fn serve(listener: Listener, table: Ref<ResponseTable>, cfg: Ref<ServerConfig>) throws IoError {   // one per worker
+fn serve(listener: Listener, table: shared ResponseTable, cfg: shared ServerConfig) throws IoError {   // one per worker
     while (true) {
         let conn = listener.accept()                         // parks until a client arrives
         spawn runConnection(conn, table, cfg)                // `conn` moves into the new vthread
@@ -60,7 +60,7 @@ struct Config { port: u16 = 8080, workers: usize = 1 }
 fn main(config: Config) {
     let port = config.port
     let table = ResponseTable.build()
-    let cfg = new ServerConfig()
+    shared ServerConfig cfg = new ServerConfig()
     for (core in 0..config.workers) {
         spawnWorker(core, fn() {                             // the worker's root: throws nothing
             try {
