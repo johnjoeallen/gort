@@ -382,7 +382,7 @@ static gort_arr *gort_arr_slice(gort_arr *a, size_t esize, size_t lo, size_t hi)
     if (lo > hi || hi > a->cap) gort_trap("slice out of range");
     gort_arr *v = gort_arr_alloc();
     gort_arr *root = a->parent ? a->parent : a;
-    v->strong = 1; v->len = v->cap = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root);
+    v->strong = 1; v->len = v->cap = hi - lo; v->data = (char *)a->data + lo * esize; v->parent = gort_arr_retain(root); v->esize = esize;
     __atomic_fetch_add(&gort_live, 1, __ATOMIC_RELAXED);
     return v;
 }

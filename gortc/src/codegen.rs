@@ -1411,6 +1411,12 @@ impl<'a> FnGen<'a> {
                     self.register_temp(&t, format!("gort_arr_release({});", t));
                     return Val { c: t.clone(), own: Some(t) };
                 }
+                if *name == "copyArr" {
+                    let t = self.tmp();
+                    self.line(format!("gort_arr* {0} = gort_arr_new({1}->esize, {1}->len); if ({1}->len) memcpy({0}->data, {1}->data, {1}->len * {1}->esize);", t, a.c));
+                    self.register_temp(&t, format!("gort_arr_release({});", t));
+                    return Val { c: t.clone(), own: Some(t) };
+                }
                 if *name == "toStr" {
                     // a String made of a copy of the bytes (the array's used length)
                     let t = self.tmp();

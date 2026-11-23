@@ -3233,8 +3233,25 @@ impl<'a> Sema<'a> {
                         };
                         return typed(EK::RtCall(rn, vec![b, n]), rt, line);
                     }
-                    if b.ty == bytes_ty && name == "copy" && args.is_empty() {
-                        return typed(EK::RtCall("toBytes", vec![b]), bytes_ty, line);
+                    // `x.copy()`: a new String, or a new Array<T> with the same elements. Elements that hold counts are not copied yet.
+                    if name == "copy" && args.is_empty() && matches!(b.ty, Ty::Str) {
+                        return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
+                    }
+                    if name == "copy" && args.is_empty() {
+                        if let Ty::Arr(el, _) = &b.ty {
+                            let plain = match &**el {
+                                Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Dur | Ty::Inst => true,
+                                Ty::Struct(s) => !self.prog.structs[*s].needs_drop,
+                                _ => false,
+                            };
+                            if !plain {
+                                let n = self.prog.type_name(&b.ty);
+                                self.error(callee.line, callee.col, format!("slice 1: `copy` of {} is not built yet: its elements hold counts", n));
+                                return error_expr(line);
+                            }
+                            let t = b.ty.clone();
+                            return typed(EK::RtCall("copyArr", vec![b]), t, line);
+                        }
                     }
                     if matches!(b.ty, Ty::Str) && name == "toBytes" && args.is_empty() {
                         return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared), line);

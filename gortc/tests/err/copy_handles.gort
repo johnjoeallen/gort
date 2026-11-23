@@ -1,0 +1,7 @@
+// error: `copy` of Array<Ref<Node>?> is not built yet: its elements hold counts
+package t
+struct Node { n: i64 }
+fn main() {
+    let a = Ref<Node>?[](2)
+    let b = a.copy()
+}
