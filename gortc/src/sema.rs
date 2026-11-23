@@ -3578,6 +3578,12 @@ impl<'a> Sema<'a> {
             }
             _ => (a, b),
         };
+        // bytes compare by content: an Array<u8> or a String against either (two Strings take the ordinary path)
+        if matches!(op, BinOp::Eq | BinOp::Ne) && (is_bytes(&a.ty) || a.ty == Ty::Str) && (is_bytes(&b.ty) || b.ty == Ty::Str) && !(a.ty == Ty::Str && b.ty == Ty::Str) {
+            let line = e.line;
+            let eq = typed(EK::RtCall("bytesEq", vec![a, b]), Ty::Bool, line);
+            return if op == BinOp::Eq { eq } else { typed(EK::Unary(UnOp::Not, Box::new(eq)), Ty::Bool, line) };
+        }
         if a.ty != b.ty {
             let (ta, tb) = (self.prog.type_name(&a.ty), self.prog.type_name(&b.ty));
             self.error(e.line, e.col, format!("`{}` needs operands of the same type, found {} and {}", op_name(op), ta, tb));

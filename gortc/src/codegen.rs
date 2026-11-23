@@ -1384,7 +1384,7 @@ impl<'a> FnGen<'a> {
                     self.line(format!("{} {} = {};", cty, yn, y.c));
                     return Val::plain(format!("(({0}) {1} ({2}) ? ({0}) : ({2}))", xn, if *name == "min" { "<" } else { ">" }, yn));
                 }
-                if matches!(*name, "find" | "contains" | "startsWith" | "copyFrom" | "equalsIgnoreCase") {
+                if matches!(*name, "find" | "contains" | "startsWith" | "copyFrom" | "equalsIgnoreCase" | "bytesEq") {
                     let data = |g: &mut Self, e: &TExpr| -> (String, String) {
                         let v = g.expr(e);
                         let n = g.tmp();
@@ -1405,6 +1405,7 @@ impl<'a> FnGen<'a> {
                         }
                         "startsWith" => Val::plain(format!("({0} >= {1} && memcmp({2}, {3}, {1}) == 0)", hl, nl, hd, nd)),
                         "equalsIgnoreCase" => Val::plain(format!("gort_mem_eqi({}, {}, {}, {})", hd, hl, nd, nl)),
+                        "bytesEq" => Val::plain(format!("({0} == {1} && memcmp({2}, {3}, {0}) == 0)", hl, nl, hd, nd)),
                         "contains" => Val::plain(format!("(gort_mem_find({}, {}, {}, {}) >= 0)", hd, hl, nd, nl)),
                         _ => {
                             let t = self.tmp();

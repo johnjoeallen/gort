@@ -1,0 +1,12 @@
+package t
+fn main() {
+    let a = "abc".toBytes()
+    let b = "abc".toBytes()
+    println(a == b)
+    println(a == "abc")
+    println("abc" == a)
+    println(a != "abd")
+    println(a[0..2] == "ab")
+    println(a == "ab")
+    println("x" == "x")
+}
