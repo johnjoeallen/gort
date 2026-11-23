@@ -4,6 +4,8 @@
 pub enum Qual {
     Ref,
     Shared,
+    /// `any T`, in a function's signature: either layout; the function is compiled once for each
+    Any,
 }
 
 #[derive(Debug, Clone)]

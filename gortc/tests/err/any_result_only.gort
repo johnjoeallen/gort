@@ -1,0 +1,4 @@
+// error: has `any` in its result but in no parameter
+package t
+fn make(): any Array<i64> { return [1] }
+fn main() { }

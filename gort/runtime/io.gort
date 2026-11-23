@@ -3,7 +3,7 @@ package runtime
 
 // ---------- sending ----------
 // Sends all of `bytes`. A short send leaves the rest in the frame while the vthread waits for space.
-fn writeAll(conn: Ref<Conn>, bytes: Array<u8>) throws IoError {
+fn writeAll(conn: Ref<Conn>, bytes: any Array<u8>) throws IoError {   // `any`: bytes of either layout (a response built per request, or one shared by every connection)
     var rest = bytes
     while (rest.length > 0) {
         let n = conn.send(rest)   // EAGAIN: park until writable
@@ -11,11 +11,3 @@ fn writeAll(conn: Ref<Conn>, bytes: Array<u8>) throws IoError {
     }
 }
 
-// The same for bytes that are shared between connections (a prebuilt response). A function cannot yet take either layout of array, so there are two.
-fn writeAllShared(conn: Ref<Conn>, bytes: shared Array<u8>) throws IoError {
-    var rest = bytes
-    while (rest.length > 0) {
-        let n = conn.send(rest)
-        rest = rest[n..]
-    }
-}

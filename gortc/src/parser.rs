@@ -366,8 +366,8 @@ impl Parser {
         }
         // `ref T` / `shared T`: soft keywords, a qualifier only when a type name follows (a variable may still be called `shared`)
         let mut qual = None;
-        if (self.is_kw("ref") || self.is_kw("shared")) && matches!(self.peek_at(1).tok, Tok::Ident(_)) {
-            qual = Some(if self.is_kw("ref") { Qual::Ref } else { Qual::Shared });
+        if (self.is_kw("ref") || self.is_kw("shared") || self.is_kw("any")) && matches!(self.peek_at(1).tok, Tok::Ident(_)) {
+            qual = Some(if self.is_kw("ref") { Qual::Ref } else if self.is_kw("any") { Qual::Any } else { Qual::Shared });
             self.bump();
         }
         let (name, t) = self.ident()?;

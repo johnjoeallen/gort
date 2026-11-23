@@ -1,0 +1,6 @@
+// error: are not all `ref` or all `shared`
+package t
+fn both(a: any Array<i64>, b: any Array<i64>): i64 { return a.length + b.length }
+fn main() { Array<i64> u = [1]
+ shared Array<i64> s = [2]
+ println(both(u, s)) }

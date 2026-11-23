@@ -1,0 +1,4 @@
+// error: `any` can only be used in the parameters
+package t
+struct S { xs: any Array<i64> }
+fn main() { }

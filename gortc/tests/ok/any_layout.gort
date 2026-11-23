@@ -1,0 +1,29 @@
+package t
+// `any` in a signature means either layout: the function is compiled once for `ref`/unshared and once for `shared`, and a call picks by its arguments.
+struct Cell { v: i64 }
+fn sum(a: any Array<i64>): i64 {
+    var t = 0
+    for (x in a) { t += x }
+    return t
+}
+fn head(a: any Array<i64>): any Array<i64> { return a[0..2] }
+fn bump(c: any Cell): i64 {
+    sync (writes c) { c.v += 1 }          // a lock in the shared version, none in the ref version
+    return c.v
+}
+fn twice(a: any Array<i64>, c: any Cell): i64 { return sum(a) + bump(c) }
+fn main() {
+    Array<i64> u = [1, 2, 3]
+    shared Array<i64> s = [10, 20, 30]
+    println(sum(u))
+    println(sum(s))
+    println(sum(head(u)))
+    println(sum(head(s)))
+    println(sum([5, 6]))
+    ref Cell rc = new Cell { v: 0 }
+    shared Cell sc = new Cell { v: 100 }
+    println(bump(rc))
+    println(bump(sc))
+    println(twice(u, rc))
+    println(twice(s, sc))
+}

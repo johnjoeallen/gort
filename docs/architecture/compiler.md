@@ -108,7 +108,8 @@ later as a diagnostic and an optimisation (it removes the check) without changin
 lock as before; arrays have the same two layouts (`gort_arr_retain_p`, `gort_arr_release_p`). The rules, with the checks in `sema.rs` (`check_layouts`, `resolve_qualified`, the capture check in
 `lower_lambda`) and `share.rs` (a `ref` object needs no block): [sharing](../sharing.md). `extern sync struct` promises the C code synchronises itself; a
 plain `extern struct` is checked like a Gort type, with `reads fn` and `writes fn` giving each method's use of its receiver (unmarked: writes). The runtime
-declarations are all `extern sync` except `Mapping` and `Crc32`.
+declarations are all `extern sync` except `Mapping` and `Crc32`. A free function with `any` in its signature is declared twice (`f` and `f__shared`) and a call
+picks by its `any` arguments (`declare_any_fn`, `pick_layout`).
 
 ## Packages, `extern` and slices (done)
 

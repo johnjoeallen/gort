@@ -56,6 +56,8 @@ pub struct Sema<'a> {
     instances: HashMap<String, usize>,
     /// the type parameters in scope while an instance is being declared or lowered
     tmap: HashMap<String, Ty>,
+    /// functions over either layout: the name of the `shared` instance, and which parameters are `any`
+    any_fns: HashMap<String, (FnId, Vec<usize>)>,
     /// for each instance: its template and arguments, to unify against
     inst_args: HashMap<usize, (String, Vec<Ty>)>,
     /// the type the expression about to be lowered is expected to have (set by its context)
@@ -96,6 +98,7 @@ pub fn analyze(files: &[ast::File]) -> Result<Program, Vec<Diag>> {
         generics: HashMap::new(),
         instances: HashMap::new(),
         tmap: HashMap::new(),
+        any_fns: HashMap::new(),
         inst_args: HashMap::new(),
         expected: None,
         for_count: 0,
@@ -236,6 +239,7 @@ impl<'a> Sema<'a> {
             self.cur_file = f.name.clone();
             for it in &f.items {
                 match it {
+                    Item::Fn(fd) if fd.owner.is_none() && !fd.is_extern && fd_has_any(fd) => self.declare_any_fn(f, fd),
                     Item::Fn(fd) if fd.owner.is_none() => self.declare_fn(f, fd, None),
                     Item::Struct(sd) if sd.type_params.is_empty() => {
                         let Some(&sid) = self.struct_ids.get(&sd.name) else { continue };
@@ -1036,6 +1040,36 @@ impl<'a> Sema<'a> {
         self.prog.global_inits.push(fid);
     }
 
+    /// A function with `any` in its signature is declared twice, once for each layout: `any` is `ref` in the first and `shared` in the second
+    /// (named `f__shared`). A call picks the one that matches its arguments.
+    fn declare_any_fn(&mut self, f: &ast::File, fd: &ast::FnDecl) {
+        let params: Vec<usize> = fd.params.iter().enumerate().filter(|(_, p)| te_has_any(&p.ty)).map(|(i, _)| i).collect();
+        if params.is_empty() {
+            self.error(fd.line, fd.col, format!("`{}` has `any` in its result but in no parameter: nothing tells it which layout to use", fd.name));
+            return;
+        }
+        for (sh, name) in [(Share::Plain, fd.name.clone()), (Share::Shared, format!("{}__shared", fd.name))] {
+            let mut d = fd.clone();
+            d.name = name.clone();
+            let saved = std::mem::replace(&mut self.tmap, HashMap::from([("$any".to_string(), Ty::Arr(Box::new(Ty::Unit), sh))]));
+            self.declare_fn(f, &d, None);
+            self.tmap = saved;
+            if sh == Share::Shared {
+                if let (Some(&sid), true) = (self.fn_ids.get(&name), self.fn_ids.contains_key(&fd.name)) {
+                    self.any_fns.insert(fd.name.clone(), (sid, params.clone()));
+                }
+            }
+        }
+    }
+
+    /// The layout `any` means in the signature or body being resolved.
+    fn any_share(&self) -> Option<Share> {
+        match self.tmap.get("$any") {
+            Some(Ty::Arr(_, sh)) => Some(*sh),
+            _ => None,
+        }
+    }
+
     fn declare_fn(&mut self, f: &ast::File, fd: &ast::FnDecl, owner: Option<usize>) {
         self.cur_file = f.name.clone();
         let mut param_tys = Vec::new();
@@ -1346,6 +1380,18 @@ impl<'a> Sema<'a> {
 
     /// `shared T` is today's only layout (`Ref<T>`); `ref T` is the plain-count layout, not built yet (docs/sharing.md, Syntax).
     fn resolve_qualified(&mut self, t: &TypeExpr, q: ast::Qual) -> Ty {
+        let q = if q == ast::Qual::Any {
+            match self.any_share() {
+                Some(Share::Shared) => ast::Qual::Shared,
+                Some(Share::Plain) => ast::Qual::Ref,
+                None => {
+                    self.error(t.line, t.col, "`any` can only be used in the parameters, the result and the body of a function that has it in a parameter");
+                    return Ty::Error;
+                }
+            }
+        } else {
+            q
+        };
         let mut plain = t.clone();
         plain.qual = None;
         let inner = self.resolve_ty_base(&plain);
@@ -2792,6 +2838,34 @@ impl<'a> Sema<'a> {
         }
     }
 
+    /// The layout the `any` arguments of a call have. They must agree; a call with none that says (a new array) uses the unshared one.
+    fn pick_layout(&mut self, cx: &mut FnCtx, args: &[Expr], any_params: &[usize], e: &Expr) -> Option<Share> {
+        let mut found: Option<Share> = None;
+        for &i in any_params {
+            let Some(a) = args.get(i) else { continue };
+            let t = self.probe(cx, a);
+            let sh = match &t {
+                Ty::Ref(_, s) | Ty::Arr(_, s) => Some(*s),
+                Ty::Opt(inner) => match &**inner {
+                    Ty::Ref(_, s) | Ty::Arr(_, s) => Some(*s),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(sh) = sh {
+                if let Some(prev) = found {
+                    if prev != sh {
+                        self.error(a.line, a.col, "the `any` arguments of this call are not all `ref` or all `shared`: a function over either layout takes one layout at a time");
+                        let _ = e;
+                        return None;
+                    }
+                }
+                found = Some(sh);
+            }
+        }
+        Some(found.unwrap_or(Share::Plain))
+    }
+
     fn lower_args(&mut self, cx: &mut FnCtx, fid: FnId, args: &[Expr], e: &Expr) -> Option<Vec<TExpr>> {
         let ptys = self.prog.fns[fid].param_tys.clone();
         let variadic = self.prog.fns[fid].variadic;
@@ -3064,6 +3138,14 @@ impl<'a> Sema<'a> {
                         }
                     }
                     if let Some(&fid) = self.fn_ids.get(name) {
+                        let fid = match self.any_fns.get(name).cloned() {
+                            Some((shared_id, any_params)) => match self.pick_layout(cx, args, &any_params, e) {
+                                Some(Share::Shared) => shared_id,
+                                Some(Share::Plain) => fid,
+                                None => return error_expr(line),
+                            },
+                            None => fid,
+                        };
                         let Some(a) = self.lower_args(cx, fid, args, e) else { return error_expr(line) };
                         let ret = self.prog.fns[fid].ret.clone();
                         return typed(EK::Call(fid, a), ret, line);
@@ -3993,4 +4075,12 @@ fn expr_mutates(e: &Expr, name: &str) -> bool {
 /// An `Array<u8>` of either layout.
 fn is_bytes(t: &Ty) -> bool {
     matches!(t, Ty::Arr(e, _) if **e == Ty::Int(IntTy::U8))
+}
+
+fn te_has_any(t: &TypeExpr) -> bool {
+    t.qual == Some(ast::Qual::Any) || t.args.iter().any(te_has_any)
+}
+
+fn fd_has_any(fd: &ast::FnDecl) -> bool {
+    fd.params.iter().any(|p| te_has_any(&p.ty)) || fd.ret.as_ref().map_or(false, te_has_any)
 }
