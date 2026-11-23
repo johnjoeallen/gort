@@ -29,7 +29,7 @@ pub struct Finding {
 
 fn sid_of(t: &Ty) -> Option<usize> {
     match t {
-        Ty::Struct(s) | Ty::Ref(s) | Ty::Obj(s) => Some(*s),
+        Ty::Struct(s) | Ty::Ref(s, _) | Ty::Obj(s) => Some(*s),
         Ty::Opt(i) => sid_of(i),
         _ => None,
     }
@@ -62,7 +62,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
         }
     }
     let mut arr_ok: Vec<Vec<bool>> = prog.fns.iter().enumerate().map(|(i, f)| {
-        f.param_tys.iter().map(|t| matches!(t, Ty::Arr(_)) && (f.is_extern || (f.body.is_some() && !taken[i]))).collect()
+        f.param_tys.iter().map(|t| matches!(t, Ty::Arr(_, _)) && (f.is_extern || (f.body.is_some() && !taken[i]))).collect()
     }).collect();
     loop {
         let mut changed = false;
@@ -102,7 +102,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
             }
             let mut cx = Cx { prog, fid, mutable: &mutable, arr_mutable: &arr_mutable, garr_mutable: &garr_mutable, arr_ok: &arr_ok, owned, infer, viol: HashSet::new(), needs, fresh, ret_fresh: None, borrowed: &borrowed, open: Vec::new(), locals: HashMap::new(), shared_arrs: HashMap::new(), var_field: HashMap::new(), fhits: Vec::new(), fneeds, out: Vec::new(), hits: Vec::new() };
             cx.block(body);
-            fresh_out[fid] = matches!(f.ret, Ty::Ref(_) | Ty::Arr(_)) && cx.ret_fresh == Some(true);
+            fresh_out[fid] = matches!(f.ret, Ty::Ref(_, _) | Ty::Arr(_, _)) && cx.ret_fresh == Some(true);
             hits.extend(cx.hits);
             fhits_out.extend(cx.fhits);
             viol_out.extend(cx.viol);
@@ -123,7 +123,7 @@ pub fn check(prog: &Program) -> Vec<Finding> {
         .filter(|(_, st)| !st.is_extern && st.variants.is_empty())
         .flat_map(|(sid, st)| st.fields.iter().enumerate().filter(|(_, f)| {
             let t = match &f.ty { Ty::Opt(i) => &**i, t => t };
-            match t { Ty::Ref(r) => !prog.structs[*r].is_extern, Ty::Arr(_) => true, _ => false }
+            match t { Ty::Ref(r, _) => !prog.structs[*r].is_extern, Ty::Arr(_, _) => true, _ => false }
         }).map(move |(i, _)| (sid, i))).collect();
     let mode = INFER_OWNS.load(std::sync::atomic::Ordering::Relaxed);
     let mut owned_final = declared.clone();
@@ -220,7 +220,7 @@ fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usiz
                 }
                 assign(b, m);
             }
-            EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_)) => arr(b, m),
+            EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_, _)) => arr(b, m),
             // what a handle points to is another object: writing through `a.b` does not change the field `b` itself
             EK::Deref(_) => {}
             EK::Index(b, _) | EK::Len(b) | EK::Unwrap(b) => assign(b, m),
@@ -242,7 +242,7 @@ fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usiz
         }
     }
     fn touch(e: &TExpr, m: &mut M) {
-        if matches!(e.ty, Ty::Arr(_)) { arr(e, m) } else { assign(e, m) }
+        if matches!(e.ty, Ty::Arr(_, _)) { arr(e, m) } else { assign(e, m) }
     }
     let mut m = M { fields: HashSet::new(), arrs: HashSet::new(), garrs: HashSet::new() };
     for f in &prog.fns {
@@ -251,7 +251,7 @@ fn mutable_fields(prog: &Program, writes: &[Vec<bool>]) -> (HashSet<(usize, usiz
         let mut written: HashSet<VarId> = HashSet::new();
         fn root_arr(e: &TExpr) -> Option<VarId> {
             match &e.kind {
-                EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_)) => match &b.kind {
+                EK::Index(b, _) | EK::Len(b) if matches!(b.ty, Ty::Arr(_, _)) => match &b.kind {
                     EK::Var(v) => Some(*v),
                     _ => None,
                 },
@@ -414,7 +414,7 @@ impl<'a> Cx<'a> {
 
     /// Is `e` a new object that nothing else refers to? A `new`, the result of a fresh function, or a local that has not escaped.
     fn is_fresh_value(&self, e: &TExpr) -> bool {
-        if matches!(e.ty, Ty::Arr(_)) {
+        if matches!(e.ty, Ty::Arr(_, _)) {
             return self.is_fresh_arr(e);
         }
         match &e.kind {
@@ -437,14 +437,14 @@ impl<'a> Cx<'a> {
                 let recv = if let EK::Method(_, r, _) = &strip(e).kind { Some(&**r) } else { None };
                 // is an argument (or the receiver) local: nothing else can reach it?
                 let local = |a: &TExpr| match &a.ty {
-                    Ty::Arr(_) => self.arr_origin(a).is_none(),
-                    Ty::Ref(_) | Ty::Obj(_) | Ty::Opt(_) => self.is_fresh_value(a),
+                    Ty::Arr(_, _) => self.arr_origin(a).is_none(),
+                    Ty::Ref(_, _) | Ty::Obj(_) | Ty::Opt(_) => self.is_fresh_value(a),
                     _ => true,
                 };
                 // an extern function gets a raw pointer, so it may hand back the array it was given or a new one: the result is fresh only
                 // when every array argument is local too
                 if self.prog.fns[*f].body.is_none() {
-                    return args.iter().all(|a| !matches!(a.ty, Ty::Arr(_)) || local(a));
+                    return args.iter().all(|a| !matches!(a.ty, Ty::Arr(_, _)) || local(a));
                 }
                 // a function that returns (a view of) its parameter or a field of its receiver gives back an array that is as local as they are
                 if !self.fresh[*f] {
@@ -521,7 +521,7 @@ impl<'a> Cx<'a> {
         let Some(body) = &info.body else { return out };
         walk_stmts(body, &mut |s| {
             if let TS::Return(Some(e)) = &s.kind {
-                if matches!(e.ty, Ty::Arr(_)) {
+                if matches!(e.ty, Ty::Arr(_, _)) {
                     derived(e, &info.params, &mut out);
                 }
             }
@@ -567,7 +567,7 @@ impl<'a> Cx<'a> {
             TS::Return(Some(e)) => {
                 self.expr(e, s.line, Need::Read);
                 // an array derived from a parameter (`return a[lo..hi]`) is as local as the argument was: checked at the call
-                let fr = self.is_fresh_value(e) || (matches!(e.ty, Ty::Arr(_)) && self.arr_param_derived(e));
+                let fr = self.is_fresh_value(e) || (matches!(e.ty, Ty::Arr(_, _)) && self.arr_param_derived(e));
                 self.ret_fresh = Some(self.ret_fresh.unwrap_or(true) && fr);
                 self.escape_in(&[e]);
             }
@@ -659,8 +659,8 @@ impl<'a> Cx<'a> {
 
     fn owned_handle(&self, e: &TExpr) -> bool {
         let h = match &e.ty {
-            Ty::Ref(_) | Ty::Arr(_) => true,
-            Ty::Opt(i) => matches!(**i, Ty::Ref(_) | Ty::Arr(_)),
+            Ty::Ref(_, _) | Ty::Arr(_, _) => true,
+            Ty::Opt(i) => matches!(**i, Ty::Ref(_, _) | Ty::Arr(_, _)),
             _ => false,
         };
         h && owned_place(self.owned, e)
@@ -814,13 +814,13 @@ impl<'a> Cx<'a> {
                         }
                     }
                 }
-                EK::Index(b, _) | EK::Len(b) | EK::Slice(b, ..) if matches!(b.ty, Ty::Arr(_)) => {
+                EK::Index(b, _) | EK::Len(b) | EK::Slice(b, ..) if matches!(b.ty, Ty::Arr(_, _)) => {
                     self.access_arr(b, Need::Read, line, "reading an array element");
                 }
                 EK::RtCall(n, args) => {
                     let mutator = matches!(*n, "appendArr" | "appendOne" | "grow" | "moveWithin" | "copyFrom");
                     for (k, a) in args.iter().enumerate() {
-                        if matches!(a.ty, Ty::Arr(_)) {
+                        if matches!(a.ty, Ty::Arr(_, _)) {
                             let need = if mutator && k == 0 { Need::Write } else { Need::Read };
                             self.access_arr(a, need, line, if need == Need::Write { "changing an array" } else { "reading an array" });
                         }
@@ -888,7 +888,7 @@ impl<'a> Cx<'a> {
 
     /// An argument that is a `Ref`: the callee reads or writes through it as its summary says, so the caller must hold a block of that strength.
     fn call_arg(&mut self, fid: FnId, slot: usize, a: &TExpr, line: u32) {
-        if matches!(a.ty, Ty::Arr(_)) {
+        if matches!(a.ty, Ty::Arr(_, _)) {
             let lvl = self.needs[fid].get(slot).copied().unwrap_or(0);
             if lvl > 0 {
                 let what = format!("passing it to `{}`, which {} through it,", self.prog.fns[fid].name, if lvl == 2 { "writes" } else { "reads" });
@@ -898,7 +898,7 @@ impl<'a> Cx<'a> {
         }
         self.field_needs(fid, slot, a, line);
         let Some(sid) = (match &a.ty {
-            Ty::Ref(s) | Ty::Obj(s) => Some(*s),
+            Ty::Ref(s, _) | Ty::Obj(s) => Some(*s),
             _ => None,
         }) else { return };
         // a value lent by address: the place itself is reached (a local variable is nobody else's; a field of a shared object is)
@@ -946,9 +946,9 @@ impl<'a> Cx<'a> {
                 self.access_spine(b, need, line);
             }
             EK::Index(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unwrap(b) => {
-                if matches!(b.ty, Ty::Arr(_)) {
+                if matches!(b.ty, Ty::Arr(_, _)) {
                     // storing into an array changes it; picking a handle out of one (`xs[i].n = 1`) only reads it
-                    let n = if matches!(e.ty, Ty::Ref(_) | Ty::Obj(_)) { Need::Read } else { need };
+                    let n = if matches!(e.ty, Ty::Ref(_, _) | Ty::Obj(_)) { Need::Read } else { need };
                     self.access_arr(b, n, line, if n == Need::Write { "changing an array" } else { "reading an array element" });
                     // the array is its own object: the object that holds it is only read to get the handle
                     return self.access_spine(b, Need::Read, line);
@@ -981,7 +981,7 @@ impl<'a> Cx<'a> {
                 let mut n: &TExpr = b;
                 let mut hop = false;
                 loop {
-                    hop |= matches!(n.ty, Ty::Ref(_) | Ty::Obj(_)) || matches!(n.kind, EK::Deref(_) | EK::ObjRef(_) | EK::ObjPlace(_));
+                    hop |= matches!(n.ty, Ty::Ref(_, _) | Ty::Obj(_)) || matches!(n.kind, EK::Deref(_) | EK::ObjRef(_) | EK::ObjPlace(_));
                     match &n.kind {
                         EK::Field(x, _) | EK::Index(x, _) | EK::Len(x) | EK::Unwrap(x) | EK::Borrow(x) | EK::BoxVal(x) | EK::Deref(x) => n = x,
                         _ => break,
@@ -1079,7 +1079,7 @@ impl<'a> Cx<'a> {
             let mut place = base.clone();
             for (sid, idx) in &path {
                 // reaching through a handle is an explicit dereference, as the lowering writes it: the hop counts against blocks on the way
-                if let Ty::Ref(t) | Ty::Obj(t) = place.ty.clone() {
+                if let Ty::Ref(t, _) | Ty::Obj(t) = place.ty.clone() {
                     place = TExpr { kind: EK::Deref(Box::new(place)), ty: Ty::Struct(t), line, lit: false };
                 }
                 let fty = self.prog.structs[*sid].fields[*idx].ty.clone();
@@ -1289,7 +1289,7 @@ fn same_arr(a: &TExpr, b: &TExpr) -> bool {
 
 /// An array, or an optional one
 fn is_arr_ty(t: &Ty) -> bool {
-    matches!(t, Ty::Arr(_)) || matches!(t, Ty::Opt(i) if matches!(**i, Ty::Arr(_)))
+    matches!(t, Ty::Arr(_, _)) || matches!(t, Ty::Opt(i) if matches!(**i, Ty::Arr(_, _)))
 }
 
 fn strip(mut e: &TExpr) -> &TExpr {

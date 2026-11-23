@@ -297,8 +297,8 @@ impl<'a> Sema<'a> {
                     t = *i;
                 }
                 let ok = match &t {
-                    Ty::Ref(r) => !self.prog.structs[*r].is_extern,
-                    Ty::Arr(_) => true,
+                    Ty::Ref(r, _) => !self.prog.structs[*r].is_extern,
+                    Ty::Arr(_, _) => true,
                     _ => false,
                 };
                 if !ok {
@@ -327,7 +327,7 @@ impl<'a> Sema<'a> {
             let np = self.prog.fns[fi].param_tys.len() - usize::from(self.prog.fns[fi].variadic);
             let tys: Vec<Ty> = self.prog.fns[fi].param_tys[..np].iter().cloned().chain(std::iter::once(self.prog.fns[fi].ret.clone())).collect();
             for t in tys {
-                if let Ty::Arr(el) = &t {
+                if let Ty::Arr(el, _) = &t {
                     if !plain(&self.prog, el, 0) {
                         let (line, name, file) = (self.prog.fns[fi].line, self.prog.fns[fi].name.clone(), self.prog.fns[fi].file.clone());
                         self.cur_file = file;
@@ -454,8 +454,8 @@ impl<'a> Sema<'a> {
             _ => ty,
         };
         match (te.name.as_str(), ty) {
-            ("Ref", Ty::Ref(s)) if te.args.len() == 1 => self.unify(&te.args[0], &Ty::Struct(*s), params, b),
-            ("Array", Ty::Arr(el)) if te.args.len() == 1 => self.unify(&te.args[0], el, params, b),
+            ("Ref", Ty::Ref(s, _)) if te.args.len() == 1 => self.unify(&te.args[0], &Ty::Struct(*s), params, b),
+            ("Array", Ty::Arr(el, _)) if te.args.len() == 1 => self.unify(&te.args[0], el, params, b),
             (n, Ty::Struct(s)) => {
                 if let Some((tn, targs)) = self.inst_args.get(s) {
                     if tn == n && targs.len() == te.args.len() {
@@ -525,7 +525,7 @@ impl<'a> Sema<'a> {
         if !te.args.is_empty() || !self.generics.contains_key(&te.name) {
             return self.struct_of(te);
         }
-        if let Some(Ty::Struct(s) | Ty::Ref(s)) = self.exp_here.clone() {
+        if let Some(Ty::Struct(s) | Ty::Ref(s, _)) = self.exp_here.clone() {
             if self.inst_args.get(&s).map(|x| x.0 == te.name).unwrap_or(false) {
                 return Some(s);
             }
@@ -868,7 +868,7 @@ impl<'a> Sema<'a> {
                 f.param_tys
                     .iter()
                     .map(|t| match t {
-                        Ty::Ref(s) => f.body.is_some() && !f.is_extern && !taken[i] && !self.prog.structs[*s].is_extern,
+                        Ty::Ref(s, _) => f.body.is_some() && !f.is_extern && !taken[i] && !self.prog.structs[*s].is_extern,
                         _ => false,
                     })
                     .collect()
@@ -969,7 +969,7 @@ impl<'a> Sema<'a> {
         let mut param_tys = Vec::new();
         for p in &fd.params {
             let t = self.resolve_ty(&p.ty);
-            param_tys.push(if p.variadic && t != Ty::Error { Ty::Arr(Box::new(t)) } else { t });
+            param_tys.push(if p.variadic && t != Ty::Error { Ty::Arr(Box::new(t), Share::Shared) } else { t });
         }
         let ret = match &fd.ret {
             Some(t) => self.resolve_ty(t),
@@ -1183,7 +1183,7 @@ impl<'a> Sema<'a> {
         let base = self.resolve_ty_base(t);
         if t.optional && base != Ty::Error {
             return match base {
-                Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Ref(_) | Ty::Str | Ty::Arr(_) | Ty::Struct(_) => Ty::Opt(Box::new(base)),
+                Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Ref(_, _) | Ty::Str | Ty::Arr(_, _) | Ty::Struct(_) => Ty::Opt(Box::new(base)),
                 other => {
                     let n = self.prog.type_name(&other);
                     self.error(t.line, t.col, format!("{} cannot be optional", n));
@@ -1252,16 +1252,16 @@ impl<'a> Sema<'a> {
         }
         match t.name.as_str() {
             "Ref" => match inner {
-                Ty::Struct(s) => Ty::Ref(s),
+                Ty::Struct(s) => Ty::Ref(s, Share::Shared),
                 // a reference to a reference is the reference (`Ref<T>` where T is itself a `Ref`, also an extern struct)
-                Ty::Ref(s) => Ty::Ref(s),
+                Ty::Ref(s, _) => Ty::Ref(s, Share::Shared),
                 // inside a generic, `Ref<T>` with a scalar or handle T is a borrow of the value: the value
                 other if !self.tmap.is_empty() && !matches!(other, Ty::Error) => other,
                 other => bad(self, format!("slice 0: Ref<T> needs a struct type, found {}", self.prog.type_name(&other))),
             },
             "Array" => {
                 if self.elem_ok(&inner) {
-                    Ty::Arr(Box::new(inner))
+                    Ty::Arr(Box::new(inner), Share::Shared)
                 } else {
                     let n = self.prog.type_name(&inner);
                     bad(self, format!("slice 1: an array element must be a scalar, an optional or a plain value, not {}", n))
@@ -1293,8 +1293,8 @@ impl<'a> Sema<'a> {
             return Ty::Error;
         }
         match inner {
-            Ty::Struct(s) => Ty::Ref(s),
-            Ty::Ref(_) | Ty::Arr(_) => inner,
+            Ty::Struct(s) => Ty::Ref(s, Share::Shared),
+            Ty::Ref(_, _) | Ty::Arr(_, _) => inner,
             other => {
                 let n = self.prog.type_name(&other);
                 self.error(t.line, t.col, format!("`shared` qualifies a handle, and {} is a value", n));
@@ -1306,7 +1306,7 @@ impl<'a> Sema<'a> {
     /// An `extern` struct is an object of the runtime and always lives behind a counted handle.
     fn struct_ty(&self, s: usize) -> Ty {
         if self.prog.structs[s].is_extern {
-            Ty::Ref(s)
+            Ty::Ref(s, Share::Shared)
         } else {
             Ty::Struct(s)
         }
@@ -1545,7 +1545,7 @@ impl<'a> Sema<'a> {
                 let (r, i) = (format!("_for{}", self.for_count), format!("_for{}i", self.for_count));
                 let ity = self.probe(cx, iter);
                 let is_range = matches!(&ity, Ty::Struct(sid) if self.prog.structs[*sid].name == "Range");
-                let is_arr = matches!(ity, Ty::Arr(_));
+                let is_arr = matches!(ity, Ty::Arr(_, _));
                 if !is_range && !is_arr {
                     if ity != Ty::Error {
                         let n = self.prog.type_name(&ity);
@@ -1651,7 +1651,7 @@ impl<'a> Sema<'a> {
                     let v = self.decay(cx, v, (target.line, target.col));
                     // an optional handle locks what it points to; null is the same NullValue failure as using it
                     let v = match &v.ty {
-                        Ty::Opt(inner) if matches!(**inner, Ty::Ref(_) | Ty::Arr(_)) => {
+                        Ty::Opt(inner) if matches!(**inner, Ty::Ref(_, _) | Ty::Arr(_, _)) => {
                             let (ty, line) = ((**inner).clone(), v.line);
                             TExpr { kind: EK::Unwrap(Box::new(v)), ty, line, lit: false }
                         }
@@ -1659,12 +1659,12 @@ impl<'a> Sema<'a> {
                     };
                     match &v.ty {
                         Ty::Error => ok = false,
-                        Ty::Ref(sid) if self.prog.structs[*sid].is_extern => {
+                        Ty::Ref(sid, _) if self.prog.structs[*sid].is_extern => {
                             let n = self.prog.structs[*sid].name.clone();
                             self.error(target.line, target.col, format!("`{}` is an extern type: it synchronises itself and needs no sync block", n));
                             ok = false;
                         }
-                        Ty::Ref(_) | Ty::Arr(_) => {
+                        Ty::Ref(_, _) | Ty::Arr(_, _) => {
                             // the same object under both reads and writes is a mistake, not a request for the stronger lock
                             if let Some((w0, _)) = vs.iter().find(|(w0, t0)| *w0 != *write && same_place(t0, &v)) {
                                 let (a, b) = if *w0 { ("writes", "reads") } else { ("reads", "writes") };
@@ -1730,7 +1730,7 @@ impl<'a> Sema<'a> {
                 let mut tcs = Vec::new();
                 for (c, k) in catches.iter().zip(kinds.iter()) {
                     cx.scopes.push(HashMap::new());
-                    let vty = if *k == ANY_EXC { Ty::Exc } else { Ty::Ref(*k) };
+                    let vty = if *k == ANY_EXC { Ty::Exc } else { Ty::Ref(*k, Share::Shared) };
                     let var = self.new_var(cx, &c.name, vty, false, false, (c.line, c.col));
                     let cb = self.lower_block_in_current_scope(cx, &c.body);
                     cx.scopes.pop();
@@ -1754,7 +1754,7 @@ impl<'a> Sema<'a> {
         let subj = if subj.lit { self.finish_lit(subj) } else { subj };
         // a `Ref` to an enum is switched on through the handle
         let subj = match &subj.ty {
-            Ty::Ref(sid) if self.prog.is_enum(&Ty::Struct(*sid)).is_some() => {
+            Ty::Ref(sid, _) if self.prog.is_enum(&Ty::Struct(*sid)).is_some() => {
                 let l = subj.line;
                 let sid = *sid;
                 typed(EK::Deref(Box::new(subj)), Ty::Struct(sid), l)
@@ -1949,7 +1949,7 @@ impl<'a> Sema<'a> {
         if let (Ty::Obj(s), EK::Var(id)) = (&te.ty, &te.kind) {
             let (s, id) = (*s, *id);
             self.mark_converted(cx, id, at.0);
-            return typed(EK::ObjRef(id), Ty::Ref(s), te.line);
+            return typed(EK::ObjRef(id), Ty::Ref(s, Share::Shared), te.line);
         }
         te
     }
@@ -2026,7 +2026,7 @@ impl<'a> Sema<'a> {
             return te;
         }
         // a string literal given where bytes are wanted: its bytes, as a fresh array
-        if let (EK::StrLit(_), Ty::Arr(el)) = (&te.kind, target) {
+        if let (EK::StrLit(_), Ty::Arr(el, _)) = (&te.kind, target) {
             if **el == Ty::Int(IntTy::U8) {
                 let line = te.line;
                 return typed(EK::RtCall("toBytes", vec![te]), target.clone(), line);
@@ -2067,22 +2067,22 @@ impl<'a> Sema<'a> {
             }
         }
         match (&te.ty, target, &te.kind) {
-            (Ty::Obj(s), Ty::Ref(t), EK::Var(id)) if s == t => {
+            (Ty::Obj(s), Ty::Ref(t, _), EK::Var(id)) if s == t => {
                 let id = *id;
                 self.mark_converted(cx, id, at.0);
-                typed(EK::ObjRef(id), Ty::Ref(*s), te.line)
+                typed(EK::ObjRef(id), Ty::Ref(*s, Share::Shared), te.line)
             }
             (Ty::Obj(s), Ty::Struct(t), EK::Var(id)) if s == t => {
                 let r = typed(EK::ObjPlace(*id), Ty::Struct(*s), te.line);
                 self.check_copyable(&r, at);
                 r
             }
-            (Ty::Ref(s), Ty::Struct(t), _) if s == t => {
+            (Ty::Ref(s, _), Ty::Struct(t), _) if s == t => {
                 let r = typed(EK::Deref(Box::new(te.clone())), Ty::Struct(*s), te.line);
                 self.check_copyable(&r, at);
                 r
             }
-            (Ty::Struct(s), Ty::Ref(t), _) if s == t => {
+            (Ty::Struct(s), Ty::Ref(t, _), _) if s == t => {
                 self.mismatch(&te.ty, target, at, "; write `new` to allocate a counted object");
                 error_expr(te.line)
             }
@@ -2176,7 +2176,7 @@ impl<'a> Sema<'a> {
                 if base.ty == Ty::Error {
                     return base;
                 }
-                if !matches!(base.ty, Ty::Arr(_)) {
+                if !matches!(base.ty, Ty::Arr(_, _)) {
                     let n = self.prog.type_name(&base.ty);
                     self.error(e.line, e.col, format!("only an array can be sliced, not {}", n));
                     return error_expr(line);
@@ -2216,7 +2216,7 @@ impl<'a> Sema<'a> {
                     }
                 };
                 match &base.ty {
-                    Ty::Arr(el) => {
+                    Ty::Arr(el, _) => {
                         let el = (**el).clone();
                         typed(EK::Index(Box::new(base), Box::new(idx)), el, line)
                     }
@@ -2235,8 +2235,8 @@ impl<'a> Sema<'a> {
                 }
                 // a field of an object, holding an array (left as an empty one) or an optional handle (left null)
                 let movable = match &v.ty {
-                    Ty::Arr(_) => true,
-                    Ty::Opt(i) => matches!(**i, Ty::Ref(_) | Ty::Arr(_)),
+                    Ty::Arr(_, _) => true,
+                    Ty::Opt(i) => matches!(**i, Ty::Ref(_, _) | Ty::Arr(_, _)),
                     _ => false,
                 };
                 if !matches!(v.kind, EK::Field(..)) || !movable {
@@ -2299,7 +2299,7 @@ impl<'a> Sema<'a> {
                     return error_expr(line);
                 };
                 let fs = self.lower_fields(cx, sid, fields, e.line, e.col);
-                typed(EK::NewObj(sid, fs), Ty::Ref(sid), line)
+                typed(EK::NewObj(sid, fs), Ty::Ref(sid, Share::Shared), line)
             }
             ExprKind::NewArray(ty, len) => {
                 let el = self.resolve_ty(ty);
@@ -2313,7 +2313,7 @@ impl<'a> Sema<'a> {
                     return error_expr(line);
                 }
                 let l = self.coerce(cx, l, &Ty::Int(IntTy::Usize), (len.line, len.col));
-                typed(EK::NewArr(el.clone(), Box::new(l)), Ty::Arr(Box::new(el)), line)
+                typed(EK::NewArr(el.clone(), Box::new(l)), Ty::Arr(Box::new(el), Share::Shared), line)
             }
             ExprKind::Lambda(l) => match self.exp_here.clone() {
                 Some(t @ Ty::Fn(..)) => self.lower_lambda(cx, e, l, &t, false),
@@ -2328,7 +2328,7 @@ impl<'a> Sema<'a> {
             }
             ExprKind::ArrayLit(items) => {
                 let want = match self.exp_here.clone() {
-                    Some(Ty::Arr(el)) => Some(*el),
+                    Some(Ty::Arr(el, _)) => Some(*el),
                     _ => None,
                 };
                 let el = match want {
@@ -2357,7 +2357,7 @@ impl<'a> Sema<'a> {
                     let v = self.lower_expecting(cx, it, &el);
                     out.push(self.coerce(cx, v, &el, (it.line, it.col)));
                 }
-                typed(EK::ArrLit(el.clone(), out), Ty::Arr(Box::new(el)), line)
+                typed(EK::ArrLit(el.clone(), out), Ty::Arr(Box::new(el), Share::Shared), line)
             }
             ExprKind::Cast(x, ty) => {
                 let t = self.resolve_ty(ty);
@@ -2421,7 +2421,7 @@ impl<'a> Sema<'a> {
                 }
                 None => {
                     // a `Ref<Map<K, V>>` field left out starts as an empty map
-                    if let Ty::Ref(m) = &fty {
+                    if let Ty::Ref(m, _) = &fty {
                         if self.inst_args.get(m).map(|(n, _)| n == "Map").unwrap_or(false) {
                             let m = *m;
                             let fs = self.lower_fields(cx, m, &[], line, col);
@@ -2436,7 +2436,7 @@ impl<'a> Sema<'a> {
                             let i = self.intern(b"");
                             Some(typed(EK::StrLit(i), Ty::Str, line))
                         }
-                        Ty::Arr(el) => {
+                        Ty::Arr(el, _) => {
                             let n = typed(EK::Int(0), Ty::Int(IntTy::Usize), line);
                             Some(typed(EK::NewArr((**el).clone(), Box::new(n)), fty.clone(), line))
                         }
@@ -2534,7 +2534,7 @@ impl<'a> Sema<'a> {
     /// Structs and enums compare field by field (an enum: the tag, then the live variant's payload).
     fn eq_ok(&self, t: &Ty, depth: usize) -> bool {
         match t {
-            Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Str | Ty::Ref(_) | Ty::Dur | Ty::Inst | Ty::Fn(..) => true,
+            Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Str | Ty::Ref(_, _) | Ty::Dur | Ty::Inst | Ty::Fn(..) => true,
             Ty::Opt(i) => self.eq_ok(i, depth),
             Ty::Struct(s) => depth < 16 && self.prog.structs[*s].fields.iter().all(|f| self.eq_ok(&f.ty, depth + 1)),
             _ => false,
@@ -2556,7 +2556,7 @@ impl<'a> Sema<'a> {
         let line = b.line;
         match (&b.ty, &b.kind) {
             (Ty::Obj(s), EK::Var(id)) => typed(EK::ObjPlace(*id), Ty::Struct(*s), line),
-            (Ty::Ref(s), _) => {
+            (Ty::Ref(s, _), _) => {
                 let s = *s;
                 typed(EK::Deref(Box::new(b)), Ty::Struct(s), line)
             }
@@ -2641,7 +2641,7 @@ impl<'a> Sema<'a> {
         if b.ty == Ty::Error {
             return b;
         }
-        if matches!(b.ty, Ty::Arr(_) | Ty::Str) {
+        if matches!(b.ty, Ty::Arr(_, _) | Ty::Str) {
             if name == "length" {
                 return typed(EK::Len(Box::new(b)), Ty::Int(IntTy::Usize), line);
             }
@@ -2693,11 +2693,11 @@ impl<'a> Sema<'a> {
             };
             // a plain value given to a `Ref<T>` parameter is lent, if the callee only borrows (checked later)
             let v = match (&v.ty, t) {
-                (Ty::Opt(i), Ty::Ref(y)) if matches!(&**i, Ty::Struct(x) if x == y) => self.unwrap_opt(v),
+                (Ty::Opt(i), Ty::Ref(y, _)) if matches!(&**i, Ty::Struct(x) if x == y) => self.unwrap_opt(v),
                 _ => v,
             };
             let v = match (&v.ty, t) {
-                (Ty::Struct(x), Ty::Ref(y)) if x == y && !is_extern => {
+                (Ty::Struct(x), Ty::Ref(y, _)) if x == y && !is_extern => {
                     let l = v.line;
                     self.borrow_sites.push((fid, out.len(), a.line, a.col));
                     typed(EK::Borrow(Box::new(v)), t.clone(), l)
@@ -2717,7 +2717,7 @@ impl<'a> Sema<'a> {
             }
         }
         if variadic {
-            let Ty::Arr(el) = ptys[fixed].clone() else { return None };
+            let Ty::Arr(el, _) = ptys[fixed].clone() else { return None };
             let mut items = Vec::new();
             for a in &args[fixed..] {
                 let v = self.lower_expecting(cx, a, &el);
@@ -2817,7 +2817,7 @@ impl<'a> Sema<'a> {
         for (x, p) in args.iter().zip(ps.iter()) {
             let v = self.lower_expecting(cx, x, p);
             let v = match (&v.ty, p) {
-                (Ty::Struct(s1), Ty::Ref(s2)) if s1 == s2 => {
+                (Ty::Struct(s1), Ty::Ref(s2, _)) if s1 == s2 => {
                     let l = v.line;
                     typed(EK::BoxVal(Box::new(v)), p.clone(), l)
                 }
@@ -2883,7 +2883,7 @@ impl<'a> Sema<'a> {
             self.error(targs[0].line, targs[0].col, format!("json cannot decode this type: {}", m));
             return error_expr(line);
         }
-        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)));
+        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
         let b = self.lower_expecting(cx, &args[0], &bytes_ty);
         let b = self.coerce(cx, b, &bytes_ty, (args[0].line, args[0].col));
         let lim = if args.len() == 2 {
@@ -2972,7 +2972,7 @@ impl<'a> Sema<'a> {
             ExprKind::Field(base, name) if matches!(base.kind, ExprKind::TypeName(_)) => {
                 let ExprKind::TypeName(te) = &base.kind else { unreachable!() };
                 match self.resolve_ty(te) {
-                    Ty::Struct(sid) | Ty::Ref(sid) => {
+                    Ty::Struct(sid) | Ty::Ref(sid, _) => {
                         if self.prog.structs[sid].variants.iter().any(|v| v.name == *name) {
                             return self.lower_variant(cx, e, sid, name, args);
                         }
@@ -3055,15 +3055,15 @@ impl<'a> Sema<'a> {
                     }
                     return b;
                 }
-                if matches!(b.ty, Ty::Str | Ty::Arr(_)) {
+                if matches!(b.ty, Ty::Str | Ty::Arr(_, _)) {
                     // `length` is how many elements are in use; `capacity()` how many the run holds (indexing and slicing go up to it)
                     if name == "length" && args.is_empty() {
                         return typed(EK::Len(Box::new(b)), Ty::Int(IntTy::Usize), line);
                     }
-                    if name == "capacity" && matches!(b.ty, Ty::Arr(_)) && args.is_empty() {
+                    if name == "capacity" && matches!(b.ty, Ty::Arr(_, _)) && args.is_empty() {
                         return typed(EK::RtCall("capacity", vec![b]), Ty::Int(IntTy::Usize), line);
                     }
-                    if let (Ty::Arr(el), "append", 1) = (&b.ty, name.as_str(), args.len()) {
+                    if let (Ty::Arr(el, _), "append", 1) = (&b.ty, name.as_str(), args.len()) {
                         let el = (**el).clone();
                         if !matches!(el, Ty::Int(_) | Ty::Bool | Ty::F64) {
                             self.error(callee.line, callee.col, "append works on arrays of numbers and booleans");
@@ -3077,7 +3077,7 @@ impl<'a> Sema<'a> {
                         return typed(EK::RtCall("appendOne", vec![b, a0]), Ty::Unit, line);
                     }
                     // searching: String or Array<u8> receivers, a String or Array<u8> needle
-                    let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)));
+                    let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
                     let byteish = matches!(b.ty, Ty::Str) || b.ty == bytes_ty;
                     if byteish && matches!(name.as_str(), "find" | "contains" | "startsWith" | "copyFrom") && args.len() == 1 {
                         let n = self.lower_expr(cx, &args[0]);
@@ -3104,12 +3104,12 @@ impl<'a> Sema<'a> {
                         return typed(EK::RtCall("toBytes", vec![b]), bytes_ty, line);
                     }
                     if matches!(b.ty, Ty::Str) && name == "toBytes" && args.is_empty() {
-                        return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8))), line);
+                        return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared), line);
                     }
-                    if matches!(b.ty, Ty::Arr(_)) && name == "grow" && args.is_empty() {
+                    if matches!(b.ty, Ty::Arr(_, _)) && name == "grow" && args.is_empty() {
                         return typed(EK::RtCall("grow", vec![b]), Ty::Unit, line);
                     }
-                    if matches!(b.ty, Ty::Arr(_)) && name == "moveWithin" && args.len() == 2 {
+                    if matches!(b.ty, Ty::Arr(_, _)) && name == "moveWithin" && args.len() == 2 {
                         let rs = self.struct_ids.get("Range").copied();
                         let r = match rs {
                             Some(sid) => {
@@ -3226,7 +3226,7 @@ impl<'a> Sema<'a> {
         }
         if matches!(op, BinOp::Eq | BinOp::Ne) && (a.ty == Ty::Null || b.ty == Ty::Null) {
             let other = if a.ty == Ty::Null { b } else { a };
-            if !matches!(other.ty, Ty::Opt(_) | Ty::Ref(_)) {
+            if !matches!(other.ty, Ty::Opt(_) | Ty::Ref(_, _)) {
                 let n = self.prog.type_name(&other.ty);
                 self.error(e.line, e.col, format!("{} is never null; only an optional or a `Ref` can be compared with `null`", n));
                 return error_expr(line);
@@ -3327,7 +3327,7 @@ impl<'a> Sema<'a> {
                 _ => false,
             }
         } else if matches!(op, BinOp::Eq | BinOp::Ne) {
-            matches!(t, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Str | Ty::Ref(_)) || self.eq_ok(&t, 0)
+            matches!(t, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Str | Ty::Ref(_, _)) || self.eq_ok(&t, 0)
         } else {
             matches!(t, Ty::Int(_) | Ty::F64)
         };
@@ -3427,7 +3427,7 @@ pub(crate) fn place_name(prog: &Program, f: &FnInfo, e: &TExpr) -> String {
         EK::Field(b, i) => {
             let bn = place_name(prog, f, b);
             match &b.ty {
-                Ty::Struct(s) | Ty::Ref(s) | Ty::Obj(s) => format!("{}.{}", bn, prog.structs[*s].fields[*i].name),
+                Ty::Struct(s) | Ty::Ref(s, _) | Ty::Obj(s) => format!("{}.{}", bn, prog.structs[*s].fields[*i].name),
                 _ => bn,
             }
         }

@@ -210,7 +210,7 @@ impl<'a> Gen<'a> {
             ps.push(format!("G_{}* self", self.prog.structs[o].name));
         }
         for (i, t) in f.param_tys.iter().enumerate() {
-            if f.is_extern && matches!(t, Ty::Arr(_)) {
+            if f.is_extern && matches!(t, Ty::Arr(_, _)) {
                 // an array travels as a raw pointer and a length; the caller keeps the array alive for the call
                 ps.push(format!("void* p{0}, size_t p{0}_len", i));
             } else if f.is_extern && matches!(t, Ty::Fn(..)) {
@@ -220,7 +220,7 @@ impl<'a> Gen<'a> {
                 ps.push(format!("{} p{}", self.ctype(t), i));
             }
         }
-        let rty = if f.is_extern && matches!(f.ret, Ty::Arr(_)) { "gort_xarr".to_string() } else { self.ctype(&f.ret) };
+        let rty = if f.is_extern && matches!(f.ret, Ty::Arr(_, _)) { "gort_xarr".to_string() } else { self.ctype(&f.ret) };
         let rt = if f.throws.is_empty() {
             rty
         } else {
@@ -265,14 +265,14 @@ impl<'a> Gen<'a> {
 
     fn field_copy_line(&self, ty: &Ty, fc: &str) -> String {
         match ty {
-            Ty::Ref(t) => format!("d->{0} = (G_{1}*)gort_retain(s->{0});", fc, self.prog.structs[*t].name),
+            Ty::Ref(t, _) => format!("d->{0} = (G_{1}*)gort_retain(s->{0});", fc, self.prog.structs[*t].name),
             Ty::Str => format!("d->{0} = gort_str_retain(s->{0});", fc),
-            Ty::Arr(_) => format!("d->{0} = gort_arr_retain(s->{0});", fc),
+            Ty::Arr(_, _) => format!("d->{0} = gort_arr_retain(s->{0});", fc),
             Ty::Struct(t) if self.prog.structs[*t].needs_drop => {
                 format!("G_{}_copy(&d->{}, &s->{});", self.prog.structs[*t].name, fc, fc)
             }
             Ty::Opt(i) if i.is_handle() => match &**i {
-                Ty::Ref(t) => format!("d->{0} = s->{0} ? (G_{1}*)gort_retain(s->{0}) : NULL;", fc, self.prog.structs[*t].name),
+                Ty::Ref(t, _) => format!("d->{0} = s->{0} ? (G_{1}*)gort_retain(s->{0}) : NULL;", fc, self.prog.structs[*t].name),
                 Ty::Str => format!("d->{0} = s->{0} ? gort_str_retain(s->{0}) : NULL;", fc),
                 _ => format!("d->{0} = s->{0} ? gort_arr_retain(s->{0}) : NULL;", fc),
             },
@@ -340,8 +340,8 @@ fn ctype(prog: &Program, t: &Ty) -> String {
         Ty::F64 => "double".into(),
         Ty::Str => "gort_str*".into(),
         Ty::Struct(s) => format!("G_{}", prog.structs[*s].name),
-        Ty::Ref(s) => format!("G_{}*", prog.structs[*s].name),
-        Ty::Arr(_) => "gort_arr*".into(),
+        Ty::Ref(s, _) => format!("G_{}*", prog.structs[*s].name),
+        Ty::Arr(_, _) => "gort_arr*".into(),
         Ty::Obj(s) => format!("G_{}", prog.structs[*s].name),
         Ty::Opt(i) if i.is_handle() => ctype(prog, i),
         Ty::Opt(i) => opt_name(prog, i),
@@ -356,9 +356,9 @@ fn ctype(prog: &Program, t: &Ty) -> String {
 /// The statement that releases the counts held by `lv` (an lvalue of type `t`), if it holds any.
 fn drop_code(prog: &Program, t: &Ty, lv: &str) -> Option<String> {
     match t {
-        Ty::Ref(s) => Some(format!("G_{}_release({});", prog.structs[*s].name, lv)),
+        Ty::Ref(s, _) => Some(format!("G_{}_release({});", prog.structs[*s].name, lv)),
         Ty::Str => Some(format!("gort_str_release({});", lv)),
-        Ty::Arr(_) => Some(format!("gort_arr_release({});", lv)),
+        Ty::Arr(_, _) => Some(format!("gort_arr_release({});", lv)),
         Ty::Exc => Some(format!("gort_exc_release(&{});", lv)),
         Ty::Opt(i) if i.is_handle() => drop_code(prog, i, lv).map(|d| format!("if ({}) {{ {} }}", lv, d)),
         Ty::Opt(i) => drop_code(prog, i, &format!("{}.v", lv)).map(|d| format!("if ({}.has) {{ {} }}", lv, d)),
@@ -555,7 +555,7 @@ impl<'a> FnGen<'a> {
             || v.c == "false"
             || (v.c.starts_with('t') && v.c.len() > 1 && v.c[1..].chars().all(|c| c.is_ascii_digit()));
         match ty {
-            Ty::Ref(s) => {
+            Ty::Ref(s, _) => {
                 let t = self.tmp();
                 let cn = self.prog.structs[*s].name.clone();
                 self.line(format!("G_{0}* {1} = (G_{0}*)gort_retain({2});", cn, t, v.c));
@@ -566,7 +566,7 @@ impl<'a> FnGen<'a> {
                 self.line(format!("gort_str* {} = gort_str_retain({});", t, v.c));
                 t
             }
-            Ty::Arr(_) => {
+            Ty::Arr(_, _) => {
                 let t = self.tmp();
                 self.line(format!("gort_arr* {} = gort_arr_retain({});", t, v.c));
                 t
@@ -587,7 +587,7 @@ impl<'a> FnGen<'a> {
                 let t = self.tmp();
                 let cty = self.ct(ty);
                 let r = match &**i {
-                    Ty::Ref(s) => format!("(G_{}*)gort_retain({})", self.prog.structs[*s].name, v.c),
+                    Ty::Ref(s, _) => format!("(G_{}*)gort_retain({})", self.prog.structs[*s].name, v.c),
                     Ty::Str => format!("gort_str_retain({})", v.c),
                     _ => format!("gort_arr_retain({})", v.c),
                 };
@@ -933,14 +933,14 @@ impl<'a> FnGen<'a> {
                 let mut rs: Vec<String> = Vec::new();
                 for (_, target) in targets {
                     let (cty, rel) = match &target.ty {
-                        Ty::Ref(sid) => {
+                        Ty::Ref(sid, _) => {
                             let sn = self.prog.structs[*sid].name.clone();
                             (format!("G_{}*", sn), format!("G_{}_release", sn))
                         }
-                        Ty::Arr(_) => ("gort_arr*".to_string(), "gort_arr_release".to_string()),
+                        Ty::Arr(_, _) => ("gort_arr*".to_string(), "gort_arr_release".to_string()),
                         _ => unreachable!(),
                     };
-                    let is_arr = matches!(target.ty, Ty::Arr(_));
+                    let is_arr = matches!(target.ty, Ty::Arr(_, _));
                     self.push_frame();
                     let v = self.expr(target);
                     let r = self.tmp();
@@ -1058,7 +1058,7 @@ impl<'a> FnGen<'a> {
                     let vty = self.f.vars[c.var].ty.clone();
                     let name = self.declare(c.var, &vty);
                     match &vty {
-                        Ty::Ref(s) => self.line(format!("{} = (G_{}*)gort_exc.obj; gort_exc.obj = NULL;", name, self.prog.structs[*s].name)),
+                        Ty::Ref(s, _) => self.line(format!("{} = (G_{}*)gort_exc.obj; gort_exc.obj = NULL;", name, self.prog.structs[*s].name)),
                         _ => self.line(format!("{} = gort_exc; gort_exc.obj = NULL;", name)),
                     }
                     self.scopes.push(Vec::new());
@@ -1135,7 +1135,7 @@ impl<'a> FnGen<'a> {
             EK::Deref(r) => {
                 let rv = self.expr(r);
                 // a handle may be null: using it is a NullValue exception where the function can throw one, else a trap
-                if matches!(r.ty, Ty::Ref(_)) && !matches!(r.kind, EK::CName(_)) {
+                if matches!(r.ty, Ty::Ref(_, _)) && !matches!(r.kind, EK::CName(_)) {
                     let h = self.hold(Val { c: rv.c, own: None }, &r.ty);
                     let handled = self.try_stack.iter().any(|t| t.catches_null)
                         || self.f.throws.iter().any(|t| *t == ANY_EXC || Some(*t) == self.prog.null_exc);
@@ -1165,7 +1165,7 @@ impl<'a> FnGen<'a> {
                 let av = if has_effects(i) { self.hold(av, &a.ty) } else { av };
                 let iv = self.expr(i);
                 match &a.ty {
-                    Ty::Arr(el) => {
+                    Ty::Arr(el, _) => {
                         let cty = self.ct(el);
                         Val::plain(format!("(((({}*)({})->data))[gort_chk((size_t)({}), ({})->cap)])", cty, av.c, iv.c, av.c))
                     }
@@ -1188,7 +1188,7 @@ impl<'a> FnGen<'a> {
                     None => format!("({})->len", av.c),
                 };
                 let el = match &a.ty {
-                    Ty::Arr(el) => self.ct(el),
+                    Ty::Arr(el, _) => self.ct(el),
                     _ => unreachable!(),
                 };
                 let t = self.tmp();
@@ -1268,7 +1268,7 @@ impl<'a> FnGen<'a> {
                 }
             }
             EK::BoxVal(inner) => {
-                let Ty::Ref(s) = &e.ty else { unreachable!() };
+                let Ty::Ref(s, _) = &e.ty else { unreachable!() };
                 let sn = self.prog.structs[*s].name.clone();
                 let v = self.expr(inner);
                 let o = self.own_value(v, &inner.ty);
@@ -1481,7 +1481,7 @@ impl<'a> FnGen<'a> {
                 let t = self.tmp();
                 self.line(format!("{} {} = {};", cty, t, p.c));
                 match &place.ty {
-                    Ty::Arr(el) => {
+                    Ty::Arr(el, _) => {
                         let ecty = self.ct(el);
                         let n = self.tmp();
                         match drop_code(self.prog, el, "(*e)") {
@@ -1538,7 +1538,7 @@ impl<'a> FnGen<'a> {
             }
             EK::IsNull(x) => {
                 let xv = self.expr(x);
-                if e.ty == Ty::Bool && (matches!(&x.ty, Ty::Ref(_)) || matches!(&x.ty, Ty::Opt(i) if i.is_handle())) {
+                if e.ty == Ty::Bool && (matches!(&x.ty, Ty::Ref(_, _)) || matches!(&x.ty, Ty::Opt(i) if i.is_handle())) {
                     Val::plain(format!("(({}) == NULL)", xv.c))
                 } else {
                     Val::plain(format!("(!({}).has)", xv.c))
@@ -1693,7 +1693,7 @@ impl<'a> FnGen<'a> {
         let mut arr_args: Vec<String> = Vec::new();
         for (i, a) in args.iter().enumerate() {
             let v = self.expr(a);
-            if ext && matches!(a.ty, Ty::Arr(_)) {
+            if ext && matches!(a.ty, Ty::Arr(_, _)) {
                 // the extern function borrows the array: a count of our own keeps it alive until the statement ends
                 let h = self.copy_value(v, &a.ty);
                 self.register_temp(&h, format!("gort_arr_release({});", h));
@@ -1720,7 +1720,7 @@ impl<'a> FnGen<'a> {
             cargs.push(c);
         }
         let t = self.tmp();
-        let raw_ret = ext && matches!(ret, Ty::Arr(_));
+        let raw_ret = ext && matches!(ret, Ty::Arr(_, _));
         let cty = if raw_ret { "gort_xarr".to_string() } else { self.ct(ret) };
         if throws && *ret != Ty::Unit {
             self.line(format!("{} {};", cty, t));
@@ -1748,7 +1748,7 @@ impl<'a> FnGen<'a> {
         }
         let t = if raw_ret {
             // the pointer it gave back says whether this is one of the arrays it was given or a new one
-            let Ty::Arr(el) = ret else { unreachable!() };
+            let Ty::Arr(el, _) = ret else { unreachable!() };
             let (hs, r) = (self.tmp(), self.tmp());
             self.line(format!("gort_arr* {}[{}] = {{ {} }};", hs, arr_args.len().max(1), if arr_args.is_empty() { "0".to_string() } else { arr_args.join(", ") }));
             self.line(format!("gort_arr* {} = gort_arr_from_c({}, sizeof({}), {}, {});", r, t, self.ct(el), hs, arr_args.len()));

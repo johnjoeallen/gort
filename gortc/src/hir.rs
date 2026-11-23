@@ -76,6 +76,14 @@ impl IntTy {
     }
 }
 
+/// Which layout a handle's object has (docs/sharing.md R5, R6). Today every object is `Shared` (atomic count and a lock);
+/// `Plain` (a plain count, no lock) is not built yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Share {
+    Plain,
+    Shared,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ty {
     Unit,
@@ -89,9 +97,9 @@ pub enum Ty {
     /// a struct value
     Struct(usize),
     /// `Ref<T>`, a counted handle to a struct object
-    Ref(usize),
+    Ref(usize, Share),
     /// `Array<T>`, a counted handle (slice 0: scalar elements only)
-    Arr(Box<Ty>),
+    Arr(Box<Ty>, Share),
     /// the type of a variable bound to `new T {..}` before it is known whether it is counted (D18 item 5)
     Obj(usize),
     /// `T?`: a handle that may be null, or a scalar or value with a presence flag
@@ -360,7 +368,7 @@ impl Program {
     }
     pub fn needs_drop(&self, t: &Ty) -> bool {
         match t {
-            Ty::Ref(_) | Ty::Str | Ty::Arr(_) | Ty::Exc => true,
+            Ty::Ref(_, _) | Ty::Str | Ty::Arr(_, _) | Ty::Exc => true,
             Ty::Struct(s) => self.structs[*s].needs_drop,
             Ty::Opt(i) => self.needs_drop(i),
             _ => false,
@@ -376,8 +384,8 @@ impl Program {
             Ty::Dur => "Duration".into(),
             Ty::Inst => "Instant".into(),
             Ty::Struct(s) => self.structs[*s].name.clone(),
-            Ty::Ref(s) => format!("Ref<{}>", self.structs[*s].name),
-            Ty::Arr(e) => format!("Array<{}>", self.type_name(e)),
+            Ty::Ref(s, _) => format!("Ref<{}>", self.structs[*s].name),
+            Ty::Arr(e, _) => format!("Array<{}>", self.type_name(e)),
             Ty::Obj(s) => self.structs[*s].name.clone(),
             Ty::Opt(i) => format!("{}?", self.type_name(i)),
             Ty::Null => "null".into(),
@@ -394,7 +402,7 @@ impl Ty {
         matches!(self, Ty::Opt(i) if i.is_handle())
     }
     pub fn is_handle(&self) -> bool {
-        matches!(self, Ty::Ref(_) | Ty::Str | Ty::Arr(_))
+        matches!(self, Ty::Ref(_, _) | Ty::Str | Ty::Arr(_, _))
     }
     /// the struct held by value, directly or as an optional
     pub fn inline_struct(&self) -> Option<usize> {
