@@ -27,6 +27,14 @@ pub struct Finding {
     pub warn: bool,
 }
 
+fn is_plain_ref(t: &Ty) -> bool {
+    match t {
+        Ty::Ref(_, Share::Plain) => true,
+        Ty::Opt(i) => is_plain_ref(i),
+        _ => false,
+    }
+}
+
 fn sid_of(t: &Ty) -> Option<usize> {
     match t {
         Ty::Struct(s) | Ty::Ref(s, _) | Ty::Obj(s) => Some(*s),
@@ -1116,6 +1124,10 @@ impl<'a> Cx<'a> {
     }
 
     fn access_from(&mut self, p: &TExpr, via_ref: bool, need: Need, line: u32, what: &str) {
+        // a `ref` object has no other holder by type (docs/sharing.md R5): reaching it never needs a block
+        if via_ref && is_plain_ref(&p.ty) {
+            return;
+        }
         // walk down to the root, collecting the places on the way
         let mut nodes: Vec<&TExpr> = Vec::new();
         // a reference to an owned object is no new object: the owner's lock covers it
@@ -1129,7 +1141,7 @@ impl<'a> Cx<'a> {
                 EK::Field(b, _) | EK::Index(b, _) | EK::Len(b) | EK::Unwrap(b) | EK::Borrow(b) | EK::BoxVal(b) => n = b,
                 EK::Deref(b) => {
                     // through an owned field the object belongs to the owner: not a hop to another object
-                    if !owned_place(self.owned, b) {
+                    if !owned_place(self.owned, b) && !is_plain_ref(&b.ty) {
                         hop = true;
                         if owner_expr.is_none() {
                             owner_expr = Some(b);
@@ -1146,7 +1158,13 @@ impl<'a> Cx<'a> {
                 self.hits.push((self.fid, 0, if need == Need::Write { 2 } else { 1 }));
                 return;
             }
-            EK::ObjPlace(_) | EK::ObjRef(_) => hop = true, // an object variable is reached through its handle
+            EK::ObjPlace(v) | EK::ObjRef(v) => {
+                // an object variable is reached through its handle, unless that handle is a `ref`
+                let vi = &self.f().vars[*v];
+                if !(vi.converted && vi.conv_share == Share::Plain) {
+                    hop = true;
+                }
+            }
             _ => {}
         }
         if !hop {

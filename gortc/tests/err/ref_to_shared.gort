@@ -1,0 +1,6 @@
+// error: a `ref` handle cannot be used as a `shared` one
+package t
+struct Cell { v: i64 }
+fn take(c: shared Cell) { }
+fn main() { ref Cell c = new Cell { v: 1 }
+ take(c) }

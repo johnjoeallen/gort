@@ -1,0 +1,6 @@
+// error: cannot be given to another thread
+package t
+struct Cell { v: i64 }
+extern fn go(body: fn())
+fn main() { ref Cell c = new Cell { v: 1 }
+ go(fn() { println(c.v) }) }

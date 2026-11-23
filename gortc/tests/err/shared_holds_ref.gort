@@ -1,0 +1,5 @@
+// error: a shared `Box` holds a `ref` handle in field `c`
+package t
+struct Cell { v: i64 }
+struct Box { c: ref Cell }
+fn main() { shared Box b = new Box { c: new Cell { v: 1 } } }

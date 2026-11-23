@@ -349,7 +349,7 @@ For an unshared type the same block emits only the body. Counts follow the type 
 
 ## Syntax
 
-*Status: proposed grammar for the first compiler pass. Implemented so far: the parser accepts `ref` and `shared`, and `shared T` is the current `Ref<T>`; no second layout yet.*
+*Status: proposed grammar for the first compiler pass. Implemented so far: `ref T` and `shared T` for Gort structs, with both layouts, the type rules and the spawn, global and extern-generic checks.*
 
 ```
 type   := qual? name ('<' type (',' type)* '>')? suffix*
@@ -367,7 +367,7 @@ suffix := '?' | '[' N ']'
 - **`extern` types are opaque C, so Gort cannot know whether they are thread-safe.** The default `extern struct Conn` is not: it is a handle that takes `ref` or `shared` like any other (`shared Conn` is the `Arc<RwLock<Conn>>` case, the lock being the handle's own). An `extern sync struct Mailbox` promises that its C code synchronises itself (R8); it is always counted atomically, has no lock and takes no qualifier. Each method of a non-`sync` extern type states its mode, `reads` or `writes`, and an unmarked method is `writes`, so the same R1 to R4 checks apply as for Gort functions. A parking method cannot be called inside a `sync` block (R4), so a `shared Conn` cannot call `recv` under its lock; a socket is normally a `ref Conn` owned by one vthread and reached from others through a `sync` type.
 - **Control block placement favours C.** Anything that can be passed to C is a plain pointer to its data, so no header precedes an array's run or an `extern` object's body. An array's control block is apart from its run (D18 item 3); an `extern` handle's control block is external too, and holds the count, the lock (in the `shared` layout), the C pointer and the destructor, so a C object that C allocated can be wrapped without copying. Passing an array to C pins it for the call, and a `shared` array's lock is held across that call, so the call cannot park. Slice 0's 16-byte header before the body stays for Gort structs, which C never sees; for arrays and `extern` types the placement is fixed by this rule, and B18 decides only how Gort structs are laid out.
 
-**Migration.** The compiler today gives every counted object atomic counts and a lock, which is the `shared` layout. While the samples are converted, `Ref<T>` is accepted as an alias for `shared T`, so nothing changes behaviour until a sample is rewritten to `ref T` on purpose. Step 1 is done: `shared T` parses and means `Ref<T>`; `ref T` parses and is rejected as not built yet. Because the keywords are soft, the four tests that name a variable `shared` needed no rename.
+**Migration.** The compiler today gives every counted object atomic counts and a lock, which is the `shared` layout. While the samples are converted, `Ref<T>` is accepted as an alias for `shared T`, so nothing changes behaviour until a sample is rewritten to `ref T` on purpose. Done in `gortc`: `shared T` is `Ref<T>`; `ref T` is the plain layout for Gort structs (a non-atomic count, no lock, no `sync` needed). Not yet: `ref Array`, `ref` for `extern` types, escape inference for an untyped `let` (it takes the layout of its first use), and the lock-free `Plain` header (it keeps the 16-byte header, so only the atomics and the lock are gone). Because the keywords are soft, the four tests that name a variable `shared` needed no rename.
 
 ## Growable containers
 

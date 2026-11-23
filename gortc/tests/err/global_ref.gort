@@ -1,0 +1,5 @@
+// error: it must be `shared`
+package t
+struct Cell { v: i64 }
+let g: ref Cell = new Cell { v: 1 }
+fn main() { }

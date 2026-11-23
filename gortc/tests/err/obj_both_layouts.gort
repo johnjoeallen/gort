@@ -1,0 +1,8 @@
+// error: is used as a `shared` handle here, but line 7 made it a `ref` handle
+package t
+struct Cell { v: i64 }
+fn a(c: ref Cell) { }
+fn b(c: shared Cell) { }
+fn main() { let x = new Cell { v: 1 }
+ a(x)
+ b(x) }

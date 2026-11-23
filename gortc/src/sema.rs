@@ -548,6 +548,10 @@ impl<'a> Sema<'a> {
             return Some(s);
         }
         let (sd, file) = self.generics.get(name).cloned()?;
+        if sd.is_extern && args.iter().any(|a| self.has_plain(a, 0)) {
+            self.error(at.0, at.1, format!("`{}` is a runtime type that carries values between threads: its argument cannot be a `ref` handle", name));
+            return None;
+        }
         if sd.type_params.len() != args.len() {
             self.error(at.0, at.1, format!("`{}` takes {} type argument(s), found {}", name, sd.type_params.len(), args.len()));
             return None;
@@ -798,6 +802,7 @@ impl<'a> Sema<'a> {
             }
         }
         self.check_sync(&may);
+        self.check_layouts();
         for si in 0..self.prog.structs.len() {
             if let Some(c) = self.prog.structs[si].cleanup {
                 if (may[c] || locks[c]) && !self.prog.fns[c].is_extern {
@@ -811,6 +816,64 @@ impl<'a> Sema<'a> {
 
     /// The rules for `sync` / `mutate` blocks: the body may not park; a `sync` body may not write through its object; a block may not lock
     /// the object it is already inside.
+    /// Does a value of type `t` hold a `ref` handle (a plain count, no lock), directly or inside a struct value or an optional?
+    fn has_plain(&self, t: &Ty, depth: usize) -> bool {
+        if depth > 16 {
+            return false;
+        }
+        match t {
+            Ty::Ref(_, Share::Plain) => true,
+            Ty::Struct(s) | Ty::Obj(s) => self.prog.structs[*s].fields.iter().any(|f| self.has_plain(&f.ty, depth + 1)),
+            Ty::Opt(i) => self.has_plain(i, depth + 1),
+            Ty::Arr(e, _) => self.has_plain(e, depth + 1),
+            _ => false,
+        }
+    }
+
+    /// The first field of struct `sid` (by path) that holds a `ref` handle.
+    fn plain_field(&self, sid: usize, depth: usize) -> Option<String> {
+        if depth > 8 {
+            return None;
+        }
+        for f in &self.prog.structs[sid].fields {
+            if self.has_plain(&f.ty, 0) {
+                return Some(f.name.clone());
+            }
+        }
+        None
+    }
+
+    /// The type rule of docs/sharing.md R5: an object with the shared layout holds only shared handles, values, scalars and strings, so
+    /// nothing reachable from it can be a plain-count object that two threads would share.
+    fn check_layouts(&mut self) {
+        let mut errs: Vec<(u32, String)> = Vec::new();
+        for f in &self.prog.fns {
+            let Some(body) = &f.body else { continue };
+            walk_stmts(body, &mut |st| {
+                if let TS::LetObj(id, sid, _) = &st.kind {
+                    let v = &f.vars[*id];
+                    if v.converted && v.conv_share == Share::Shared {
+                        if let Some(n) = self.plain_field(*sid, 0) {
+                            errs.push((st.line, format!("a shared `{}` holds a `ref` handle in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
+                        }
+                    }
+                }
+            });
+            visit_block(body, &mut |e| {
+                visit_expr(e, &mut |x| {
+                    if let (EK::NewObj(sid, _), Ty::Ref(_, Share::Shared)) = (&x.kind, &x.ty) {
+                        if let Some(n) = self.plain_field(*sid, 0) {
+                            errs.push((x.line, format!("a shared `{}` holds a `ref` handle in field `{}`: a shared object may hold only shared handles", self.prog.structs[*sid].name, n)));
+                        }
+                    }
+                })
+            });
+        }
+        for (line, msg) in errs {
+            self.error(line, 1, msg);
+        }
+    }
+
     fn check_sync(&mut self, may: &[bool]) {
         let writes = param_writes(&self.prog);
         let mut errs: Vec<(u32, String)> = Vec::new();
@@ -935,6 +998,10 @@ impl<'a> Sema<'a> {
             }
         };
         if t == Ty::Error {
+            return;
+        }
+        if self.has_plain(&t, 0) {
+            self.error(at.0, at.1, format!("`{}` is a top-level `let`, which every vthread can reach: it must be `shared`, not {}", name, self.prog.type_name(&t)));
             return;
         }
         let g = self.prog.globals.len();
@@ -1279,10 +1346,21 @@ impl<'a> Sema<'a> {
         if inner == Ty::Error {
             return Ty::Error;
         }
+        // a type parameter or an alias that already is a handle must agree with the qualifier
+        if let Ty::Ref(sx, have) = &inner {
+            let ext = self.prog.structs[*sx].is_extern;
+            let want = if q == ast::Qual::Ref { Share::Plain } else { Share::Shared };
+            if *have != want && !ext {
+                self.error(t.line, t.col, format!("`{}` is already {}; it cannot be made {}", t.name, self.prog.type_name(&inner), if q == ast::Qual::Ref { "`ref`" } else { "`shared`" }));
+                return Ty::Error;
+            }
+        }
         let msg = if t.fixed.is_some() {
             Some("`T[N]` is a run of values and takes no `ref` or `shared`; write `Array<shared T>` or `shared Array<..>`".to_string())
-        } else if q == ast::Qual::Ref {
-            Some("`ref` handles (plain counts, no lock) are not built yet: every object has the shared layout, so write `shared T`".to_string())
+        } else if q == ast::Qual::Ref && matches!(inner, Ty::Arr(..)) {
+            Some("`ref Array` is not built yet: arrays always have atomic counts and a lock; write `Array<..>` or `shared Array<..>`".to_string())
+        } else if q == ast::Qual::Ref && matches!(&inner, Ty::Ref(s, _) if self.prog.structs[*s].is_extern) {
+            Some("an `extern` type is always `shared`: its C code owns its body".to_string())
         } else if matches!(inner, Ty::Str) {
             Some("`String` is always atomic and takes no `shared`".to_string())
         } else {
@@ -1293,7 +1371,7 @@ impl<'a> Sema<'a> {
             return Ty::Error;
         }
         match inner {
-            Ty::Struct(s) => Ty::Ref(s, Share::Shared),
+            Ty::Struct(s) => Ty::Ref(s, if q == ast::Qual::Ref { Share::Plain } else { Share::Shared }),
             Ty::Ref(_, _) | Ty::Arr(_, _) => inner,
             other => {
                 let n = self.prog.type_name(&other);
@@ -1345,6 +1423,7 @@ impl<'a> Sema<'a> {
                 mutable: false,
                 converted: false,
                 converted_line: 0,
+                conv_share: Share::Shared,
                 is_obj: false,
                 line: decl.line,
                 alias: None,
@@ -1436,7 +1515,7 @@ impl<'a> Sema<'a> {
             return None;
         }
         let id = cx.vars.len();
-        cx.vars.push(VarInfo { name: name.to_string(), ty, mutable, converted: false, converted_line: 0, is_obj, line: at.0, alias: None });
+        cx.vars.push(VarInfo { name: name.to_string(), ty, mutable, converted: false, converted_line: 0, conv_share: Share::Shared, is_obj, line: at.0, alias: None });
         cx.scopes.last_mut().unwrap().insert(name.to_string(), id);
         Some(id)
     }
@@ -1937,10 +2016,17 @@ impl<'a> Sema<'a> {
         }
     }
 
-    fn mark_converted(&mut self, cx: &mut FnCtx, id: VarId, line: u32) {
+    /// `a` was bound to `new T {..}` and is now used as a handle of layout `sh`. The first such use decides the layout; a later use that wants
+    /// the other one is an error, since the object is one allocation (docs/sharing.md R5).
+    fn mark_converted(&mut self, cx: &mut FnCtx, id: VarId, at: (u32, u32), sh: Share) {
         if !cx.vars[id].converted {
             cx.vars[id].converted = true;
-            cx.vars[id].converted_line = line;
+            cx.vars[id].converted_line = at.0;
+            cx.vars[id].conv_share = sh;
+        } else if cx.vars[id].conv_share != sh {
+            let (n, l) = (cx.vars[id].name.clone(), cx.vars[id].converted_line);
+            let (a, b) = if sh == Share::Plain { ("ref", "shared") } else { ("shared", "ref") };
+            self.error(at.0, at.1, format!("`{}` is used as a `{}` handle here, but line {} made it a `{}` handle: one object has one layout; declare it `{} T {}` to choose", n, a, l, b, b, n));
         }
     }
 
@@ -1948,7 +2034,7 @@ impl<'a> Sema<'a> {
     fn decay(&mut self, cx: &mut FnCtx, te: TExpr, at: (u32, u32)) -> TExpr {
         if let (Ty::Obj(s), EK::Var(id)) = (&te.ty, &te.kind) {
             let (s, id) = (*s, *id);
-            self.mark_converted(cx, id, at.0);
+            self.mark_converted(cx, id, at, Share::Shared);
             return typed(EK::ObjRef(id), Ty::Ref(s, Share::Shared), te.line);
         }
         te
@@ -2067,10 +2153,21 @@ impl<'a> Sema<'a> {
             }
         }
         match (&te.ty, target, &te.kind) {
-            (Ty::Obj(s), Ty::Ref(t, _), EK::Var(id)) if s == t => {
-                let id = *id;
-                self.mark_converted(cx, id, at.0);
-                typed(EK::ObjRef(id), Ty::Ref(*s, Share::Shared), te.line)
+            (Ty::Obj(s), Ty::Ref(t, sh), EK::Var(id)) if s == t => {
+                let (id, sh) = (*id, *sh);
+                self.mark_converted(cx, id, at, sh);
+                typed(EK::ObjRef(id), Ty::Ref(*s, sh), te.line)
+            }
+            // a `new` that meets the handle type it is stored in takes that layout: `ref T x = new T {..}`
+            (Ty::Ref(s, _), Ty::Ref(t, sh), EK::NewObj(..)) if s == t => {
+                let mut te = te;
+                te.ty = Ty::Ref(*t, *sh);
+                te
+            }
+            (Ty::Ref(s, a), Ty::Ref(t, b), _) if s == t && a != b => {
+                let (x, y) = if *b == Share::Plain { ("shared", "ref") } else { ("ref", "shared") };
+                self.error(at.0, at.1, format!("expected {}, found {}: a `{}` handle cannot be used as a `{}` one; they are different layouts, so declare the object `{}` where it is made", self.prog.type_name(target), self.prog.type_name(&te.ty), x, y, x));
+                error_expr(te.line)
             }
             (Ty::Obj(s), Ty::Struct(t), EK::Var(id)) if s == t => {
                 let r = typed(EK::ObjPlace(*id), Ty::Struct(*s), te.line);
@@ -2764,6 +2861,14 @@ impl<'a> Sema<'a> {
             tmap.insert(tn.clone(), v.ty.clone());
             params.push(ast::Param { name: n.clone(), ty: TypeExpr { name: tn, args: vec![], optional: false, fixed: None, qual: None, line: e.line, col: e.col }, variadic: false });
             caps.push(v);
+        }
+        if extern_ctx {
+            for (k, c) in caps.iter().enumerate() {
+                if self.has_plain(&c.ty, 0) {
+                    self.error(e.line, e.col, format!("`{}` is {} and cannot be given to another thread (spawn, spawnWorker): declare it `shared`", names[k], self.prog.type_name(&c.ty)));
+                    return error_expr(line);
+                }
+            }
         }
         if !caps.is_empty() && !extern_ctx {
             self.error(e.line, e.col, "an anonymous function that captures variables can only be given to a runtime function (spawnWorker and the like)");

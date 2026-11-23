@@ -1,0 +1,45 @@
+package t
+// `ref T` is the plain layout: a non-atomic count, no lock, no `sync` needed; `shared T` keeps the atomic count and the lock
+struct Node { n: i64, next: ref Node? }
+struct Cell { v: i64 }
+struct Hub { cells: shared Cell?, hits: i64 }
+
+fn bump(c: ref Cell): i64 {
+    c.v += 1
+    return c.v
+}
+fn chain(k: usize): ref Node {
+    ref Node head = new Node { n: 0 }
+    var cur: ref Node = head
+    for (i in 1..k) {
+        ref Node nx = new Node { n: i as i64 }
+        cur.next = nx
+        cur = nx
+    }
+    return head
+}
+fn total(h: ref Node): i64 {
+    var sum = 0
+    var cur: ref Node? = h
+    while (cur != null) {
+        sum += cur.n
+        cur = cur.next
+    }
+    return sum
+}
+fn main() {
+    ref Cell c = new Cell { v: 1 }
+    println(bump(c))
+    println(bump(c))
+    sync (writes c) { c.v += 10 }        // no lock for a ref object
+    println(c.v)
+    println(total(chain(5)))
+    shared Cell s = new Cell { v: 100 }
+    sync (writes s) { s.v += 1 }
+    println(s.v)
+    shared Hub h = new Hub { cells: s }
+    sync (writes h) { h.hits += 1 }
+    println(h.hits)
+    let loose = new Cell { v: 5 }          // untyped: it becomes whatever handle it is first used as
+    println(bump(loose))
+}

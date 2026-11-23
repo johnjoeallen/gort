@@ -235,7 +235,7 @@ impl<'a> Gen<'a> {
 
     fn emit_prototypes(&self, out: &mut String) {
         for s in &self.prog.structs {
-            out.push_str(&format!("static void G_{0}_release(G_{0}* p);\n", s.name));
+            out.push_str(&format!("static void G_{0}_release(G_{0}* p);\nstatic void G_{0}_release_p(G_{0}* p);\n", s.name));
             if s.needs_drop {
                 out.push_str(&format!("static void G_{0}_drop(G_{0}* s);\n", s.name));
                 out.push_str(&format!("static void G_{0}_copy(G_{0}* d, const G_{0}* s);\n", s.name));
@@ -265,14 +265,14 @@ impl<'a> Gen<'a> {
 
     fn field_copy_line(&self, ty: &Ty, fc: &str) -> String {
         match ty {
-            Ty::Ref(t, _) => format!("d->{0} = (G_{1}*)gort_retain(s->{0});", fc, self.prog.structs[*t].name),
+            Ty::Ref(t, sh) => format!("d->{0} = (G_{1}*)gort_retain{2}(s->{0});", fc, self.prog.structs[*t].name, sfx(sh)),
             Ty::Str => format!("d->{0} = gort_str_retain(s->{0});", fc),
             Ty::Arr(_, _) => format!("d->{0} = gort_arr_retain(s->{0});", fc),
             Ty::Struct(t) if self.prog.structs[*t].needs_drop => {
                 format!("G_{}_copy(&d->{}, &s->{});", self.prog.structs[*t].name, fc, fc)
             }
             Ty::Opt(i) if i.is_handle() => match &**i {
-                Ty::Ref(t, _) => format!("d->{0} = s->{0} ? (G_{1}*)gort_retain(s->{0}) : NULL;", fc, self.prog.structs[*t].name),
+                Ty::Ref(t, sh) => format!("d->{0} = s->{0} ? (G_{1}*)gort_retain{2}(s->{0}) : NULL;", fc, self.prog.structs[*t].name, sfx(sh)),
                 Ty::Str => format!("d->{0} = s->{0} ? gort_str_retain(s->{0}) : NULL;", fc),
                 _ => format!("d->{0} = s->{0} ? gort_arr_retain(s->{0}) : NULL;", fc),
             },
@@ -328,7 +328,22 @@ impl<'a> Gen<'a> {
                 out.push_str(&format!("        G_{}_drop(p);\n", n));
             }
             out.push_str("        gort_free(p);\n    }\n}\n");
+            // the same for a `ref` handle: a plain count
+            out.push_str(&format!("static void G_{}_release_p(G_{}* p) {{\n", n, n));
+            out.push_str("    if (p && gort_release_last_p(p)) {\n");
+            if s.needs_drop {
+                out.push_str(&format!("        G_{}_drop(p);\n", n));
+            }
+            out.push_str("        gort_free(p);\n    }\n}\n");
         }
+    }
+}
+
+/// The suffix of the count and release functions for a handle's layout: `_p` for a `ref` object, none for a `shared` one.
+fn sfx(sh: &Share) -> &'static str {
+    match sh {
+        Share::Plain => "_p",
+        Share::Shared => "",
     }
 }
 
@@ -356,7 +371,7 @@ fn ctype(prog: &Program, t: &Ty) -> String {
 /// The statement that releases the counts held by `lv` (an lvalue of type `t`), if it holds any.
 fn drop_code(prog: &Program, t: &Ty, lv: &str) -> Option<String> {
     match t {
-        Ty::Ref(s, _) => Some(format!("G_{}_release({});", prog.structs[*s].name, lv)),
+        Ty::Ref(s, sh) => Some(format!("G_{}_release{}({});", prog.structs[*s].name, sfx(sh), lv)),
         Ty::Str => Some(format!("gort_str_release({});", lv)),
         Ty::Arr(_, _) => Some(format!("gort_arr_release({});", lv)),
         Ty::Exc => Some(format!("gort_exc_release(&{});", lv)),
@@ -555,10 +570,10 @@ impl<'a> FnGen<'a> {
             || v.c == "false"
             || (v.c.starts_with('t') && v.c.len() > 1 && v.c[1..].chars().all(|c| c.is_ascii_digit()));
         match ty {
-            Ty::Ref(s, _) => {
+            Ty::Ref(s, sh) => {
                 let t = self.tmp();
                 let cn = self.prog.structs[*s].name.clone();
-                self.line(format!("G_{0}* {1} = (G_{0}*)gort_retain({2});", cn, t, v.c));
+                self.line(format!("G_{0}* {1} = (G_{0}*)gort_retain{3}({2});", cn, t, v.c, sfx(sh)));
                 t
             }
             Ty::Str => {
@@ -587,7 +602,7 @@ impl<'a> FnGen<'a> {
                 let t = self.tmp();
                 let cty = self.ct(ty);
                 let r = match &**i {
-                    Ty::Ref(s, _) => format!("(G_{}*)gort_retain({})", self.prog.structs[*s].name, v.c),
+                    Ty::Ref(s, sh) => format!("(G_{}*)gort_retain{}({})", self.prog.structs[*s].name, sfx(sh), v.c),
                     Ty::Str => format!("gort_str_retain({})", v.c),
                     _ => format!("gort_arr_retain({})", v.c),
                 };
@@ -719,6 +734,7 @@ impl<'a> FnGen<'a> {
             }
             TS::LetObj(id, sid, fields) => {
                 let counted = self.f.vars[*id].converted;
+                let vsh = self.f.vars[*id].conv_share;
                 let sn = self.prog.structs[*sid].name.clone();
                 let name = self.var_c[*id].clone();
                 if counted {
@@ -747,7 +763,7 @@ impl<'a> FnGen<'a> {
                 self.pop_frame();
                 self.ind -= 1;
                 self.line("}");
-                let d = if counted { format!("G_{}_release({});", sn, name) } else { format!("G_{}_drop(&{});", sn, name) };
+                let d = if counted { format!("G_{}_release{}({});", sn, sfx(&vsh), name) } else { format!("G_{}_drop(&{});", sn, name) };
                 if counted || self.prog.structs[*sid].needs_drop {
                     self.scopes.last_mut().unwrap().push(d);
                 }
@@ -931,11 +947,13 @@ impl<'a> FnGen<'a> {
                 self.ind += 1;
                 self.scopes.push(Vec::new());
                 let mut rs: Vec<String> = Vec::new();
-                for (_, target) in targets {
+                let mut ws: Vec<bool> = Vec::new();
+                for (target_w, target) in targets {
+                    let target_w = *target_w;
                     let (cty, rel) = match &target.ty {
-                        Ty::Ref(sid, _) => {
+                        Ty::Ref(sid, sh) => {
                             let sn = self.prog.structs[*sid].name.clone();
-                            (format!("G_{}*", sn), format!("G_{}_release", sn))
+                            (format!("G_{}*", sn), format!("G_{}_release{}", sn, sfx(sh)))
                         }
                         Ty::Arr(_, _) => ("gort_arr*".to_string(), "gort_arr_release".to_string()),
                         _ => unreachable!(),
@@ -967,19 +985,25 @@ impl<'a> FnGen<'a> {
                         let l = self.tmp();
                         self.line(format!("void* {} = gort_arr_lockobj({});", l, r));
                         rs.push(l);
+                        ws.push(target_w);
+                    } else if matches!(target.ty, Ty::Ref(_, Share::Plain)) {
+                        // a `ref` object has no lock and no other holder: the block takes nothing for it
                     } else {
                         rs.push(r);
+                        ws.push(target_w);
                     }
                 }
-                if rs.len() == 1 {
-                    let (lock, unlock) = if targets[0].0 { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
+                if rs.is_empty() {
+                    // every target is a `ref` object: nothing to lock
+                } else if rs.len() == 1 {
+                    let (lock, unlock) = if ws[0] { ("gort_wr_lock", "gort_wr_unlock") } else { ("gort_rd_lock", "gort_rd_unlock") };
                     self.line(format!("{}({});", lock, rs[0]));
                     self.scopes.last_mut().unwrap().push(format!("{}({});", unlock, rs[0]));
                 } else {
                     let g = self.tmp();
                     let m = self.tmp();
                     self.line(format!("void* {}[{}] = {{ {} }};", g, rs.len(), rs.iter().map(|r| format!("(void*){}", r)).collect::<Vec<_>>().join(", ")));
-                    self.line(format!("unsigned char {}[{}] = {{ {} }};", m, rs.len(), targets.iter().map(|(w, _)| if *w { "1" } else { "0" }).collect::<Vec<_>>().join(", ")));
+                    self.line(format!("unsigned char {}[{}] = {{ {} }};", m, rs.len(), ws.iter().map(|w| if *w { "1" } else { "0" }).collect::<Vec<_>>().join(", ")));
                     self.line(format!("gort_lock_group({}, {}, {});", g, m, rs.len()));
                     self.scopes.last_mut().unwrap().push(format!("gort_unlock_group({}, {}, {});", g, m, rs.len()));
                 }
@@ -1268,14 +1292,14 @@ impl<'a> FnGen<'a> {
                 }
             }
             EK::BoxVal(inner) => {
-                let Ty::Ref(s, _) = &e.ty else { unreachable!() };
+                let Ty::Ref(s, bsh) = &e.ty else { unreachable!() };
                 let sn = self.prog.structs[*s].name.clone();
                 let v = self.expr(inner);
                 let o = self.own_value(v, &inner.ty);
                 let t = self.tmp();
                 self.line(format!("G_{0}* {1} = (G_{0}*)gort_new(sizeof(G_{0})); *{1} = {2};", sn, t, o));
                 self.unregister(&o);
-                self.register_temp(&t, format!("G_{}_release({});", sn, t));
+                self.register_temp(&t, format!("G_{}_release{}({});", sn, sfx(bsh), t));
                 Val { c: t.clone(), own: Some(t) }
             }
             EK::Lambda(..) => unreachable!("a lambda with captures is only valid as an argument to a runtime function"),
@@ -1462,6 +1486,7 @@ impl<'a> FnGen<'a> {
                 }
             }
             EK::NewObj(sid, fields) => {
+                let Ty::Ref(_, nsh) = &e.ty else { unreachable!() };
                 let fs = self.eval_fields(fields);
                 let sn = self.prog.structs[*sid].name.clone();
                 let t = self.tmp();
@@ -1471,7 +1496,7 @@ impl<'a> FnGen<'a> {
                     self.line(format!("{}->{} = {};", t, fname, o));
                     self.unregister(&o);
                 }
-                self.register_temp(&t, format!("G_{}_release({});", sn, t));
+                self.register_temp(&t, format!("G_{}_release{}({});", sn, sfx(nsh), t));
                 Val { c: t.clone(), own: Some(t) }
             }
             EK::Take(place) => {

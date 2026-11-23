@@ -127,6 +127,8 @@ pub struct VarInfo {
     /// a variable bound to `new T {..}`: true once any use converts it to a `Ref`
     pub converted: bool,
     pub converted_line: u32,
+    /// the layout of the object once `converted`: decided by the first conversion, and every later one must agree
+    pub conv_share: Share,
     pub is_obj: bool,
     pub line: u32,
     /// a switch binding that names the payload in place: uses of the name are this place
@@ -384,7 +386,8 @@ impl Program {
             Ty::Dur => "Duration".into(),
             Ty::Inst => "Instant".into(),
             Ty::Struct(s) => self.structs[*s].name.clone(),
-            Ty::Ref(s, _) => format!("Ref<{}>", self.structs[*s].name),
+            Ty::Ref(s, Share::Shared) => format!("Ref<{}>", self.structs[*s].name),
+            Ty::Ref(s, Share::Plain) => format!("ref {}", self.structs[*s].name),
             Ty::Arr(e, _) => format!("Array<{}>", self.type_name(e)),
             Ty::Obj(s) => self.structs[*s].name.clone(),
             Ty::Opt(i) => format!("{}?", self.type_name(i)),
