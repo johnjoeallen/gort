@@ -304,6 +304,8 @@ pub struct StructInfo {
     pub variants: Vec<VariantInfo>,
     pub is_exception: bool,
     pub is_extern: bool,
+    /// `extern sync struct`: needs no lock and no `sync` block
+    pub self_sync: bool,
     pub cleanup: Option<FnId>,
     pub needs_drop: bool,
     /// holds a cleanup() (directly or inline): copying it would run the cleanup twice
@@ -325,6 +327,8 @@ pub struct FnInfo {
     pub is_extern: bool,
     /// declared: an `extern` function that may wait (`parks fn`)
     pub parks: bool,
+    /// an extern method's use of its receiver: 0 unmarked (counts as writes), 1 reads, 2 writes
+    pub ext_mode: u8,
     /// `fn[nopark]`: asserted not to park (checked)
     pub nopark: bool,
     /// inferred: this function, or something it calls, may park

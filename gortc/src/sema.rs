@@ -158,6 +158,7 @@ impl<'a> Sema<'a> {
             variants: Vec::new(),
             is_exception: true,
             is_extern: false,
+            self_sync: false,
             cleanup: None,
             needs_drop: false,
             no_copy: false,
@@ -190,6 +191,7 @@ impl<'a> Sema<'a> {
                         variants: Vec::new(),
                         is_exception: sd.is_exception,
                         is_extern: sd.is_extern,
+                        self_sync: sd.self_sync,
                         cleanup: None,
                         needs_drop: false,
                         no_copy: false,
@@ -569,6 +571,7 @@ impl<'a> Sema<'a> {
             variants: Vec::new(),
             is_exception: sd.is_exception,
             is_extern: sd.is_extern,
+            self_sync: sd.self_sync,
             cleanup: None,
             needs_drop: false,
             no_copy: false,
@@ -1019,6 +1022,7 @@ impl<'a> Sema<'a> {
             throws: Vec::new(),
             is_extern: false,
             parks: false,
+            ext_mode: 0,
             nopark: false,
             may_park: false,
             variadic: false,
@@ -1069,6 +1073,7 @@ impl<'a> Sema<'a> {
             throws,
             is_extern: fd.is_extern,
             parks: fd.parks,
+            ext_mode: fd.mode,
             nopark: fd.attr.as_deref() == Some("nopark"),
             may_park: fd.parks,
             variadic: fd.params.last().map(|p| p.variadic).unwrap_or(false),
@@ -1359,8 +1364,8 @@ impl<'a> Sema<'a> {
             Some("`T[N]` is a run of values and takes no `ref` or `shared`; write `Array<shared T>` or `shared Array<..>`".to_string())
         } else if q == ast::Qual::Ref && matches!(inner, Ty::Arr(..)) {
             Some("`ref Array` is not built yet: arrays always have atomic counts and a lock; write `Array<..>` or `shared Array<..>`".to_string())
-        } else if q == ast::Qual::Ref && matches!(&inner, Ty::Ref(s, _) if self.prog.structs[*s].is_extern) {
-            Some("an `extern` type is always `shared`: its C code owns its body".to_string())
+        } else if q == ast::Qual::Ref && matches!(&inner, Ty::Ref(s, _) if self.prog.structs[*s].self_sync) {
+            Some("an `extern sync` type is always atomic and takes no `ref`".to_string())
         } else if matches!(inner, Ty::Str) {
             Some("`String` is always atomic and takes no `shared`".to_string())
         } else {
@@ -1372,6 +1377,8 @@ impl<'a> Sema<'a> {
         }
         match inner {
             Ty::Struct(s) => Ty::Ref(s, if q == ast::Qual::Ref { Share::Plain } else { Share::Shared }),
+            // an `extern` type is a shared handle unless it is written `ref`
+            Ty::Ref(s, _) if q == ast::Qual::Ref => Ty::Ref(s, Share::Plain),
             Ty::Ref(_, _) | Ty::Arr(_, _) => inner,
             other => {
                 let n = self.prog.type_name(&other);
@@ -1738,9 +1745,9 @@ impl<'a> Sema<'a> {
                     };
                     match &v.ty {
                         Ty::Error => ok = false,
-                        Ty::Ref(sid, _) if self.prog.structs[*sid].is_extern => {
+                        Ty::Ref(sid, _) if self.prog.structs[*sid].self_sync => {
                             let n = self.prog.structs[*sid].name.clone();
-                            self.error(target.line, target.col, format!("`{}` is an extern type: it synchronises itself and needs no sync block", n));
+                            self.error(target.line, target.col, format!("`{}` is an `extern sync` type: it synchronises itself and needs no sync block", n));
                             ok = false;
                         }
                         Ty::Ref(_, _) | Ty::Arr(_, _) => {
@@ -2887,6 +2894,7 @@ impl<'a> Sema<'a> {
             body: Some(l.body.clone()),
             is_extern: false,
             parks: false,
+            mode: 0,
             attr: if np { Some("nopark".into()) } else { None },   // the function type promises it: checked like `fn[nopark]`
             line: e.line,
             col: e.col,

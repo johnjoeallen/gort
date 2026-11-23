@@ -143,9 +143,11 @@ impl Parser {
                         ms.push(self.method(true)?);
                     }
                     items.push(Item::Impl(ty, ms));
-                } else if self.is_kw("struct") {
+                } else if self.is_kw("struct") || (self.is_kw("sync") && matches!(&self.peek_at(1).tok, Tok::Ident(x) if x == "struct")) {
+                    let self_sync = self.eat_kw("sync");
                     let mut sd = self.struct_decl(true)?;
                     sd.is_extern = true;
+                    sd.self_sync = self_sync;
                     items.push(Item::Struct(sd));
                 } else {
                     let mut f = self.method(true)?;
@@ -186,11 +188,17 @@ impl Parser {
 
     /// `[static] [parks] fn ...`, a method or an extern function
     fn method(&mut self, in_struct: bool) -> R<FnDecl> {
+        let mut mode = 0;
+        if (self.is_kw("reads") || self.is_kw("writes")) && matches!(&self.peek_at(1).tok, Tok::Ident(x) if matches!(x.as_str(), "fn" | "parks" | "static")) {
+            mode = if self.is_kw("reads") { 1 } else { 2 };
+            self.bump();
+        }
         let is_static = self.eat_kw("static");
         let parks = self.eat_kw("parks");
         let mut f = self.fn_decl(in_struct)?;
         f.is_static = is_static;
         f.parks = parks;
+        f.mode = mode;
         Ok(f)
     }
 
@@ -200,7 +208,7 @@ impl Parser {
         let kw = self.bump();
         let (name, _) = self.ident()?;
         if is_exception && !self.is_sym("{") {
-            return Ok(StructDecl { name, fields: Vec::new(), methods: Vec::new(), variants: Vec::new(), is_enum, is_exception, is_extern, type_params: Vec::new(), line: kw.line, col: kw.col });
+            return Ok(StructDecl { name, fields: Vec::new(), methods: Vec::new(), variants: Vec::new(), is_enum, is_exception, is_extern, self_sync: false, type_params: Vec::new(), line: kw.line, col: kw.col });
         }
         let mut type_params = Vec::new();
         if self.eat_sym("<") {
@@ -228,7 +236,7 @@ impl Parser {
             if self.eat_sym("}") {
                 break;
             }
-            if self.is_kw("fn") || self.is_kw("static") || self.is_kw("parks") {
+            if self.is_kw("fn") || self.is_kw("static") || self.is_kw("parks") || ((self.is_kw("reads") || self.is_kw("writes")) && matches!(&self.peek_at(1).tok, Tok::Ident(x) if matches!(x.as_str(), "fn" | "parks" | "static"))) {
                 let mut f = self.method(true)?;
                 f.is_extern = is_extern;
                 methods.push(f);
@@ -267,7 +275,7 @@ impl Parser {
                 fields.push(FieldDecl { name: fname, owns, ty, default, line: ft.line, col: ft.col });
             }
         }
-        Ok(StructDecl { name, fields, methods, variants, is_enum, is_exception, is_extern, type_params, line: kw.line, col: kw.col })
+        Ok(StructDecl { name, fields, methods, variants, is_enum, is_exception, is_extern, self_sync: false, type_params, line: kw.line, col: kw.col })
     }
 
     fn fn_decl(&mut self, in_struct: bool) -> R<FnDecl> {
@@ -315,7 +323,7 @@ impl Parser {
             let t = self.cur().clone();
             return self.err(&t, format!("expected '{{', found {}", Self::describe(&t)));
         };
-        Ok(FnDecl { name, owner, is_static: false, params, ret, throws, body, is_extern: false, parks: false, attr, line: kw.line, col: kw.col })
+        Ok(FnDecl { name, owner, is_static: false, params, ret, throws, body, is_extern: false, parks: false, mode: 0, attr, line: kw.line, col: kw.col })
     }
 
     // ---------------- types ----------------

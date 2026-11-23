@@ -1,0 +1,24 @@
+package t
+// A plain `extern struct` is not thread-safe: its methods declare how they use it, and a shared one needs `sync`. An `extern sync struct`
+// promises that its C code synchronises itself. A plain extern object can also be a `ref`: no lock, no atomics.
+extern struct Counter {
+    static fn make(): Counter
+    static fn makeLocal(): ref Counter
+    reads fn get(): i64
+    writes fn inc()
+}
+extern sync struct Beacon {
+    static fn make(): Beacon
+    fn ping(): i64
+}
+fn main() {
+    shared Counter c = Counter.make()
+    sync (writes c) { c.inc(); c.inc() }
+    sync (reads c) { println(c.get()) }
+    ref Counter r = Counter.makeLocal()
+    r.inc()
+    println(r.get())
+    let b = Beacon.make()
+    println(b.ping())
+    println(b.ping())
+}

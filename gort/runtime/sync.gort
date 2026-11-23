@@ -16,14 +16,14 @@ extern impl Wakeup {
 }
 
 // Auto-reset signal (a "permit"): notify() before a wait is remembered, so a wake is never lost between a check and a wait. One waiter at a time.
-extern struct Signal {
+extern sync struct Signal {
     static fn make(): Signal
     fn notify()                                          // any worker; never parks
     fn wakeup(): Wakeup                                  // ready when a permit exists; waitAny consumes it when it returns this source
 }
 
 // Sticky flag: once set it stays set and every waiter, now or later, is woken. Used for server shutdown.
-extern struct Flag {
+extern sync struct Flag {
     static fn make(): Flag
     fn set()                                             // any worker; never parks; idempotent
     fn isSet(): bool
@@ -33,7 +33,7 @@ extern struct Flag {
 // A bounded queue with one consumer vthread and any number of producers on any worker. `capacity` is stated by the creator (principle 11).
 // A full queue REFUSES the message and counts it; nothing is dropped silently and nothing is dropped from the middle: the producer is
 // told (tryPush returns false) and the consumer is told how many it missed (takeLost).
-extern struct Mailbox<T> {
+extern sync struct Mailbox<T> {
     static fn make(capacity: usize): Ref<Mailbox<T>>
     fn tryPush(msg: T): bool                             // never parks. false: full; the message is NOT queued and the lost count goes up
     fn tryPop(): T?                                      // consumer only; never parks
@@ -42,7 +42,7 @@ extern struct Mailbox<T> {
 }
 
 // Counting limit on live things (connections). tryAcquire refuses instead of parking; the caller says what a refusal means.
-extern struct Limiter {
+extern sync struct Limiter {
     static fn make(limit: usize): Limiter
     fn tryAcquire(): bool                                // atomic
     fn release()

@@ -1,0 +1,9 @@
+// error: needs writes
+package t
+extern struct Counter { static fn make(): Counter
+ reads fn get(): i64
+ writes fn inc() }
+extern sync struct Beacon { static fn make(): Beacon
+ fn ping(): i64 }
+fn main() { shared Counter c = Counter.make()
+ sync (reads c) { c.inc() } }

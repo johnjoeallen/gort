@@ -1,0 +1,9 @@
+// error: is an `extern sync` type
+package t
+extern struct Counter { static fn make(): Counter
+ reads fn get(): i64
+ writes fn inc() }
+extern sync struct Beacon { static fn make(): Beacon
+ fn ping(): i64 }
+fn main() { let b = Beacon.make()
+ sync (writes b) { b.ping() } }

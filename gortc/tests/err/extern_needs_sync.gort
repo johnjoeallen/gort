@@ -1,0 +1,12 @@
+// error: needs `sync (writes
+package t
+extern struct Counter { static fn make(): Counter
+ reads fn get(): i64
+ writes fn inc() }
+extern sync struct Beacon { static fn make(): Beacon
+ fn ping(): i64 }
+fn bump(c: shared Counter) { c.inc() }
+fn main() { shared Counter c = Counter.make()
+ bump(c)
+ let d = Counter.make()
+ d.inc() }

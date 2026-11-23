@@ -845,8 +845,14 @@ impl<'a> Cx<'a> {
                     }
                     self.field_needs(*fid, 0, r, line);
                     if let Some(s) = sid_of(&r.ty) {
-                        if !self.prog.structs[s].is_extern {
-                            let lvl = self.needs[*fid].first().copied().unwrap_or(0);
+                        let ext = self.prog.structs[s].is_extern;
+                        if !(ext && self.prog.structs[s].self_sync) {
+                            // an extern method states how it uses its receiver; unmarked counts as writes
+                            let lvl = if ext && self.prog.fns[*fid].is_extern {
+                                if self.prog.fns[*fid].ext_mode == 1 { 1 } else { 2 }
+                            } else {
+                                self.needs[*fid].first().copied().unwrap_or(0)
+                            };
                             let desc = |w: &str| format!("calling `{}.{}`, which {} its receiver,", self.prog.structs[s].name, self.prog.fns[*fid].name, w);
                             if lvl == 2 {
                                 self.access(r, Need::Write, line, &desc("writes"));
@@ -914,10 +920,16 @@ impl<'a> Cx<'a> {
             EK::Borrow(i) | EK::BoxVal(i) if matches!(i.ty, Ty::Struct(_)) => Some(&**i),
             _ => None,
         };
-        if self.prog.structs[sid].is_extern {
+        // an `extern sync` type needs no block. Another extern type does, with the mode its method declares (unmarked: writes)
+        let ext = self.prog.structs[sid].is_extern;
+        if ext && self.prog.structs[sid].self_sync {
             return;
         }
-        let lvl = self.needs[fid].get(slot).copied().unwrap_or(0);
+        let lvl = if ext && self.prog.fns[fid].is_extern {
+            if self.prog.fns[fid].ext_mode == 1 { 1 } else { 2 }
+        } else {
+            self.needs[fid].get(slot).copied().unwrap_or(0)
+        };
         if lvl == 0 || self.is_fresh_value(a) {
             return;                               // nothing needed, or a new object nobody else has
         }

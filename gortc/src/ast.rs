@@ -185,6 +185,8 @@ pub struct FnDecl {
     pub is_extern: bool,
     /// `parks`: may wait (the runtime's effect, stated because there is no body to analyse)
     pub parks: bool,
+    /// `reads fn` or `writes fn` on a method of an `extern` type: how it uses its receiver (0 unmarked, which counts as writes, 1 reads, 2 writes)
+    pub mode: u8,
     /// `fn[nopark]` / `fn[yield]`: the effect attribute, if written
     pub attr: Option<String>,
     pub line: u32,
@@ -212,6 +214,8 @@ pub struct StructDecl {
     pub is_enum: bool,
     pub is_exception: bool,
     pub is_extern: bool,
+    /// `extern sync struct`: the C code synchronises itself, so the type takes no lock, no `ref` and needs no `sync` block
+    pub self_sync: bool,
     /// `struct Ring<T>`: a template, instantiated per use
     pub type_params: Vec<String>,
     pub line: u32,

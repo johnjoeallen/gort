@@ -20,7 +20,7 @@ struct Args {
     count: usize = 0
 }
 extern let argsPool: ArgsPool
-extern struct ArgsPool { fn get(): Args }                // a block whose cleanup() returns it to the pool; server.c: args_pool
+extern sync struct ArgsPool { fn get(): Args }                // a block whose cleanup() returns it to the pool; server.c: args_pool
 
 // Result of scanning the buffered bytes for one frame.
 enum Scan {
