@@ -1,0 +1,4 @@
+// error: `T[N]` is a run of values and takes no `ref` or `shared`
+package t
+struct Node { n: i64 }
+fn main() { Array<shared Node[4]> a = Array<shared Node[4]>() }

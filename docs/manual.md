@@ -151,7 +151,7 @@ The element type of an array that crosses into C (a variadic parameter such as `
 
 A block on the holder never stands in for a block on the array: `sync (writes g) { bump(g) }` is rejected when `bump` writes `g.xs`. So every access to one array, whether direct, through a callee, or through a copied-out handle, takes the array's own lock, and they exclude each other (`ok/sync_array_one_lock.gort`, `err/share_array_holder_block.gort`).
 
-Known gaps: the shared flag (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
+Known gaps: the shared and unshared layouts (the lock is always taken); lock order across separate nested blocks (the 5 s wait timeout traps a deadlock).
 
 ### 5.5 Owned fields: `owns`
 

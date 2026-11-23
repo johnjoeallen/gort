@@ -346,7 +346,7 @@ impl Parser {
             }
             self.in_type_args -= 1;
             self.expect_sym(")")?;
-            let ret = if self.eat_sym(":") { self.type_expr()? } else { TypeExpr { name: "()".into(), args: vec![], optional: false, fixed: None, line: t.line, col: t.col } };
+            let ret = if self.eat_sym(":") { self.type_expr()? } else { TypeExpr { name: "()".into(), args: vec![], optional: false, fixed: None, qual: None, line: t.line, col: t.col } };
             args.push(ret);
             let mut throws = false;
             if self.is_kw("throws") {
@@ -354,7 +354,13 @@ impl Parser {
                 throws = true;
                 self.ident()?; // a function type names one exception (usually `Exception`): a comma would be the next parameter
             }
-            return Ok(TypeExpr { name: format!("fn{}{}", if throws { "!" } else { "" }, if nopark { ".np" } else { "" }), args, optional: false, fixed: None, line: t.line, col: t.col });
+            return Ok(TypeExpr { name: format!("fn{}{}", if throws { "!" } else { "" }, if nopark { ".np" } else { "" }), args, optional: false, fixed: None, qual: None, line: t.line, col: t.col });
+        }
+        // `ref T` / `shared T`: soft keywords, a qualifier only when a type name follows (a variable may still be called `shared`)
+        let mut qual = None;
+        if (self.is_kw("ref") || self.is_kw("shared")) && matches!(self.peek_at(1).tok, Tok::Ident(_)) {
+            qual = Some(if self.is_kw("ref") { Qual::Ref } else { Qual::Shared });
+            self.bump();
         }
         let (name, t) = self.ident()?;
         let mut args = Vec::new();
@@ -392,7 +398,7 @@ impl Parser {
         let optional = self.eat_sym("?");
         // `T?&`: a borrowed view. Slice 1 treats it as the plain type (a counted copy)
         self.eat_sym("&");
-        Ok(TypeExpr { name, args, optional, fixed, line: t.line, col: t.col })
+        Ok(TypeExpr { name, args, optional, fixed, qual, line: t.line, col: t.col })
     }
 
     // ---------------- statements ----------------
@@ -1187,7 +1193,7 @@ impl Parser {
                 let starts_upper = s.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false);
                 if starts_upper && self.looks_like_struct_lit() {
                     let f = self.field_inits()?;
-                    return Ok(mk(ExprKind::StructLit(TypeExpr { name: s.clone(), args: Vec::new(), optional: false, fixed: None, line: t.line, col: t.col }, f)));
+                    return Ok(mk(ExprKind::StructLit(TypeExpr { name: s.clone(), args: Vec::new(), optional: false, fixed: None, qual: None, line: t.line, col: t.col }, f)));
                 }
                 Ok(mk(ExprKind::Ident(s.clone())))
             }
@@ -1211,6 +1217,6 @@ fn is_reserved(s: &str) -> bool {
 
 /// `Range(lo, hi)` and `lo..hi`: the prelude's `Range { lo, hi }`.
 fn range_lit(lo: Expr, hi: Expr, line: u32, col: u32) -> Expr {
-    let te = TypeExpr { name: "Range".into(), args: vec![], optional: false, fixed: None, line, col };
+    let te = TypeExpr { name: "Range".into(), args: vec![], optional: false, fixed: None, qual: None, line, col };
     Expr { kind: ExprKind::StructLit(te, vec![("lo".into(), lo), ("hi".into(), hi)]), line, col }
 }

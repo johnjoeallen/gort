@@ -1,8 +1,8 @@
 # Sharing and access checking
 
-One reference kind, `Ref<T>`. Whether an object is shared is not written anywhere. The compiler works out where a `sync` block is required, reports a missing or too-weak one as a compile error, and the blocks cost almost nothing on an object that was never shared. All examples are taken or adapted from `gort/redis/db.gort`.
+Two reference kinds, `ref T` and `shared T` (spelled `Ref<T>` in the current compiler). Whether an object is shared is a compile-time property of the object, fixed when it is constructed. The programmer states it in the handle's type (`shared T` or `ref T`), and for an untyped `let` the compiler infers it from where the object escapes. It works out where a `sync` block is required and reports a missing or too-weak one as a compile error. An unshared object has no lock, no atomic count and no run-time flag, so it costs nothing extra. All examples are taken or adapted from `gort/redis/db.gort`.
 
-Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Partly implemented in `gortc`: explicit `sync` blocks with the lock, R1 to R4 (where a block is required, and its mode) and the no-parking rule, with `spawn` as the publishing point (R5, by capture). Not implemented: `fresh` results, the shared flag (R6) and write-once inference across modules; the C beside the `.gort` is hand-written.
+Status: **Direction**. Replaces the open questions about "how shareability is proven or declared" (spec 10.2, 10.3, 7.3). Partly implemented in `gortc`: explicit `sync` blocks with the lock, R1 to R4 (where a block is required, and its mode) and the no-parking rule, with `spawn` as the publishing point (R5, by capture). Not implemented: `fresh` results, the two layouts (R5, R6) and write-once inference across modules; the C beside the `.gort` is hand-written.
 
 ## The rules
 
@@ -21,9 +21,22 @@ Status: **Direction**. Replaces the open questions about "how shareability is pr
 
 **Owned fields.** A field declared `owns` holds an object or array only its struct holds, so the struct's block covers it (and what it owns in turn). The compiler checks that it is only ever given new objects and never copied out. See the [manual](manual.md#55-owned-fields-owns).
 
-**R5. Publishing.** A reference to a local object crosses a vthread boundary when it is passed to `spawn`, sent in a message, stored in a global or in a non-local object, or captured by a closure that is. From that point the object is *shared*: the compiler treats the reference as no longer local on every later path, so R1 applies after it. At run time the object's shared flag is set before the handoff, and everything reachable from it is set too (or the compiler refuses the publish; see Open).
+**R5. Sharedness is fixed at construction.** Every `new T` is either *shared* or *unshared*, decided at that site and never changed. A handle's type says which: `shared T` or `ref T` (a bare struct name is a value, stored inline; `Array` and `String` are always handles, and a bare `Array<T>` is unshared). A `new` takes its sharedness from its expected type (a local's declared type, a field, a parameter or a return type), so no `new shared` is written: `shared Db db = new Db { .. }`. A `let` with no declared type is inferred: the compiler marks the site shared when a reference to the object crosses a vthread boundary on any path (passed to `spawn`, sent in a message, stored in a global or in a non-local object, or captured by a closure that does one of these), and unshared otherwise. In the first compiler only the declared form exists, and an untyped `let x = new T` is unshared. A wrong inference is repaired by declaring the type, never by converting an object, so there is no promotion and no representation change. A reference to a shared object is treated as non-local on every path, so R1 applies to it.
 
-**R6. Cost on an unshared object.** A `sync` block tests the flag once at entry. If it is clear, it does nothing. The flag only ever goes from clear to set, so the test at exit agrees with the one at entry.
+**Type rule.** Sharedness is part of the handle's type, and there is no conversion between `ref T` and `shared T`. Storing a `ref` handle into a shared object, or passing one across a vthread boundary, is a compile error that names the allocation site and the fix (declare it `shared`). A shared object holds only shared handles, values, scalars and `String`, so nothing is walked at a handoff and no graph is published. `String` is immutable and always counted atomically, whichever object holds it, so it needs no `shared` form.
+
+`shared` qualifies one handle, so a container and its elements are separate choices:
+
+| Type | The container | The elements |
+|---|---|---|
+| `shared Array<Thing>` | shared (atomic count, lock) | `Thing` is a value, inline, covered by the array's lock |
+| `Array<shared Thing>` | unshared (plain count, no lock) | shared handles, each with its own lock |
+| `shared Array<shared Thing>` | shared | shared handles; a block on the array covers its membership, not an element's body |
+| `shared Array<ref Thing>` | error | an unshared handle inside a shared object |
+
+`Array<ref Thing>` and `Array<shared Thing>` are different instances of the generic, with no conversion between them.
+
+**R6. Two layouts, no run-time flag.** The compiler emits two C representations of one Gort type. An unshared object is a plain (non-atomic) count and the data: no lock, no atomic operation, no flag. A shared object is an atomic count, a vthread-aware reader-writer lock and the data. The compiler picks the allocation, count, destroy and `sync` operations from the type, so no code asks at run time whether an object is shared. A `sync` block on an unshared object compiles to nothing. A function that accepts either kind may be specialised into two C versions; this is an option, not a requirement. The compiler may drop a lock acquisition when it proves the current vthread already holds a sufficient lock.
 
 **R7. No hoisting.** Every access goes through the `Ref`, field or container, so a call that removes an object from its container cannot leave a stale pointer behind. The compiler may keep a pointer in a register where it proves nothing can drop, grow or park, but the program cannot observe that. A pointer the program gets by calling `deref()` itself is unsafe, allowed only inside an `unsafe` block, and never on a shared object outside `sync` (D18 item 8). A `Ref<T>` parameter needs no block in the callee: the caller either owns the object locally or holds the block (R4 checks its mode against the callee's summary). The summary names the object by its path from the parameter (`a`, `a.b`), so the caller must hold a block on that object, not only on the parameter. A lambda has no checked caller and holds its own blocks.
 
@@ -326,14 +339,35 @@ A consumer of `db.smod` can run every check above with no source. An implementat
 ## Generated C for a block
 
 ```c
-// sync (reads store) { ... } where store is incoming
-bool sh = obj_is_shared(store);                  // one load of the control-block flag
-if (sh) { st_t s = rwlock_read_enter(t, &store->lock); /* may park; PARKED unwinds as usual */ }
+// sync (reads store) { ... } where store is a shared type
+st_t s = rwlock_read_enter(t, &store->lock);     // may park; PARKED unwinds as usual
 /* body: no parking inside, no slice checks */
-if (sh) rwlock_read_exit(&store->lock);          // on every exit path, including throws
+rwlock_read_exit(&store->lock);                  // on every exit path, including throws
 ```
 
-Reference counts follow the same split. An object the compiler proves local uses plain counts. A reference to a non-local object tests the flag: plain count if clear, atomic if set. That test per copy and release is a real cost, and the alternative (always atomic for non-local) is simpler and slower; `bench/c/refcount_bench.c` is where it gets measured (Open).
+For an unshared type the same block emits only the body. Counts follow the type too: `rc_inc_plain` and `rc_dec_plain` on an unshared object, `rc_inc_atomic` and `rc_dec_atomic` on a shared one. There is no flag test per copy or release.
+
+## Syntax
+
+*Status: proposed grammar for the first compiler pass. Implemented so far: the parser accepts `ref` and `shared`, and `shared T` is the current `Ref<T>`; no second layout yet.*
+
+```
+type   := qual? name ('<' type (',' type)* '>')? suffix*
+qual   := 'ref' | 'shared'
+suffix := '?' | '[' N ']'
+```
+
+- **`ref` and `shared` are soft keywords** (a qualifier only where a type name follows, so a variable may still be called `shared`) and qualify the one handle written after them. `ref Db` and `shared Db` are handles to an unshared and a shared `Db`. A bare struct name is a value, stored inline. A bare `Array<T>` or `String` is a handle: `Array<T>` is unshared, and `String` is always atomic (R5).
+- **A suffix applies to the whole qualified handle.** `shared Db?` is an optional shared handle, and `Array<shared Thing>?` an optional unshared array of shared handles. `T[N]` is only ever a fixed run of values (`Thing[4]`, `u8[N]`), so a qualifier on it is an error. An array of handles is written `Array<shared Thing>`, and a shared array `shared Array<..>`; there is no short form.
+- **Qualifiers nest through type arguments only where the argument is a handle:** `Map<String, shared Entry>`, `Ring<ref Task>`. A qualifier on a scalar or a value type is an error.
+- **`new` has no qualifier.** Its sharedness is the expected type's: `shared Db db = new Db { .. }`, a `shared Db` field or parameter, a `shared Db` return type. With no expected type (`let x = new Db { .. }`) the first pass makes it `ref Db`.
+- **No conversion between `ref T` and `shared T`**, in an assignment, an argument or a return. A call passing a `shared` object to a `ref` parameter is an error that suggests the fix. A function that works on either kind needs the specialisation described under R6, which the first pass does not have.
+- **Lending a value to a parameter** (the current borrow rule) works only for `ref T` parameters: a value in a frame is not a shared object.
+- **`WeakRef<T>` names its target's kind:** `WeakRef<shared T>`. The weak handle itself follows the array rule.
+- **`extern` types are opaque C, so Gort cannot know whether they are thread-safe.** The default `extern struct Conn` is not: it is a handle that takes `ref` or `shared` like any other (`shared Conn` is the `Arc<RwLock<Conn>>` case, the lock being the handle's own). An `extern sync struct Mailbox` promises that its C code synchronises itself (R8); it is always counted atomically, has no lock and takes no qualifier. Each method of a non-`sync` extern type states its mode, `reads` or `writes`, and an unmarked method is `writes`, so the same R1 to R4 checks apply as for Gort functions. A parking method cannot be called inside a `sync` block (R4), so a `shared Conn` cannot call `recv` under its lock; a socket is normally a `ref Conn` owned by one vthread and reached from others through a `sync` type.
+- **Control block placement favours C.** Anything that can be passed to C is a plain pointer to its data, so no header precedes an array's run or an `extern` object's body. An array's control block is apart from its run (D18 item 3); an `extern` handle's control block is external too, and holds the count, the lock (in the `shared` layout), the C pointer and the destructor, so a C object that C allocated can be wrapped without copying. Passing an array to C pins it for the call, and a `shared` array's lock is held across that call, so the call cannot park. Slice 0's 16-byte header before the body stays for Gort structs, which C never sees; for arrays and `extern` types the placement is fixed by this rule, and B18 decides only how Gort structs are laid out.
+
+**Migration.** The compiler today gives every counted object atomic counts and a lock, which is the `shared` layout. While the samples are converted, `Ref<T>` is accepted as an alias for `shared T`, so nothing changes behaviour until a sample is rewritten to `ref T` on purpose. Step 1 is done: `shared T` parses and means `Ref<T>`; `ref T` parses and is rejected as not built yet. Because the keywords are soft, the four tests that name a variable `shared` needed no rename.
 
 ## Growable containers
 
@@ -341,9 +375,11 @@ A container that can relocate its storage (arrays, builders, map tables) is reac
 
 ## Open
 
-- **Publishing a graph.** Setting the flag on everything reachable costs a walk at the publish. Alternatives: refuse to publish an object whose graph has local-only parts that are not themselves being published; or make `spawn` and message sends take only values whose reachable graph is already shared or immutable.
-- **Where the lock word lives.** In every control block (costs bytes on every promoted object), or allocated at the first publish (costs an indirection).
-- **Counts per instance.** A flag test in each count operation, or atomic always for non-local references. Needs `refcount_bench` on realistic access patterns.
+- **Inference accuracy.** A site is shared if any path publishes it. Measure how often this over-approximates in `gort/` (an object shared only on a rare path pays atomics on all paths).
+- **Specialising functions.** Whether a function over `Ref<T>` is compiled once per sharedness (code size) or only where a call site needs it.
+- **Generic containers.** A library container over `ref T` and over `shared T` needs two instantiations (table in R5).
+- **Reference syntax.** `ref T` and `shared T` replace `Ref<T>`; the parser, `sema.rs`, `codegen.rs`, the samples and the docs still say `Ref<T>` until the rename.
+- **Where the lock word lives.** In the shared layout only, so unshared objects pay no bytes. Inline in the control block or out of line (waiters in a table keyed by address) is still open.
 - **Write-once across modules.** A field is write-once if no code in its defining module writes it. Public fields that other modules may write need either a mutability declaration or a rule that they are mutable by default.
 - **Immutable types.** Inferred from R3 as above; whether to also let the programmer assert it (for a compile error if a later change breaks it) is undecided.
 - **Runtime types that are not thread-safe.** R8 treats every `extern` type as self-synchronising. Whether an `extern` declaration may say otherwise (a handle that one vthread must own) is undecided.

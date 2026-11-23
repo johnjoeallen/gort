@@ -1,0 +1,4 @@
+// error: `shared` qualifies a handle, and i64 is a value
+package t
+struct Node { n: i64 }
+fn main() { shared i64 x = 1 }

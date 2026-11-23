@@ -230,7 +230,7 @@ Costs and open points:
 - A value that flows to a return, or into a parameter's contents, is allocated shared up front.
 - A shared or longer-lived object never holds a reference to a local (the concept's INV-7): a store of a local into one is rejected, or the local is published first (sharing.md R5).
 
-**7. Counts.** Counts on an unshared object may be non-atomic. They become atomic when the object is shared (the shared flag of sharing.md R5, set before the handoff). Spec Phase 1 starts with atomic counts; this is the later optimisation. The saving is unmeasured.
+**7. Counts.** Counts on an unshared object may be non-atomic. They are atomic when the object's type is shared: sharedness is fixed at construction and selects the layout at compile time (sharing.md R5, R6), so there is no flag and no conversion. Spec Phase 1 starts with atomic counts everywhere; this is the later optimisation. The saving is unmeasured.
 
 **8. Access and pointers.**
 

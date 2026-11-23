@@ -1195,6 +1195,9 @@ impl<'a> Sema<'a> {
     }
 
     fn resolve_ty_base(&mut self, t: &TypeExpr) -> Ty {
+        if let Some(q) = t.qual {
+            return self.resolve_qualified(t, q);
+        }
         let bad = |s: &mut Self, msg: String| {
             s.error(t.line, t.col, msg);
             Ty::Error
@@ -1265,6 +1268,38 @@ impl<'a> Sema<'a> {
                 }
             }
             _ => bad(self, format!("type `{}` takes no type arguments", t.name)),
+        }
+    }
+
+    /// `shared T` is today's only layout (`Ref<T>`); `ref T` is the plain-count layout, not built yet (docs/sharing.md, Syntax).
+    fn resolve_qualified(&mut self, t: &TypeExpr, q: ast::Qual) -> Ty {
+        let mut plain = t.clone();
+        plain.qual = None;
+        let inner = self.resolve_ty_base(&plain);
+        if inner == Ty::Error {
+            return Ty::Error;
+        }
+        let msg = if t.fixed.is_some() {
+            Some("`T[N]` is a run of values and takes no `ref` or `shared`; write `Array<shared T>` or `shared Array<..>`".to_string())
+        } else if q == ast::Qual::Ref {
+            Some("`ref` handles (plain counts, no lock) are not built yet: every object has the shared layout, so write `shared T`".to_string())
+        } else if matches!(inner, Ty::Str) {
+            Some("`String` is always atomic and takes no `shared`".to_string())
+        } else {
+            None
+        };
+        if let Some(m) = msg {
+            self.error(t.line, t.col, m);
+            return Ty::Error;
+        }
+        match inner {
+            Ty::Struct(s) => Ty::Ref(s),
+            Ty::Ref(_) | Ty::Arr(_) => inner,
+            other => {
+                let n = self.prog.type_name(&other);
+                self.error(t.line, t.col, format!("`shared` qualifies a handle, and {} is a value", n));
+                Ty::Error
+            }
         }
     }
 
@@ -1356,7 +1391,7 @@ impl<'a> Sema<'a> {
             let s = match &s.kind {
                 StmtKind::Let { name, mutable, ty: None, init } if matches!(init.kind, ExprKind::Int(_)) => match self.int_hint(cx, name, &b.stmts[i + 1..]) {
                     Some(t) => {
-                        let te = ast::TypeExpr { name: t.name().to_string(), args: vec![], optional: false, fixed: None, line: s.line, col: s.col };
+                        let te = ast::TypeExpr { name: t.name().to_string(), args: vec![], optional: false, fixed: None, qual: None, line: s.line, col: s.col };
                         hinted = ast::Stmt { kind: StmtKind::Let { name: name.clone(), mutable: *mutable, ty: Some(te), init: init.clone() }, line: s.line, col: s.col };
                         &hinted
                     }
@@ -1518,7 +1553,7 @@ impl<'a> Sema<'a> {
                     }
                     return None;
                 }
-                let usize_ty = TypeExpr { name: "usize".into(), args: vec![], optional: false, fixed: None, line, col };
+                let usize_ty = TypeExpr { name: "usize".into(), args: vec![], optional: false, fixed: None, qual: None, line, col };
                 let (start, limit, elem) = if is_range {
                     (field(&r, "lo"), field(&r, "hi"), id(&i))
                 } else {
@@ -2727,7 +2762,7 @@ impl<'a> Sema<'a> {
             }
             let tn = format!("__cap{}", k);
             tmap.insert(tn.clone(), v.ty.clone());
-            params.push(ast::Param { name: n.clone(), ty: TypeExpr { name: tn, args: vec![], optional: false, fixed: None, line: e.line, col: e.col }, variadic: false });
+            params.push(ast::Param { name: n.clone(), ty: TypeExpr { name: tn, args: vec![], optional: false, fixed: None, qual: None, line: e.line, col: e.col }, variadic: false });
             caps.push(v);
         }
         if !caps.is_empty() && !extern_ctx {
@@ -2743,7 +2778,7 @@ impl<'a> Sema<'a> {
             is_static: true,
             params,
             ret: l.ret.clone(),
-            throws: if th { vec![TypeExpr { name: "Exception".into(), args: vec![], optional: false, fixed: None, line: e.line, col: e.col }] } else { vec![] },
+            throws: if th { vec![TypeExpr { name: "Exception".into(), args: vec![], optional: false, fixed: None, qual: None, line: e.line, col: e.col }] } else { vec![] },
             body: Some(l.body.clone()),
             is_extern: false,
             parks: false,

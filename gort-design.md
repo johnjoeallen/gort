@@ -316,13 +316,13 @@ There is one reference kind, `Ref<T>`, and no declaration of sharedness. The com
 
 - Access through a `Ref<T>` needs a `sync` block naming it when the object is **not provably local** (not allocated in this function, or a reference to it has escaped) **and** the accessed field is **mutable** (written after construction, directly or by a method that writes its receiver). Fields never written after construction, and types made only of them, are read without a block.
 - An object listed under `reads` is read-only. Calling a function whose summary writes the argument, inside a block that lists it under `reads`, is a compile error naming the chain (`needs writes x, but it is listed under reads`), checked from the callee's contract, so it works across separately compiled modules.
-- Passing a local object to `spawn`, a message, a global, a non-local object or an escaping closure **publishes** it: the compiler treats it as non-local from that point, and at run time its shared flag is set before the handoff. The flag only goes from clear to set.
-- On an unshared object a `sync` block tests the flag once and do nothing. Behaviour never depends on whether an object is shared, only cost does.
+- Passing a local object to `spawn`, a message, a global, a non-local object or an escaping closure **publishes** it. Sharedness is fixed at construction: a `new` takes its sharedness from the declared type of the handle (`shared T` or `ref T`), and an untyped `let` is inferred shared when any path publishes the object, and a shared object is a different C layout (atomic count and a reader-writer lock). A shared object holds only shared handles, values, scalars and `String` (always atomic); storing an unshared object into a shared one is a compile error. There is no run-time flag and no promotion.
+- On an unshared type a `sync` block compiles to nothing. Behaviour never depends on whether an object is shared, only cost does.
 - There is no hoisting (D18 item 8): every access goes through the `Ref`, field or container, so a pointer cannot outlive the block that makes it valid.
 
 A module-level `var` is local to each vthread. A module-level `let` is one binding for the whole process, initialised before any vthread starts: the object it holds is published at that point, so a `let` holding a `Ref<T>` is how a process-wide table is declared (`gort/http/store.gort`). There is no `shared var` keyword.
 
-Open: publishing a graph, where the lock word lives, per-instance reference-count mode, write-once fields across modules, interface access modes (`docs/sharing.md`, Open).
+Open: inference accuracy, function specialisation, generic containers over both kinds, where the lock word lives, write-once fields across modules, interface access modes (`docs/sharing.md`, Open).
 
 ## 8. Messaging
 

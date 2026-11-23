@@ -1,0 +1,4 @@
+// error: `String` is always atomic and takes no `shared`
+package t
+struct Node { n: i64 }
+fn main() { shared String s = "x" }

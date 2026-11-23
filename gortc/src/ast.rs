@@ -1,5 +1,11 @@
 //! Syntax tree for the slice-0 subset.
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Qual {
+    Ref,
+    Shared,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeExpr {
     pub name: String,
@@ -8,6 +14,8 @@ pub struct TypeExpr {
     pub optional: bool,
     /// `T[N]`: a fixed-capacity run of N elements (the size is recorded, not yet used)
     pub fixed: Option<u64>,
+    /// `ref T` or `shared T`: which kind of handle (docs/sharing.md, Syntax)
+    pub qual: Option<Qual>,
     pub line: u32,
     pub col: u32,
 }

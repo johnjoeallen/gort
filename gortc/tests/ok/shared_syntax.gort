@@ -1,0 +1,16 @@
+package t
+// `shared T` is the same type as `Ref<T>` while `ref T` is not built; `shared` is still a usable variable name
+struct Node { n: i64 }
+struct S { next: shared Node?, xs: shared Array<i64> }
+fn bump(s: shared S): i64 { return s.xs[0] + 1 }
+fn mk(): shared Node { return new Node { n: 7 } }
+fn main() {
+    let shared = 3
+    shared Node a = new Node { n: shared }
+    Ref<Node> b = a
+    shared S s = new S { xs: [10, 20] }
+    s.next = mk()
+    println(a.n + b.n)
+    println(bump(s))
+    println(s.next != null)
+}

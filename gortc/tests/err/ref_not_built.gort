@@ -1,0 +1,4 @@
+// error: `ref` handles (plain counts, no lock) are not built yet
+package t
+struct Node { n: i64 }
+fn main() { ref Node a = new Node { n: 1 } }
