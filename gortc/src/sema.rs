@@ -1290,7 +1290,7 @@ impl<'a> Sema<'a> {
         let base = self.resolve_ty_base(t);
         if t.optional && base != Ty::Error {
             return match base {
-                Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Ref(_, _) | Ty::Str | Ty::Arr(_, _) | Ty::Struct(_) => Ty::Opt(Box::new(base)),
+                Ty::Int(_) | Ty::Bool | Ty::F64 | Ty::Dur | Ty::Inst | Ty::Ref(_, _) | Ty::Str | Ty::Arr(_, _) | Ty::Struct(_) => Ty::Opt(Box::new(base)),
                 other => {
                     let n = self.prog.type_name(&other);
                     self.error(t.line, t.col, format!("{} cannot be optional", n));
@@ -3250,7 +3250,14 @@ impl<'a> Sema<'a> {
                         };
                         if let (Some(k), 1) = (k, args.len()) {
                             let n = self.lower_expr(cx, &args[0]);
-                            let n = self.coerce(cx, n, &Ty::Int(IntTy::I64), (args[0].line, args[0].col));
+                            // any integer type: a u64 count of seconds is a normal thing to have
+                            let n = match &n.ty {
+                                Ty::Int(it) if *it != IntTy::I64 && !n.lit => {
+                                    let l = n.line;
+                                    typed(EK::Cast(Box::new(n)), Ty::Int(IntTy::I64), l)
+                                }
+                                _ => self.coerce(cx, n, &Ty::Int(IntTy::I64), (args[0].line, args[0].col)),
+                            };
                             let kk = typed(EK::Int(k), Ty::Int(IntTy::I64), line);
                             return typed(EK::Binary(BinOp::Mul, Box::new(n), Box::new(kk)), Ty::Dur, line);
                         }
@@ -3313,7 +3320,7 @@ impl<'a> Sema<'a> {
                     // searching: String or Array<u8> receivers, a String or Array<u8> needle
                     let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Plain);
                     let byteish = matches!(b.ty, Ty::Str) || is_bytes(&b.ty);
-                    if byteish && matches!(name.as_str(), "find" | "contains" | "startsWith" | "copyFrom") && args.len() == 1 {
+                    if byteish && matches!(name.as_str(), "find" | "contains" | "startsWith" | "copyFrom" | "equalsIgnoreCase") && args.len() == 1 {
                         let n = self.lower_expr(cx, &args[0]);
                         let n = self.decay(cx, n, (args[0].line, args[0].col));
                         if n.ty != Ty::Str && !is_bytes(&n.ty) {
@@ -3330,11 +3337,15 @@ impl<'a> Sema<'a> {
                             "find" => ("find", Ty::Opt(Box::new(Ty::Int(IntTy::Usize)))),
                             "contains" => ("contains", Ty::Bool),
                             "startsWith" => ("startsWith", Ty::Bool),
+                            "equalsIgnoreCase" => ("equalsIgnoreCase", Ty::Bool),
                             _ => ("copyFrom", Ty::Unit),
                         };
                         return typed(EK::RtCall(rn, vec![b, n]), rt, line);
                     }
                     // `x.copy()`: a new String, or a new Array<T> with the same elements. Elements that hold counts are not copied yet.
+                    if byteish && name == "isUtf8" && args.is_empty() {
+                        return typed(EK::RtCall("isUtf8", vec![b]), Ty::Bool, line);
+                    }
                     if name == "copy" && args.is_empty() && matches!(b.ty, Ty::Str) {
                         return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
                     }

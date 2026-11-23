@@ -591,6 +591,35 @@ static int gort_jp_skip(gort_jp *j) {
 static uint64_t gort_hash_u(uint64_t x) { x += 0x9e3779b97f4a7c15ULL; x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL; x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL; return x ^ (x >> 31); }
 static uint64_t gort_hash_str(const gort_str *s) { uint64_t h = 1469598103934665603ULL; for (size_t i = 0; i < s->len; i++) { h ^= s->data[i]; h *= 1099511628211ULL; } return gort_hash_u(h); }
 
+/* ASCII case-insensitive equality of two byte runs */
+static bool gort_mem_eqi(const uint8_t *a, size_t an, const uint8_t *b, size_t bn) {
+    if (an != bn) return false;
+    for (size_t i = 0; i < an; i++) {
+        uint8_t x = a[i], y = b[i];
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return false;
+    }
+    return true;
+}
+/* is the run well-formed UTF-8 (no overlong forms, no surrogates, nothing above U+10FFFF)? */
+static bool gort_utf8_ok(const uint8_t *s, size_t n) {
+    size_t i = 0;
+    while (i < n) {
+        uint8_t c = s[i];
+        if (c < 0x80) { i++; continue; }
+        size_t len; uint32_t cp;
+        if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; }
+        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; }
+        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; }
+        else return false;
+        if (i + len > n) return false;
+        for (size_t k = 1; k < len; k++) { if ((s[i + k] & 0xC0) != 0x80) return false; cp = (cp << 6) | (s[i + k] & 0x3F); }
+        if ((len == 3 && cp < 0x800) || (len == 4 && cp < 0x10000) || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
+        i += len;
+    }
+    return true;
+}
 static long gort_mem_find(const uint8_t *h, size_t hn, const uint8_t *n, size_t nn) {
     if (nn == 0) return 0;
     if (nn > hn) return -1;

@@ -1,0 +1,18 @@
+package t
+struct Entry { at: Instant?, ttl: Duration? }
+fn after(d: Duration?): Instant? { return d == null ? null : Instant.now() + d }
+fn main() {
+    let e = Entry { at: null, ttl: Duration.seconds(5) }
+    println(e.at == null)
+    println(e.ttl != null)
+    var t: Duration? = null
+    println(t == null)
+    t = 2.s
+    println(t > 1.s)
+    let w = after(t)
+    println(w != null)
+    let secs: u64 = 3
+    println(Duration.seconds(secs) == 3.s)
+    let x = after(null)
+    println(x == null)
+}

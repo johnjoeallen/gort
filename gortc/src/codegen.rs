@@ -1384,7 +1384,7 @@ impl<'a> FnGen<'a> {
                     self.line(format!("{} {} = {};", cty, yn, y.c));
                     return Val::plain(format!("(({0}) {1} ({2}) ? ({0}) : ({2}))", xn, if *name == "min" { "<" } else { ">" }, yn));
                 }
-                if matches!(*name, "find" | "contains" | "startsWith" | "copyFrom") {
+                if matches!(*name, "find" | "contains" | "startsWith" | "copyFrom" | "equalsIgnoreCase") {
                     let data = |g: &mut Self, e: &TExpr| -> (String, String) {
                         let v = g.expr(e);
                         let n = g.tmp();
@@ -1404,6 +1404,7 @@ impl<'a> FnGen<'a> {
                             Val::plain("")
                         }
                         "startsWith" => Val::plain(format!("({0} >= {1} && memcmp({2}, {3}, {1}) == 0)", hl, nl, hd, nd)),
+                        "equalsIgnoreCase" => Val::plain(format!("gort_mem_eqi({}, {}, {}, {})", hd, hl, nd, nl)),
                         "contains" => Val::plain(format!("(gort_mem_find({}, {}, {}, {}) >= 0)", hd, hl, nd, nl)),
                         _ => {
                             let t = self.tmp();
@@ -1421,6 +1422,11 @@ impl<'a> FnGen<'a> {
                     self.line(format!("gort_arr* {} = gort_arr_new(1, {}->len); memcpy({}->data, {}->data, {}->len);", t, a.c, t, a.c, a.c));
                     self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                     return Val { c: t.clone(), own: Some(t) };
+                }
+                if *name == "isUtf8" {
+                    let t = self.tmp();
+                    self.line(format!("bool {} = gort_utf8_ok((const uint8_t*){}->data, {}->len);", t, a.c, a.c));
+                    return Val::plain(t);
                 }
                 if *name == "copyArr" {
                     let t = self.tmp();
@@ -1930,6 +1936,8 @@ fn opt_name(prog: &Program, inner: &Ty) -> String {
         Ty::Int(i) => i.name().to_string(),
         Ty::Bool => "bool".into(),
         Ty::F64 => "f64".into(),
+        Ty::Dur => "dur".into(),
+        Ty::Inst => "inst".into(),
         Ty::Struct(s) => format!("S_{}", prog.structs[*s].name),
         _ => "x".into(),
     };

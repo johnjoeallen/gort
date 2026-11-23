@@ -1,0 +1,15 @@
+package t
+fn main() {
+    let b = "GeT".toBytes()
+    println(b.equalsIgnoreCase("get"))
+    println(b.equalsIgnoreCase("gets"))
+    println("Set".equalsIgnoreCase("sET".toBytes()))
+    println(b[0..2].equalsIgnoreCase("ge"))
+    println("héllo".isUtf8())
+    let bad = new u8[2]
+    bad[0] = 195
+    bad[1] = 40
+    println(bad.isUtf8())
+    let ok = "ok".toBytes()
+    println(ok.isUtf8())
+}
