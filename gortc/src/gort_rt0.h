@@ -293,8 +293,13 @@ static inline void *gort_new(size_t size) {
 }
 static inline void *gort_retain(void *p) { if (p) __atomic_fetch_add(&GORT_CTL(p)->strong, 1, __ATOMIC_RELAXED); return p; }
 /* a `ref` object (plain layout): one thread holds every handle, so the count needs no atomic and the lock word is never touched */
+#ifdef GORT_ATOMIC_REFS   /* gortc --atomic-refs: measure a program as if every ref were shared */
+#define gort_retain_p gort_retain
+#define gort_release_last_p gort_release_last
+#else
 static inline void *gort_retain_p(void *p) { if (p) GORT_CTL(p)->strong++; return p; }
 static inline bool gort_release_last_p(void *p) { return --GORT_CTL(p)->strong == 0; }
+#endif
 static inline bool gort_release_last(void *p) { return __atomic_sub_fetch(&GORT_CTL(p)->strong, 1, __ATOMIC_ACQ_REL) == 0; }
 static inline void gort_free(void *p) { free(GORT_CTL(p)); __atomic_fetch_sub(&gort_live, 1, __ATOMIC_RELAXED); }
 

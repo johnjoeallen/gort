@@ -1,0 +1,162 @@
+plain store ref 605
+plain store shared 7239
+plain sync ref 543
+plain sync shared 7783
+plain alloc ref 10324
+plain alloc shared 13944
+plain list ref 14601
+plain list shared 68227
+plain check true
+atomic store ref 7251
+atomic store shared 7276
+atomic sync ref 8506
+atomic sync shared 8507
+atomic alloc ref 13935
+atomic alloc shared 13936
+atomic list ref 37803
+atomic list shared 68166
+atomic check true
+plain store ref 560
+plain store shared 7233
+plain sync ref 542
+plain sync shared 7771
+plain alloc ref 10319
+plain alloc shared 13932
+plain list ref 14661
+plain list shared 68176
+plain check true
+atomic store ref 7244
+atomic store shared 7237
+atomic sync ref 8508
+atomic sync shared 8719
+atomic alloc ref 14324
+atomic alloc shared 13947
+atomic list ref 37835
+atomic list shared 68235
+atomic check true
+plain store ref 558
+plain store shared 7242
+plain sync ref 543
+plain sync shared 7782
+plain alloc ref 10319
+plain alloc shared 13931
+plain list ref 14590
+plain list shared 68272
+plain check true
+atomic store ref 7248
+atomic store shared 7239
+atomic sync ref 8507
+atomic sync shared 8509
+atomic alloc ref 13943
+atomic alloc shared 13937
+atomic list ref 37839
+atomic list shared 68206
+atomic check true
+plain store ref 593
+plain store shared 7239
+plain sync ref 542
+plain sync shared 7786
+plain alloc ref 10320
+plain alloc shared 13937
+plain list ref 14652
+plain list shared 68207
+plain check true
+atomic store ref 7238
+atomic store shared 7236
+atomic sync ref 8506
+atomic sync shared 8505
+atomic alloc ref 13935
+atomic alloc shared 13933
+atomic list ref 37841
+atomic list shared 68359
+atomic check true
+plain store ref 565
+plain store shared 7239
+plain sync ref 543
+plain sync shared 7786
+plain alloc ref 10315
+plain alloc shared 13929
+plain list ref 14578
+plain list shared 68272
+plain check true
+atomic store ref 7255
+atomic store shared 7238
+atomic sync ref 8505
+atomic sync shared 8508
+atomic alloc ref 13933
+atomic alloc shared 13940
+atomic list ref 37830
+atomic list shared 68210
+atomic check true
+plain store ref 589
+plain store shared 7242
+plain sync ref 543
+plain sync shared 7777
+plain alloc ref 10322
+plain alloc shared 13933
+plain list ref 14586
+plain list shared 68290
+plain check true
+atomic store ref 7247
+atomic store shared 7225
+atomic sync ref 8511
+atomic sync shared 8510
+atomic alloc ref 13939
+atomic alloc shared 13935
+atomic list ref 37849
+atomic list shared 68218
+atomic check true
+plain store ref 556
+plain store shared 7245
+plain sync ref 543
+plain sync shared 7822
+plain alloc ref 10325
+plain alloc shared 13939
+plain list ref 14666
+plain list shared 68240
+plain check true
+atomic store ref 7240
+atomic store shared 7241
+atomic sync ref 8508
+atomic sync shared 8517
+atomic alloc ref 14060
+atomic alloc shared 13949
+atomic list ref 37844
+atomic list shared 68235
+atomic check true
+plain store ref 573
+plain store shared 7242
+plain sync ref 543
+plain sync shared 7780
+plain alloc ref 10321
+plain alloc shared 13936
+plain list ref 14658
+plain list shared 68220
+plain check true
+atomic store ref 7289
+atomic store shared 7239
+atomic sync ref 8506
+atomic sync shared 8508
+atomic alloc ref 13936
+atomic alloc shared 13957
+atomic list ref 37816
+atomic list shared 68196
+atomic check true
+plain store ref 584
+plain store shared 7241
+plain sync ref 542
+plain sync shared 7785
+plain alloc ref 10317
+plain alloc shared 13931
+plain list ref 14653
+plain list shared 68213
+plain check true
+atomic store ref 7248
+atomic store shared 7239
+atomic sync ref 8507
+atomic sync shared 8506
+atomic alloc ref 13930
+atomic alloc shared 13936
+atomic list ref 37854
+atomic list shared 68183
+atomic check true

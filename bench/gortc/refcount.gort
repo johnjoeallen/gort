@@ -1,0 +1,76 @@
+package bench
+// ref against shared objects in generated code (docs/sharing.md R5, R6). One thread, so this measures the cost of the atomic count and of the lock
+// when nothing contends; it does not measure a contended shared object. Each workload runs with `ref` (plain count, no lock) and with `shared`.
+// Prints "<workload> <layout> <ps per iteration>".
+struct Cell { v: i64 }
+struct Node { n: i64, next: ref Node? }
+struct SNode { n: i64, next: shared SNode? }
+
+struct HolderR { c: ref Cell }
+struct HolderS { c: shared Cell }
+
+fn report(name: String, layout: String, spent: Duration, n: usize) {
+    println(name + " " + layout + " " + str(spent * 1000 / n))      // a Duration prints as nanoseconds: this is picoseconds per iteration
+}
+
+fn main() {
+    let n: usize = 20000000
+
+    // 1. store a handle into a field in a loop: a retain of the new handle and a release of the old one (a function argument that the callee only
+    //    reads is lent without a count, so it would measure nothing)
+    ref Cell r = new Cell { v: 3 }
+    ref Cell r2 = new Cell { v: 4 }
+    shared Cell s = new Cell { v: 3 }
+    shared Cell s2 = new Cell { v: 4 }
+    var hr = HolderR { c: r }
+    var hs = HolderS { c: s }
+    var acc: i64 = 0
+    var t0 = Instant.now()
+    for (i in 0..n) { hr.c = (i % 2 == 0) ? r : r2; acc = acc * 31 + 1 }
+    report("store", "ref", Instant.now() - t0, n)
+    t0 = Instant.now()
+    for (i in 0..n) { hs.c = (i % 2 == 0) ? s : s2; acc = acc * 31 + 1 }
+    report("store", "shared", Instant.now() - t0, n)
+
+    // 2. a write inside a sync block: the lock for a shared object, nothing for a ref
+    t0 = Instant.now()
+    for (i in 0..n) { sync (writes r) { r.v += 1; acc = acc * 31 + r.v } }
+    report("sync", "ref", Instant.now() - t0, n)
+    t0 = Instant.now()
+    for (i in 0..n) { sync (writes s) { s.v += 1; acc = acc * 31 + s.v } }
+    report("sync", "shared", Instant.now() - t0, n)
+
+    // 3. allocate and free an object
+    let m: usize = 5000000
+    t0 = Instant.now()
+    for (i in 0..m) { ref Cell t = new Cell { v: 1 }; acc += t.v }
+    report("alloc", "ref", Instant.now() - t0, m)
+    t0 = Instant.now()
+    for (i in 0..m) { shared Cell t = new Cell { v: 1 }; acc += t.v }
+    report("alloc", "shared", Instant.now() - t0, m)
+
+    // 4. build and walk a 1000-node list: handle copies on every step
+    t0 = Instant.now()
+    for (k in 0..2000) {
+        ref Node head = new Node { n: 0 }
+        var cur: ref Node = head
+        for (i in 1..1000) { ref Node nx = new Node { n: 1 }; cur.next = nx; cur = nx }
+        var w: ref Node? = head
+        while (w != null) { acc += w.n; w = w.next }
+    }
+    report("list", "ref", Instant.now() - t0, 2000 * 1000)
+    t0 = Instant.now()
+    for (k in 0..2000) {
+        shared SNode head = new SNode { n: 0 }
+        var cur: shared SNode = head
+        for (i in 1..1000) { shared SNode nx = new SNode { n: 1 }; sync (writes cur) { cur.next = nx }; cur = nx }
+        var w: shared SNode? = head
+        while (w != null) {
+            var nxt: shared SNode? = null
+            sync (reads w) { acc += w.n; nxt = w.next }
+            w = nxt
+        }
+    }
+    report("list", "shared", Instant.now() - t0, 2000 * 1000)
+    println("check " + str(acc != 1))
+}

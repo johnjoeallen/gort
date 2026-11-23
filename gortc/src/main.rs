@@ -3,7 +3,7 @@ use std::process::{Command, ExitCode};
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --effects       list the functions that may park\n  --owns          list the fields that could be declared `owns`\n  --infer-owns    treat every field that could be `owns` as owned\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
+        "usage: gortc <check|emit|build|run> [options] FILE.gort...\n\n  check           type-check only; no `main` needed\n  emit            print the generated C\n  build -o OUT    compile to an executable (needs cc)\n  run             build and run\n\noptions:\n  --instances     list the generic instances of the program\n  --effects       list the functions that may park\n  --owns          list the fields that could be declared `owns`\n  --infer-owns    treat every field that could be `owns` as owned\n  --notes         say which `new` objects are counted and why\n  --sanitize      build with ASan and UBSan\n  --atomic-refs   give every `ref` object the shared layout (atomic counts and a lock), to measure a program both ways\n  --keep-c        keep the generated C next to the output\n  --link FILE.c   also compile and link a C file (the runtime's side of `extern` declarations)"
     );
     ExitCode::from(2)
 }
@@ -32,6 +32,7 @@ fn main() -> ExitCode {
             "--infer-owns" => gortc::share::INFER_OWNS.store(2, std::sync::atomic::Ordering::Relaxed),
             "--sanitize" => sanitize = true,
             "--keep-c" => keep_c = true,
+            "--atomic-refs" => gortc::codegen::ATOMIC_REFS.store(true, std::sync::atomic::Ordering::Relaxed),
             "--link" => links.extend(args.next()),
             _ if a.starts_with('-') => return usage(),
             _ => files.push(a),
@@ -92,7 +93,9 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     let mut cc = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".into()));
-    cc.args(["-std=gnu11", "-g", "-O1", "-fwrapv", "-Wall", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable"]);
+    let opt = std::env::var("GORTC_OPT").unwrap_or_else(|_| "-O1".into());   // e.g. GORTC_OPT=-O2 for a benchmark
+    cc.arg(&opt);
+    cc.args(["-std=gnu11", "-g", "-fwrapv", "-Wall", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable"]);
     if sanitize {
         cc.arg("-fsanitize=address,undefined");
     }

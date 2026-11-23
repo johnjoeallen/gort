@@ -3314,6 +3314,11 @@ impl<'a> Sema<'a> {
                 typed(EK::Builtin(b, vec![a]), Ty::Int(IntTy::U64), line)
             }
             Builtin::Print | Builtin::Println | Builtin::Str => {
+                // a Duration or an Instant prints as its nanoseconds (both are an int64_t in the C)
+                let mut a = a;
+                if matches!(a.ty, Ty::Dur | Ty::Inst) {
+                    a.ty = Ty::Int(IntTy::I64);
+                }
                 if !matches!(a.ty, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Str) {
                     let n = self.prog.type_name(&a.ty);
                     self.error(args[0].line, args[0].col, format!("cannot print or convert a value of type {}", n));
