@@ -3116,6 +3116,26 @@ impl<'a> Sema<'a> {
                     if cx.lookup(tn).is_none() && self.generics.contains_key(tn) {
                         return self.generic_static_call(cx, e, callee, tn, name, args);
                     }
+                    // `String.toString(bytes)`: a String made of a copy of an Array<u8>. A function of String, not of Array, so other element types
+                    // are not asked what they would print; more argument types can be added to it
+                    if cx.lookup(tn).is_none() && tn == "String" {
+                        let bytes_ty = Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared);
+                        if name == "toString" && args.len() == 1 {
+                            let b = self.lower_expr(cx, &args[0]);
+                            let b = self.decay(cx, b, (args[0].line, args[0].col));
+                            if b.ty == Ty::Error {
+                                return b;
+                            }
+                            if b.ty == bytes_ty {
+                                return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
+                            }
+                            let n = self.prog.type_name(&b.ty);
+                            self.error(args[0].line, args[0].col, format!("`String.toString` takes an Array<u8>, found {}", n));
+                            return error_expr(line);
+                        }
+                        self.error(callee.line, callee.col, format!("`String.{}` is not a function of String (there is `String.toString(Array<u8>)`)", name));
+                        return error_expr(line);
+                    }
                     if cx.lookup(tn).is_none() && (tn == "Duration" || tn == "Instant") {
                         if tn == "Instant" && name == "now" && args.is_empty() {
                             return typed(EK::Builtin(Builtin::Now, Vec::new()), Ty::Inst, line);
@@ -3215,9 +3235,6 @@ impl<'a> Sema<'a> {
                     }
                     if b.ty == bytes_ty && name == "copy" && args.is_empty() {
                         return typed(EK::RtCall("toBytes", vec![b]), bytes_ty, line);
-                    }
-                    if b.ty == bytes_ty && name == "toString" && args.is_empty() {
-                        return typed(EK::RtCall("toStr", vec![b]), Ty::Str, line);
                     }
                     if matches!(b.ty, Ty::Str) && name == "toBytes" && args.is_empty() {
                         return typed(EK::RtCall("toBytes", vec![b]), Ty::Arr(Box::new(Ty::Int(IntTy::U8)), Share::Shared), line);

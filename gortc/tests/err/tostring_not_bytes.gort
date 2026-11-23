@@ -1,0 +1,6 @@
+// error: `String.toString` takes an Array<u8>, found Array<f64>
+package t
+fn main() {
+    let a = [1.5, 2.5]
+    println(String.toString(a))
+}

@@ -1,7 +1,7 @@
 package t
 fn main() {
     let b = "hello world".toBytes()
-    let s = b[0..5].toString()
+    let s = String.toString(b[0..5])
     println(s + "!" + str(s.length))
     println(s == "hello")
 }

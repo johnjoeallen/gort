@@ -51,11 +51,11 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
     let sp1 = indexOf(head, 32, 0)
     let sp2 = indexOf(head, 32, sp1 + 1)
     if (sp1 == 0 || sp2 >= eol || sp2 == sp1 + 1) throw BadRequest()
-    let method = head[0..sp1].toString()
+    let method = String.toString(head[0..sp1])
     let target = head[sp1 + 1..sp2]
     let q = indexOf(target, 63, 0)                        // '?'
-    let path = target[0..q].toString()
-    let query = (q < target.length) ? target[q + 1..target.length].toString() : ""
+    let path = String.toString(target[0..q])
+    let query = (q < target.length) ? String.toString(target[q + 1..target.length]) : ""
     if (path.length == 0 || !path.startsWith("/")) throw BadRequest()
     // HTTP/1.1 keeps the connection open unless told otherwise; HTTP/1.0 closes unless told otherwise
     let version = head[sp2 + 1..eol - 1]

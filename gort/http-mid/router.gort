@@ -37,7 +37,7 @@ fn hPut(req: Request, body: Array<u8>, store: shared Store, key: String): ref Re
     var existed = false
     sync (writes store.kv) {
         existed = store.kv.has(key)
-        store.kv.insert(key, body.toString())
+        store.kv.insert(key, String.toString(body))
     }
     sync (writes store) { store.writes += 1 }
     if (existed) return respond(200, "replaced\n", req.keepAlive, req.http10)
@@ -86,7 +86,7 @@ fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared R
         let matches = cur.exact ? (req.path == cur.path) : (req.path.startsWith(cur.path) && req.path.length > cur.path.length)
         if (matches) {
             if (req.method == cur.method) {
-                let rest = cur.exact ? "" : req.path.toBytes()[cur.path.length..req.path.length].toString()
+                let rest = cur.exact ? "" : String.toString(req.path.toBytes()[cur.path.length..req.path.length])
                 let h = cur.handler
                 return h(req, body, store, rest)
             }
