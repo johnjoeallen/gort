@@ -165,6 +165,11 @@ fn hLike(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply t
     return json(fresh ? (201 as u16) : (200 as u16), "{\"liked\":true,\"already_liked\":" + (fresh ? "false" : "true") + ",\"post_id\":" + id + "}")
 }
 
+// A small web page over the API (not part of the challenge): /ui. It signs its own tokens in the browser with the secret typed into it.
+fn hUi(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    return Reply.bytes(200, "text/html; charset=utf-8", uiHtml())
+}
+
 // ---------- the table ----------
 
 fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
@@ -175,7 +180,8 @@ fn buildRoutes(): shared Route {
     shared Route r3 = new Route { method: Method.Get,  pattern: "/posts/:id",      handler: mem(hPostGet), next: r4 }
     shared Route r2 = new Route { method: Method.Get,  pattern: "/feed",           handler: mem(hFeed), next: r3 }
     shared Route r1 = new Route { method: Method.Get,  pattern: "/health",         handler: mem(hHealth), next: r2 }
-    return r1
+    shared Route r0 = new Route { method: Method.Get,  pattern: "/ui",             handler: mem(hUi), next: r1 }
+    return r0
 }
 
 // The first route that matches the request's path and method (HEAD matches a GET route); null if there is none.

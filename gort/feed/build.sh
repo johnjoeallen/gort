@@ -3,6 +3,8 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 mkdir -p "$root/gort/feed/bin"
+# ui.html as adjacent C string literals, for native.c to include
+sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/\\n"/' "$root/gort/feed/ui.html" > "$root/gort/feed/ui.inc"
 (cd "$root/gortc" && cargo build --release -q)
 "$root/gortc/target/release/gortc" build --link "$root/gortc/rt/posix.c" --link "$root/gort/feed/native.c" \
     --link -l:libsqlite3.so.0 -o "$root/gort/feed/bin/feed" "$root"/gort/runtime/*.gort "$root"/gort/feed/*.gort 2>/dev/null

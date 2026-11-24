@@ -12,6 +12,7 @@ extern fn dbInt(id: i32, col: i32): i64                  // columns count from 0
 extern fn dbText(id: i32, col: i32): Array<u8>
 extern fn dbChanges(): i64
 extern fn dbError(): Array<u8>
+extern fn uiHtml(): Array<u8>                          // the page served at /ui
 extern fn nowSec(): i64
 extern fn uptimeSec(): i64
 extern fn hmacB64(msg: Array<u8>, key: Array<u8>): Array<u8>   // HMAC-SHA256 as unpadded base64url

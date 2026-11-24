@@ -69,6 +69,12 @@ gort_xarr gort_x_dbText(int32_t id, int32_t col) {
 int64_t gort_x_dbChanges(void) { return sqlite3_changes(db); }
 gort_xarr gort_x_dbError(void) { const char *m = sqlite3_errmsg(db); return copy_out(m, strlen(m)); }
 
+/* ---- the web page (ui.html, turned into ui.inc by build.sh) ---- */
+static const char UI[] =
+#include "ui.inc"
+;
+gort_xarr gort_x_uiHtml(void) { return copy_out(UI, sizeof UI - 1); }
+
 /* ---- clock ---- */
 int64_t gort_x_nowSec(void) { return (int64_t)time(NULL); }
 int64_t gort_x_uptimeSec(void) { return (int64_t)(time(NULL) - started); }

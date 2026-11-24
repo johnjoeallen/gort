@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gort feed</title>
+<style>
+  :root { color-scheme: light dark; --b: #8884; --accent: #2a6df4; }
+  body { font: 15px/1.45 system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  .bar, form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  input, textarea, button { font: inherit; padding: 6px 8px; border: 1px solid var(--b); border-radius: 6px; background: transparent; color: inherit; }
+  textarea { flex: 1 1 100%; min-height: 64px; resize: vertical; }
+  button { cursor: pointer; } button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .post { border: 1px solid var(--b); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .meta { font-size: 12px; opacity: .65; display: flex; gap: 10px; align-items: center; }
+  .body { margin: 4px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg { min-height: 1.4em; font-size: 13px; } .err { color: #d33; } .ok { color: #2a8f4a; }
+  .sp { flex: 1; } code { opacity: .7; }
+</style></head><body>
+<h1>Gort feed <code id="stat"></code></h1>
+<div class="bar">
+  <label>user id <input id="uid" type="number" min="1" value="1" style="width:90px"></label>
+  <label>secret <input id="secret" value="twelve-dollar-challenge" style="width:190px"></label>
+  <span class="sp"></span><button id="refresh">Refresh</button>
+</div>
+<form id="f"><textarea id="text" maxlength="600" placeholder="What's happening? (500 characters)"></textarea>
+  <button class="primary">Post</button><span class="msg" id="msg"></span></form>
+<div class="bar"><label>open post # <input id="pid" type="number" min="1" style="width:110px"></label><button id="open">Open</button></div>
+<div id="feed"></div>
+<script>
+const $ = id => document.getElementById(id);
+const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const enc = s => new TextEncoder().encode(s);
+// the server has no login: a token is signed here, with the secret in the box (HS256, 1 hour)
+async function token() {
+  const id = String(parseInt($('uid').value, 10) || 1), now = Math.floor(Date.now() / 1000);
+  const head = b64(enc(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))), body = b64(enc(JSON.stringify({ sub: id, username: 'web_user_' + id, iat: now, exp: now + 3600 })));
+  const key = await crypto.subtle.importKey('raw', enc($('secret').value), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return head + '.' + body + '.' + b64(await crypto.subtle.sign('HMAC', key, enc(head + '.' + body)));
+}
+function say(t, ok) { $('msg').textContent = t; $('msg').className = 'msg ' + (ok ? 'ok' : 'err'); }
+function card(p) {
+  const d = document.createElement('div'); d.className = 'post';
+  const m = document.createElement('div'); m.className = 'meta';
+  m.append('#' + p.id, '@' + p.author, p.created_at);
+  const sp = document.createElement('span'); sp.className = 'sp'; m.append(sp);
+  const lb = document.createElement('button'); lb.textContent = '♥ ' + p.like_count; lb.onclick = () => like(p.id); m.append(lb);
+  const t = document.createElement('div'); t.className = 'body'; t.textContent = p.body;
+  d.append(m, t); return d;
+}
+async function api(path, opts = {}) {
+  const t0 = performance.now(), r = await fetch(path, opts);
+  $('stat').textContent = r.status + ' ' + path + ' ' + Math.round(performance.now() - t0) + ' ms';
+  return [r.status, await r.json()];
+}
+async function load() { const [, j] = await api('/feed'); $('feed').replaceChildren(...j.posts.map(card)); }
+async function like(id) {
+  const [s, j] = await api('/posts/' + id + '/like', { method: 'POST', headers: { Authorization: 'Bearer ' + await token() } });
+  say(s < 300 ? (j.already_liked ? 'already liked #' + id : 'liked #' + id) : j.error, s < 300); load();
+}
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const [s, j] = await api('/posts', { method: 'POST', headers: { Authorization: 'Bearer ' + await token() }, body: JSON.stringify({ body: $('text').value }) });
+  say(s === 201 ? 'posted #' + j.post.id : j.error, s === 201); if (s === 201) { $('text').value = ''; load(); }
+};
+$('open').onclick = async () => { const [s, j] = await api('/posts/' + $('pid').value); if (s === 200) $('feed').replaceChildren(card(j.post)); else say(j.error, false); };
+$('refresh').onclick = load; load();
+</script></body></html>
