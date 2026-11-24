@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/sendfile.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -284,6 +285,13 @@ void gort_rt_scope_join(void) {
     struct vt *v = S ? S->cur : NULL;
     while (v && v->nchild) { v->wait_all = true; v->woken = false; S->nwait++; swapcontext(&v->ctx, &S->home); v->wait_all = false; }
 }
+/* the vthread goes to the back of the run queue and resumes in its turn */
+void gort_x_yield(void) {
+    struct vt *v = S ? S->cur : NULL;
+    if (!v) return;
+    ready(v);
+    swapcontext(&v->ctx, &S->home);
+}
 void gort_x_sleep(int64_t ns) {
     if (ns <= 0) { return; }
     if (!S || !S->cur) { struct timespec t = { ns / 1000000000LL, ns % 1000000000LL }; nanosleep(&t, NULL); return; }
@@ -318,6 +326,19 @@ int gort_x_Conn_tryRecv(G_Conn *self, void *buf, size_t buf_len, rt_opt_usize *r
 }
 G_Wakeup *gort_x_Conn_readableWakeup(G_Conn *self) {
     struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 1; w->fd = ((struct rt_conn *)self)->fd; return (G_Wakeup *)w;
+}
+int gort_x_Conn_sendFile(G_Conn *self, G_File *file, uint64_t off, uint64_t count, uint64_t *ret_out) {
+    struct rt_conn *c = (struct rt_conn *)self;
+    int ffd = ((struct rt_file *)file)->fd;
+    if (count > (1u << 20)) count = 1u << 20;
+    for (;;) {
+        off_t o = (off_t)off;
+        ssize_t n = sendfile(c->fd, ffd, &o, (size_t)count);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLOUT, -1) == 0) continue; }
+        if (n >= 0) { *ret_out = (uint64_t)n; return 0; }
+        return gort_rt_throw_io();
+    }
 }
 int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;

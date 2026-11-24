@@ -55,6 +55,8 @@ extern sync struct Task<T> {
 extern sync struct Conn {
     parks fn recv(buf: Array<u8>): usize throws IoError      // parks on EAGAIN until readable (W_RD). 0 = the peer closed
     parks fn send(bytes: Array<u8>): usize throws IoError    // parks on EAGAIN until writable (W_WR)
+    parks fn sendFile(file: File, offset: u64, count: u64): u64 throws IoError   // sendfile(2): up to 1 MB of the file straight to the socket, parking on EAGAIN. Returns how many
+                                                         // bytes went (0: the file ended early). The caller loops
     fn tryRecv(buf: Array<u8>): usize? throws IoError        // never parks. null = nothing to read right now, 0 = the peer closed
     fn trySend(bytes: Array<u8>): usize?                     // never parks, never throws. null = would block. For best-effort cleanup
     parks fn waitReadable() throws IoError               // parks until the socket has input, holding no buffer

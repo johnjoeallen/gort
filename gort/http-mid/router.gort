@@ -16,6 +16,7 @@ struct Route {
     pattern: String
     handler: Handler
     cost: Cost = Cost.Bounded(50.ms)
+    streams: bool = false           // the answer is streamed (a file, chunks): it is sent by the connection's own vthread, alone, so the route is a barrier
     next: shared Route?
 
     // A safe route has no side effects the next request could observe (GET, HEAD, OPTIONS): such requests may run side by side. Anything else is a barrier.
@@ -128,21 +129,78 @@ fn hFilePut(req: Request, up: Upload, store: shared Store, p: Params): Reply thr
     return reply(201, "stored " + up.length + " bytes\n").with("Location", "/files/" + percentEncode(name))
 }
 
+// The content type for a file name, by its extension.
+fn contentTypeFor(name: String): String {
+    let b = name.toBytes()
+    var dot = b.length
+    var i: usize = 0
+    while (i < b.length) {
+        if (b[i] == 46) dot = i
+        i += 1
+    }
+    if (dot >= b.length) return "application/octet-stream"
+    let ext = b[dot + 1..b.length]
+    if (ext.equalsIgnoreCase("txt")) return "text/plain"
+    if (ext.equalsIgnoreCase("html") || ext.equalsIgnoreCase("htm")) return "text/html"
+    if (ext.equalsIgnoreCase("css")) return "text/css"
+    if (ext.equalsIgnoreCase("js")) return "text/javascript"
+    if (ext.equalsIgnoreCase("json")) return "application/json"
+    if (ext.equalsIgnoreCase("png")) return "image/png"
+    if (ext.equalsIgnoreCase("jpg") || ext.equalsIgnoreCase("jpeg")) return "image/jpeg"
+    if (ext.equalsIgnoreCase("gif")) return "image/gif"
+    if (ext.equalsIgnoreCase("svg")) return "image/svg+xml"
+    if (ext.equalsIgnoreCase("pdf")) return "application/pdf"
+    return "application/octet-stream"
+}
+
+// A requested byte range of a file of `size` bytes, both ends included. `ok` false: it lies outside the file (416).
+struct ByteRange { start: u64, end: u64, ok: bool }
+
+// The single range of a `Range: bytes=a-b` / `a-` / `-n` header; null if there is no usable one (another unit, several ranges, a malformed value): the
+// whole file is served then, as the RFC allows.
+fn parseRange(header: String, size: u64): ByteRange? {
+    let h = header.toBytes()
+    if (h.length < 7 || !h[0..6].equalsIgnoreCase("bytes=")) return null
+    let spec = h[6..h.length]
+    if (indexOf(spec, 44, 0) < spec.length) return null              // several ranges: not supported
+    let dash = indexOf(spec, 45, 0)
+    if (dash >= spec.length) return null
+    let first = spec[0..dash]
+    let last = spec[dash + 1..spec.length]
+    if (first.length == 0) {                                          // "-n": the last n bytes
+        let n = parseUsize(last)
+        if (n == null) return null
+        if (n == 0 || size == 0) return ByteRange { start: 0, end: 0, ok: false }
+        let want = n as u64
+        return ByteRange { start: (want >= size) ? 0 : size - want, end: size - 1, ok: true }
+    }
+    let s = parseUsize(first)
+    if (s == null) return null
+    let start = s as u64
+    var end: u64 = (size == 0) ? 0 : size - 1
+    if (last.length > 0) {
+        let e = parseUsize(last)
+        if (e == null || (e as u64) < start) return null              // not a range at all
+        if ((e as u64) < end) end = e as u64
+    }
+    if (start >= size) return ByteRange { start: 0, end: 0, ok: false }
+    return ByteRange { start: start, end: end, ok: true }
+}
+
+// Streams the file: it is never read into memory, however large. A Range header gets 206 with the part asked for.
 fn hFileGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
     let name = p.get("name") ?? ""
     if (!validFileName(name)) return reply(400, "bad file name\n")
     let f = File.open(store.dir + "/" + name)
     if (f == null) return reply(404, "no such file\n")
     let size = f.length()
-    if (size > 16.mb) return reply(500, "file too large to serve from memory\n")      // streamed responses are not built yet
-    let data = new u8[size]
-    var got: usize = 0
-    while (got < size) {
-        let n = f.readAt(got, data[got..size])
-        if (n == 0) break                                        // the file shrank under us
-        got += n
-    }
-    return Reply.bytes(200, "application/octet-stream", data[0..got])
+    let type = contentTypeFor(name)
+    let wanted = req.header("range")
+    let range = (wanted == null) ? null : parseRange(wanted, size)
+    if (range == null) return Reply.file(200, type, f, 0, size).with("Accept-Ranges", "bytes")
+    if (!range.ok) return reply(416, "range not satisfiable\n").with("Content-Range", "bytes */" + size)
+    return Reply.file(206, type, f, range.start, range.end - range.start + 1)
+        .with("Content-Range", "bytes " + range.start + "-" + range.end + "/" + size).with("Accept-Ranges", "bytes")
 }
 
 fn hFileDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
@@ -235,18 +293,38 @@ fn hSpin(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply t
     return reply(200, "spun " + ms + "\n")
 }
 
+// ---------- a chunked body from a producer ----------
+
+// n lines (at most 1000), one chunk each, `ms` milliseconds apart: /stream/5?ms=100. The writer runs after the head is out.
+fn writeLines(req: Request, p: Params, out: Sink) throws IoError {
+    let n = millisFrom(p, "n")
+    let delay = parseUsize((queryGet(req.query, "ms") ?? "").toBytes()) ?? 0
+    let total = (n > 1000) ? 1000 : n
+    var i: usize = 0
+    while (i < total) {
+        if (i > 0 && delay > 0) sleep(Duration.millis(delay))
+        out.writeText("line " + i + "\n")
+        i += 1
+    }
+}
+
+fn hStream(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    return Reply.stream(200, "text/plain", p, writeLines)
+}
+
 // ---------- the table ----------
 
 fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
 
 fn buildRoutes(): shared Route {
-    shared Route r17 = new Route { method: Method.Get,    pattern: "/stats",      handler: mem(hStats),  next: null }
+    shared Route r18 = new Route { method: Method.Get,    pattern: "/stream/:n",  handler: mem(hStream), streams: true, next: null }
+    shared Route r17 = new Route { method: Method.Get,    pattern: "/stats",      handler: mem(hStats),  next: r18 }
     shared Route r16 = new Route { method: Method.Get,    pattern: "/spin/:ms",   handler: mem(hSpin), cost: Cost.Unbounded, next: r17 }
     shared Route r15 = new Route { method: Method.Get,    pattern: "/sleep/:ms",  handler: mem(hSleep), cost: Cost.Bounded(5.s), next: r16 }
     shared Route r14 = new Route { method: Method.Get,    pattern: "/users/:id",  handler: mem(hUserGet), next: r15 }
     shared Route r13 = new Route { method: Method.Post,   pattern: "/users",      handler: mem(hUserCreate), next: r14 }
     shared Route r12 = new Route { method: Method.Delete, pattern: "/files/:name", handler: mem(hFileDelete), next: r13 }
-    shared Route r11 = new Route { method: Method.Get,    pattern: "/files/:name", handler: mem(hFileGet), next: r12 }
+    shared Route r11 = new Route { method: Method.Get,    pattern: "/files/:name", handler: mem(hFileGet), streams: true, next: r12 }
     shared Route r10 = new Route { method: Method.Put,    pattern: "/files/:name", handler: Handler.Upload(64.mb, hFilePut), next: r11 }
     shared Route r8 = new Route { method: Method.Get,    pattern: "/boom",       handler: mem(hBoom),   next: r10 }
     shared Route r7 = new Route { method: Method.Get,    pattern: "/hello/:name", handler: mem(hGreet), next: r8 }
@@ -305,11 +383,14 @@ fn runRoute(route: shared Route, req: Request, body: Array<u8>, up: Upload?, sto
     }
 }
 
-// Answers a request whose body has been read (into `body`, or spooled into `up` for an upload route): HEAD gets the GET handler's answer without the body.
-fn dispatch(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): ref Resp {
+// The reply to a request whose body has been read (into `body`, or spooled into `up` for an upload route). It counts the request.
+fn answer(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): Reply {
     sync (writes store) { store.requests += 1 }
-    let head = req.method == Method.Head
     let route = findRoute(req, routes)
-    let r = (route == null) ? noRoute(req, routes) : runRoute(route, req, body, up, store)
-    return render(r, req.keepAlive, req.http10, !head)
+    return (route == null) ? noRoute(req, routes) : runRoute(route, req, body, up, store)
+}
+
+// ... rendered into bytes: HEAD gets the GET handler's answer without the body. (A streaming route is not dispatched this way: see sendStream.)
+fn dispatch(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): ref Resp {
+    return render(answer(req, body, up, store, routes), req.keepAlive, req.http10, req.method != Method.Head)
 }

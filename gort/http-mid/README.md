@@ -16,6 +16,10 @@
 - two readers (`reader.gort`, `body.gort`): a route is `Handler.Memory(fn)` (the body is read into memory, at most `maxBody`) or `Handler.Upload(limit, fn)` (the body is
   spooled to an unnamed temporary file under the route's own limit, so memory does not grow with it; the handler gets an `Upload` to link into place). The server finds
   the route first and picks the reader from it. A 60 MB upload peaks at under 4 MB of memory;
+- streamed answers (`stream.gort`): a `Reply` body is `Source.Memory`, `Source.File(file, offset)` (sendfile, `length` bytes) or `Source.Stream(params, writer)`, where the
+  writer is a plain function that gets the request, the path parameters and a `Sink` and writes pieces as it likes (each write is one chunk). The connection's own
+  vthread sends it, after the answers before it, parking while the client is slow and yielding between pieces; a route with `streams: true` is a barrier in the pipelined
+  loop, so nothing else is in flight while it is sent. A 48 MB upload and download leave the server's peak memory under 2 MB;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;
 - keep-alive, with per-connection `ref` responses;
 - concurrent pipelining (`pipeline.gort`, the default; `--sequential` selects the one-at-a-time loop of `server.gort`, which batches its answers into one `send`): requests that
@@ -34,7 +38,9 @@
 | `POST /echo` | the body, back |
 | `GET /hello/:name` | `hello, name`; with `?shout=1`, `hello, name!` |
 | `PUT /files/:name` | an **upload**: the body (up to 64 MB, chunked or not) is spooled to an unnamed temporary file as it arrives, then linked into the upload directory under `name`: 201 if new, 200 if replaced |
-| `GET /files/:name`, `DELETE /files/:name` | the file (read into memory, up to 16 MB), or 404; 204 or 404 |
+| `GET /files/:name` | the file, **streamed** with sendfile(2) (never read into memory, any size), with its content type by extension and `Accept-Ranges`; `Range: bytes=a-b`, `a-` and `-n` answer 206 with `Content-Range`, a range outside the file 416; several ranges, another unit or a malformed value get the whole file; `HEAD` gives the head only; 404 if there is none |
+| `DELETE /files/:name` | 204, or 404 |
+| `GET /stream/:n[?ms=d]` | `n` lines (at most 1000), one chunk each, `d` ms apart: a chunked body from a writer function (an HTTP/1.0 client gets it unchunked, ended by closing) |
 | `POST /users` | `application/json` parsed with `json.parse<User>` (name, optional email and age): 201 with the user as JSON and a `Location`; 400 for bad JSON or a missing name, 415 for another content type |
 | `GET /users/:id` | the user as JSON, or 404 |
 | `GET /sleep/:ms` | parks for `ms` (at most 5000): what overlapping looks like |

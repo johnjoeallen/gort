@@ -12,12 +12,14 @@ fn reasonPhrase(code: u16): String {
         302     -> { return "Found" }
         303     -> { return "See Other" }
         307     -> { return "Temporary Redirect" }
+        206     -> { return "Partial Content" }
         308     -> { return "Permanent Redirect" }
         400     -> { return "Bad Request" }
         404     -> { return "Not Found" }
         405     -> { return "Method Not Allowed" }
         413     -> { return "Payload Too Large" }
         415     -> { return "Unsupported Media Type" }
+        416     -> { return "Range Not Satisfiable" }
         431     -> { return "Request Header Fields Too Large" }
         500     -> { return "Internal Server Error" }
         501     -> { return "Not Implemented" }
@@ -25,11 +27,29 @@ fn reasonPhrase(code: u16): String {
     }
 }
 
+// Where a reply's body comes from. Memory: `body`. File: `length` bytes of an open file, from an offset, sent with sendfile(2). Stream: a function the connection
+// calls with a Sink, once the head is out; what it writes is sent chunked (or as it is, ended by closing, to an HTTP/1.0 client). A streamed body is written by
+// the connection's own vthread, in order, and never held in memory.
+enum Source {
+    Memory
+    File(File, u64)
+    Stream(Params, fn(Request, Params, Sink) throws Exception)       // the request's path parameters, and the writer
+}
+
 struct Reply {
     status: u16
     contentType: String
     headers: String             // extra header lines, each ending in CR LF
     body: Array<u8>
+    source: Source = Source.Memory
+    length: u64 = 0             // for a File: how many bytes of it
+
+    fn isStream(): bool {
+        switch (source) {
+            Memory -> { return false }
+            File(_, _), Stream(_, _) -> { return true }
+        }
+    }
 
     // A text answer: reply(200, "ok\n").
     static fn text(status: u16, body: String): Reply {
@@ -41,24 +61,51 @@ struct Reply {
         return Reply { status: status, contentType: contentType, headers: "", body: body }
     }
 
+    // `length` bytes of `file` from `offset`, streamed: the file is never read into memory.
+    static fn file(status: u16, contentType: String, file: File, offset: u64, length: u64): Reply {
+        return Reply { status: status, contentType: contentType, headers: "", body: Array<u8>(), source: Source.File(file, offset), length: length }
+    }
+
+    // A body written piece by piece by `writer`, which gets the request, the path parameters it was given here, and a Sink. It runs in the connection's vthread
+    // after the head has been sent, so it may sleep, loop and write as it likes; an IoError (the client left) ends it.
+    static fn stream(status: u16, contentType: String, params: Params, writer: fn(Request, Params, Sink) throws Exception): Reply {
+        return Reply { status: status, contentType: contentType, headers: "", body: Array<u8>(), source: Source.Stream(params, writer) }
+    }
+
     // The same reply with one more header: reply(201, "made\n").with("Location", "/kv/a").
     fn with(name: String, value: String): Reply {
-        return Reply { status: status, contentType: contentType, headers: headers + name + ": " + value + "\r\n", body: body }
+        return Reply { status: status, contentType: contentType, headers: headers + name + ": " + value + "\r\n", body: body, source: source, length: length }
     }
 }
 
 fn reply(status: u16, body: String): Reply { return Reply.text(status, body) }
 
-// Turns a reply into the bytes to send. `keepAlive` false adds `Connection: close`; an HTTP/1.0 client that asked to keep the connection is told it
-// is kept. `withBody` false is for HEAD: the same headers, Content-Length included, and no body. A 204 has neither a body nor a Content-Length.
-fn render(r: Reply, keepAlive: bool, http10: bool, withBody: bool): ref Resp {
-    let noBody = r.status == 204
+// The status line and headers of a reply, ending in the blank line. `chunked`: the body is sent with chunked transfer coding. A 204 has neither a body nor a Content-Length.
+fn renderHead(r: Reply, keepAlive: bool, http10: bool, chunked: bool): Array<u8> {
     var head = "HTTP/1.1 " + r.status + " " + reasonPhrase(r.status) + "\r\n"
-    if (!noBody) head = head + "Content-Type: " + r.contentType + "\r\nContent-Length: " + r.body.length + "\r\n"
+    if (r.status != 204) {
+        head = head + "Content-Type: " + r.contentType + "\r\n"
+        if (chunked) {
+            head = head + "Transfer-Encoding: chunked\r\n"
+        } else {
+            switch (r.source) {
+                Memory -> { head = head + "Content-Length: " + r.body.length + "\r\n" }
+                File(_, _) -> { head = head + "Content-Length: " + r.length + "\r\n" }
+                Stream(_, _) -> { }                          // HTTP/1.0: the body ends where the connection does
+            }
+        }
+    }
     head = head + r.headers + (keepAlive ? (http10 ? "Connection: keep-alive\r\n" : "") : "Connection: close\r\n") + "\r\n"
+    return head.toBytes()
+}
+
+// Turns a reply into the bytes to send. `keepAlive` false adds `Connection: close`; an HTTP/1.0 client that asked to keep the connection is told it
+// is kept. `withBody` false is for HEAD: the same headers, Content-Length included, and no body. A streamed reply cannot be rendered into bytes: it is sent by sendStream.
+fn render(r: Reply, keepAlive: bool, http10: bool, withBody: bool): ref Resp {
+    if (r.isStream()) return respond(500, "internal error\n", keepAlive, http10)      // cannot happen: a streaming route never runs where its answer is held in memory
     var out = Array<u8>()
-    out.append(head.toBytes())
-    if (withBody && !noBody) out.append(r.body)
+    out.append(renderHead(r, keepAlive, http10, false))
+    if (withBody && r.status != 204) out.append(r.body)
     return new Resp { bytes: out, keepAlive: keepAlive }
 }
 

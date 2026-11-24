@@ -155,6 +155,54 @@ if [ "$leftover" -eq 0 ]; then echo "ok   no temporary names left behind"; pass=
 check "an upload on a keep-alive connection, then a GET" \
     "$(raw "PUT /files/k HTTP/1.1\r\n${H}Content-Length: 4\r\n\r\nabcdGET /files/k HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "stored 4 bytes" "abcd"
 
+
+# streamed bodies: files (sendfile, Range) and chunked output
+printf '0123456789abcdefghij' | curl -s -o /dev/null -X PUT --data-binary @- "localhost:$port/files/range.txt"
+resp=$(curl -s -i "localhost:$port/files/range.txt")
+check "file: 200, length, type by extension, Accept-Ranges" "$resp" "200 OK" "Content-Type: text/plain" "Content-Length: 20" "Accept-Ranges: bytes" "0123456789abcdefghij"
+check "range a-b"          "$(curl -s -i -H 'Range: bytes=5-9' "localhost:$port/files/range.txt")" "206 Partial Content" "Content-Range: bytes 5-9/20" "Content-Length: 5" "56789"
+check "range a-"           "$(curl -s -i -H 'Range: bytes=15-' "localhost:$port/files/range.txt")" "206" "Content-Range: bytes 15-19/20" "fghij"
+check "range -n"           "$(curl -s -i -H 'Range: bytes=-4' "localhost:$port/files/range.txt")" "206" "Content-Range: bytes 16-19/20" "ghij"
+check "range past the end is cut" "$(curl -s -i -H 'Range: bytes=15-99' "localhost:$port/files/range.txt")" "Content-Range: bytes 15-19/20"
+check "range outside -> 416"      "$(curl -s -i -H 'Range: bytes=50-60' "localhost:$port/files/range.txt")" "416 Range Not Satisfiable" "Content-Range: bytes */20"
+check "several ranges -> whole file" "$(curl -s -i -H 'Range: bytes=0-1,5-6' "localhost:$port/files/range.txt")" "200 OK" "0123456789abcdefghij"
+check "other unit -> whole file"     "$(curl -s -i -H 'Range: items=0-1' "localhost:$port/files/range.txt")" "200 OK" "0123456789abcdefghij"
+check "malformed range -> whole file" "$(curl -s -i -H 'Range: bytes=x-y' "localhost:$port/files/range.txt")" "200 OK" "0123456789abcdefghij"
+resp=$(raw "HEAD /files/range.txt HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "HEAD of a file: length, no body" "$resp" "200 OK" "Content-Length: 20"
+if [[ $resp == *0123456789* ]]; then echo "FAIL HEAD of a file sent the body"; fail=$((fail+1)); else echo "ok   HEAD of a file sends no body"; pass=$((pass+1)); fi
+printf '{"a":1}' | curl -s -o /dev/null -X PUT --data-binary @- "localhost:$port/files/data.json"
+check "content type: .json"  "$(curl -s -i "localhost:$port/files/data.json")" "Content-Type: application/json"
+check "missing file -> 404"  "$(curl -s -i "localhost:$port/files/nothing.txt")" "404"
+# a download far larger than the memory the server may use: it is streamed, not read in
+head -c 48000000 /dev/zero | tr '\0' 'z' > "$bin.huge"
+curl -s -o /dev/null -X PUT --data-binary @"$bin.huge" "localhost:$port/files/huge"
+curl -s "localhost:$port/files/huge" -o "$bin.huge.back"
+if cmp -s "$bin.huge" "$bin.huge.back"; then echo "ok   a 48 MB file downloads intact"; pass=$((pass+1)); else echo "FAIL the 48 MB download differs"; fail=$((fail+1)); fi
+rm -f "$bin.huge" "$bin.huge.back"
+peak=$(awk '/VmHWM/ {print $2}' /proc/$pid/status 2>/dev/null)
+if [ -n "$peak" ] && [ "$peak" -lt 30000 ]; then echo "ok   the server's peak memory stayed at ${peak} kB through a 48 MB upload and download"; pass=$((pass+1)); else echo "FAIL peak memory ${peak:-unknown} kB"; fail=$((fail+1)); fi
+
+check "chunked body, decoded by curl" "$(curl -s "localhost:$port/stream/3")" "line 0" "line 1" "line 2"
+resp=$(raw "GET /stream/2 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "chunked on the wire"   "$resp" "Transfer-Encoding: chunked" $'7\r\nline 0\n\r\n7\r\nline 1\n\r\n0'
+if [[ $resp == *"Content-Length"* ]]; then echo "FAIL a chunked answer has Content-Length"; fail=$((fail+1)); else echo "ok   a chunked answer has no Content-Length"; pass=$((pass+1)); fi
+resp=$(raw "GET /stream/2 HTTP/1.0\r\n\r\n")
+check "HTTP/1.0 gets the body as it is, ended by closing" "$resp" "line 0" "line 1" "Connection: close"
+if [[ $resp == *"chunked"* ]]; then echo "FAIL HTTP/1.0 got a chunked body"; fail=$((fail+1)); else echo "ok   HTTP/1.0 is not sent chunked"; pass=$((pass+1)); fi
+resp=$(raw "HEAD /stream/2 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "HEAD of a stream: head only" "$resp" "200 OK" "Transfer-Encoding: chunked"
+if [[ $resp == *"line 0"* ]]; then echo "FAIL HEAD of a stream sent a body"; fail=$((fail+1)); else echo "ok   HEAD of a stream sends no body"; pass=$((pass+1)); fi
+resp=$(raw "GET /stream/2 HTTP/1.1\r\n${H}\r\nGET /health HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "a stream, then the next request on the same connection" "$resp" "line 1" "HTTP/1.1 200 OK"
+count "both answers sent" "$resp" "HTTP/1.1 200 OK" 2
+curl -s "localhost:$port/stream/5?ms=100" >/dev/null &
+slow=$!
+sleep 0.15
+quick=$(curl -s -o /dev/null -w '%{time_total}' "localhost:$port/health")
+wait $slow
+if awk "BEGIN { exit !($quick < 0.1) }"; then echo "ok   a slow stream does not hold up other connections (${quick}s)"; pass=$((pass+1)); else echo "FAIL a /health took ${quick}s beside a stream"; fail=$((fail+1)); fi
+
 # JSON: parsed into a struct, answered as JSON
 J='Content-Type: application/json'
 resp=$(curl -s -i -X POST -H "$J" -d '{"name":"Ann","age":30,"extra":[1,{"a":null}]}' "localhost:$port/users")

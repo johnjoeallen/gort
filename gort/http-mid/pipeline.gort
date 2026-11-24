@@ -6,6 +6,7 @@
 //   * depth: at most `depth` requests are in flight; the connection stops reading beyond that.
 //   * barriers: a request with a body, or to an unsafe method (anything but GET, HEAD, OPTIONS), starts only when nothing is in flight; so does a route
 //     declared Unbounded. Nothing starts behind a request that runs in the connection's own vthread, since the connection does not read until it is back.
+//   * streams: a route whose answer is a file or a chunked body (`Route.streams`) is a barrier too: this vthread sends it itself, once the answers before it are out.
 //   * inline: a request with nothing in flight and no other request buffered behind it runs directly in the connection's vthread (no spawn).
 //   * the connection waits in waitAny for input or for a child to finish, and does not listen for input while it could not admit it anyway (full, a
 //     request held by a barrier, or closing): that would wake it at once, again and again.
@@ -106,7 +107,8 @@ fn pipelineLoop(conn: Conn, store: shared Store, routes: shared Route, cfg: shar
                 let hasBody = req.chunked || req.contentLength > 0 || limit != null
                 let safe = !hasBody && (route == null || route.safe())
                 let unbounded = route != null && route.cost.isUnbounded()
-                if ((!safe || unbounded) && count > 0) {     // a barrier: it starts only when nothing is in flight
+                let streams = route != null && route.streams       // sent by this vthread, alone, so it is a barrier too
+                if ((!safe || unbounded || streams) && count > 0) {     // a barrier: it starts only when nothing is in flight
                     held = req
                     break admission
                 }
@@ -128,6 +130,14 @@ fn pipelineLoop(conn: Conn, store: shared Store, routes: shared Route, cfg: shar
                         failure = respond(400, "bad request\n", false, false)
                     }
                     if (failure == null) queued = doneSlot(dispatch(req, body, upload, store, routes))
+                } else if (streams) {
+                    // Nothing is in flight and everything before it has been sent, so a streamed answer can go out right here, in order.
+                    let r = answer(req, Array<u8>(), null, store, routes)
+                    if (r.isStream()) {
+                        if (!sendStream(conn, req, r)) closing = true
+                    } else {
+                        queued = doneSlot(render(r, req.keepAlive, req.http10, req.method != Method.Head))
+                    }
                 } else if (count == 0 && !input.hasCompleteRequest()) {
                     queued = doneSlot(dispatch(req, Array<u8>(), null, store, routes))   // inline: nothing to overlap with
                 } else {

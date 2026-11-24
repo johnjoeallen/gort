@@ -74,7 +74,16 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
                 break
             }
         }
-        let resp = dispatch(req, body, upload, store, routes)
+        let r = answer(req, body, upload, store, routes)
+        if (r.isStream()) {
+            // a file or a chunked body: written by this vthread, after the answers before it, never held in memory
+            out = flush(conn, out)
+            answered = 0
+            if (!sendStream(conn, req, r)) { ending = Ending.ServerClosed; break }
+            input.releaseIfDrained()
+            continue
+        }
+        let resp = render(r, req.keepAlive, req.http10, req.method != Method.Head)
         out.append(resp.bytes)
         answered += 1
         if (!resp.keepAlive) { writeAll(conn, out); ending = Ending.ServerClosed; break }
