@@ -4,7 +4,7 @@
 package http
 
 struct Route {
-    method: String
+    method: Method
     pattern: String
     handler: fn(Request, Array<u8>, shared Store, Params): ref Resp throws Exception
     next: shared Route?
@@ -21,7 +21,7 @@ fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): ref R
 }
 
 fn hEcho(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    return respondBytes(200, "application/octet-stream", body, req.keepAlive, req.http10)
+    return respondBytes(200, req.header("content-type") ?? "application/octet-stream", body, req.keepAlive, req.http10)
 }
 
 fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
@@ -85,15 +85,15 @@ fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Re
 // ---------- the table ----------
 
 fn buildRoutes(): shared Route {
-    shared Route r9 = new Route { method: "GET",    pattern: "/stats",      handler: hStats,  next: null }
-    shared Route r8 = new Route { method: "GET",    pattern: "/boom",       handler: hBoom,   next: r9 }
-    shared Route r7 = new Route { method: "GET",    pattern: "/hello/:name", handler: hGreet, next: r8 }
-    shared Route r6 = new Route { method: "DELETE", pattern: "/kv/:key",    handler: hDelete, next: r7 }
-    shared Route r5 = new Route { method: "PUT",    pattern: "/kv/:key",    handler: hPut,    next: r6 }
-    shared Route r4 = new Route { method: "GET",    pattern: "/kv/:key",    handler: hGet,    next: r5 }
-    shared Route r3 = new Route { method: "POST",   pattern: "/echo",       handler: hEcho,   next: r4 }
-    shared Route r2 = new Route { method: "GET",    pattern: "/health",     handler: hHealth, next: r3 }
-    shared Route r1 = new Route { method: "GET",    pattern: "/",           handler: hHello,  next: r2 }
+    shared Route r9 = new Route { method: Method.Get,    pattern: "/stats",      handler: hStats,  next: null }
+    shared Route r8 = new Route { method: Method.Get,    pattern: "/boom",       handler: hBoom,   next: r9 }
+    shared Route r7 = new Route { method: Method.Get,    pattern: "/hello/:name", handler: hGreet, next: r8 }
+    shared Route r6 = new Route { method: Method.Delete, pattern: "/kv/:key",    handler: hDelete, next: r7 }
+    shared Route r5 = new Route { method: Method.Put,    pattern: "/kv/:key",    handler: hPut,    next: r6 }
+    shared Route r4 = new Route { method: Method.Get,    pattern: "/kv/:key",    handler: hGet,    next: r5 }
+    shared Route r3 = new Route { method: Method.Post,   pattern: "/echo",       handler: hEcho,   next: r4 }
+    shared Route r2 = new Route { method: Method.Get,    pattern: "/health",     handler: hHealth, next: r3 }
+    shared Route r1 = new Route { method: Method.Get,    pattern: "/",           handler: hHello,  next: r2 }
     return r1
 }
 
@@ -105,13 +105,15 @@ fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared R
     let path = req.path.toBytes()
     while (cur != null) {
         if (patternMatches(cur.pattern.toBytes(), path)) {
-            if (req.method == cur.method) {
+            // HEAD is answered by the GET handler, without the body
+            if (req.method == cur.method || (req.method == Method.Head && cur.method == Method.Get)) {
                 let h = cur.handler
                 try {
-                    return h(req, body, store, Params { pattern: cur.pattern, path: req.path })
+                    let resp = h(req, body, store, Params { pattern: cur.pattern, path: req.path })
+                    return (req.method == Method.Head) ? headOnly(resp) : resp
                 } catch (e: Exception) {
                     // whatever the handler threw ends this request only: the client gets a 500 and the connection stays open
-                    logLine((req.method + " " + req.path + ": the handler threw\n").toBytes())
+                    logLine((req.method.name() + " " + req.path + ": the handler threw\n").toBytes())
                     return respond(500, "internal error\n", req.keepAlive, req.http10)
                 }
             }
@@ -121,4 +123,11 @@ fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared R
     }
     if (pathSeen) return respond(405, "method not allowed\n", req.keepAlive, req.http10)
     return respond(404, "not found\n", req.keepAlive, req.http10)
+}
+
+// The response without its body: the same status line and headers (Content-Length is still the length the GET would send).
+fn headOnly(resp: ref Resp): ref Resp {
+    let at = resp.bytes.find("\r\n\r\n")
+    if (at == null) return resp
+    return new Resp { bytes: resp.bytes[0..at + 4].copy(), keepAlive: resp.keepAlive }
 }

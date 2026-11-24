@@ -20,6 +20,10 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
             reject(conn, 431, "headers too large\n")
             ending = Ending.ServerRejected
             break
+        } catch (e: NotImplemented) {
+            reject(conn, 501, "not implemented\n")
+            ending = Ending.ServerRejected
+            break
         } catch (e: BadRequest) {
             reject(conn, 400, "bad request\n")
             ending = Ending.ServerRejected

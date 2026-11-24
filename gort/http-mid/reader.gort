@@ -19,7 +19,7 @@ struct Reader {
     }
 
     // The next request head, waiting for input if needed. null: the peer closed cleanly.
-    fn nextRequest(): Request? throws IoError, TooLarge, BadRequest {
+    fn nextRequest(): Request? throws IoError, TooLarge, BadRequest, NotImplemented {
         if (buf == null) {                                   // nothing buffered: wait without holding memory
             conn.waitReadable()
             self.buf = Array<u8>()

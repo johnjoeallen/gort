@@ -77,6 +77,19 @@ check "kv key read back"       "$(curl -s "localhost:$port/kv/a%2Fb")" "v"
 check "kv key with a slash -> 404" "$(raw "GET /kv/a/b HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
 check "kv empty key -> 404"    "$(raw "GET /kv/ HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
 
+# methods, HEAD, request headers
+check "HEAD has the GET headers, no body" "$(raw "HEAD /hello/zed HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "200 OK" "Content-Length: 11"
+resp=$(raw "HEAD /hello/zed HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+if [[ $resp == *"hello, zed"* ]]; then echo "FAIL HEAD sent a body"; fail=$((fail+1)); else echo "ok   HEAD sends no body"; pass=$((pass+1)); fi
+resp=$(raw "HEAD /health HTTP/1.1\r\n${H}\r\nGET /health HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+count "HEAD then GET on one connection" "$resp" "HTTP/1.1 200 OK" 2
+check "HEAD of a missing path -> 404" "$(raw "HEAD /nope HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
+check "HEAD of a POST-only path -> 405" "$(raw "HEAD /echo HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "405"
+check "unknown method -> 501" "$(raw "BREW /pot HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "501"
+check "lower-case method -> 501" "$(raw "get / HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "501"
+check "request Content-Type reflected" "$(raw "POST /echo HTTP/1.1\r\n${H}content-TYPE:  application/json \r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")" "Content-Type: application/json"
+check "no Content-Type -> default" "$(raw "POST /echo HTTP/1.1\r\n${H}Content-Length: 2\r\nConnection: close\r\n\r\nab")" "Content-Type: application/octet-stream"
+
 # a handler that throws: 500, and the connection stays usable
 resp=$(raw "GET /boom HTTP/1.1\r\n${H}\r\nGET /boom?ok=1 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
 check "handler throws -> 500, then the next request on the same connection" "$resp" "500 Internal Server Error" "internal error" "200 OK" "fine"

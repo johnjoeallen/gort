@@ -6,8 +6,42 @@ import runtime
 struct Resp { bytes: Array<u8>, keepAlive: bool }
 
 // The parsed head of a request. `head` and the positions are offsets into the reader's buffer; the strings are copies.
+enum Method {
+    Get
+    Head
+    Post
+    Put
+    Delete
+    Patch
+    Options
+
+    fn name(): String {
+        switch (self) {
+            Get -> { return "GET" }
+            Head -> { return "HEAD" }
+            Post -> { return "POST" }
+            Put -> { return "PUT" }
+            Delete -> { return "DELETE" }
+            Patch -> { return "PATCH" }
+            Options -> { return "OPTIONS" }
+        }
+    }
+
+    // null: not a method this server knows (a 501, not a 400: the request may be well formed)
+    static fn parse(b: Array<u8>): Method? {
+        if (b == "GET") return Method.Get
+        if (b == "HEAD") return Method.Head
+        if (b == "POST") return Method.Post
+        if (b == "PUT") return Method.Put
+        if (b == "DELETE") return Method.Delete
+        if (b == "PATCH") return Method.Patch
+        if (b == "OPTIONS") return Method.Options
+        return null
+    }
+}
+
 struct Request {
-    method: String
+    method: Method
     path: String
     query: String
     keepAlive: bool
@@ -15,12 +49,17 @@ struct Request {
     contentLength: usize
     chunked: bool           // Transfer-Encoding: chunked
     expectContinue: bool    // Expect: 100-continue
+    headers: Array<u8>      // the header lines (the request line and the blank line cut off), copied so they outlive the reader's buffer
     headEnd: usize          // where the head ends in the reader's buffer (the body starts here)
+
+    // The value of a request header (any case), or null: `req.header("content-type") ?? ""`. The first of several wins.
+    fn header(name: String): String? { return headerValue(headers, name) }
 }
 
 exception TooLarge                                      // the header block does not fit in the buffer
 exception BodyTooLarge                                  // Content-Length is above the limit
 exception BadRequest                                    // the head is malformed
+exception NotImplemented                                // the method is not one this server knows
 exception BadBody                                       // the body's framing is malformed
 
 enum Ending {

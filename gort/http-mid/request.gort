@@ -51,14 +51,15 @@ fn parseUsize(b: Array<u8>): usize? {
 }
 
 // Parses `head`, the bytes of the request line and the headers up to and including the blank line.
-fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
+fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest, NotImplemented {
     // request line: METHOD SP target SP HTTP/1.x
     let eol = indexOf(head, 10, 0)
     if (eol >= head.length || eol < 2) throw BadRequest()
     let sp1 = indexOf(head, 32, 0)
     let sp2 = indexOf(head, 32, sp1 + 1)
     if (sp1 == 0 || sp2 >= eol || sp2 == sp1 + 1) throw BadRequest()
-    let method = String.toString(head[0..sp1])
+    let method = Method.parse(head[0..sp1])
+    if (method == null) throw NotImplemented()
     let target = head[sp1 + 1..sp2]
     let q = indexOf(target, 63, 0)                        // '?'
     let path = String.toString(target[0..q])
@@ -103,5 +104,22 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
         pos = e + 1
     }
     if (chunked && hasLength) throw BadRequest()          // the two framings together are a smuggling risk: refuse
-    return Request { method: method, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, chunked: chunked, expectContinue: expectContinue, headEnd: headEnd }
+    let headers = head[eol + 1..head.length].copy()
+    return Request { method: method, headers: headers, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, chunked: chunked, expectContinue: expectContinue, headEnd: headEnd }
+}
+
+// The value of the first header called `name` (any case), without the spaces around it; null if the request has none.
+fn headerValue(headers: Array<u8>, name: String): String? {
+    var pos: usize = 0
+    while (pos < headers.length) {
+        let e = indexOf(headers, 10, pos)
+        let end = (e > pos && headers[e - 1] == 13) ? e - 1 : e              // without the CR
+        if (end == pos) return null                                            // the blank line: no more headers
+        let line = headers[pos..end]
+        if (line.length > name.length && line[name.length] == 58 && line[0..name.length].equalsIgnoreCase(name)) {
+            return String.toString(trimmed(line[valueStart(line, name.length + 1)..line.length]))
+        }
+        pos = e + 1
+    }
+    return null
 }
