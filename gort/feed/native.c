@@ -31,6 +31,7 @@ static sqlite3 *db;
 static sqlite3_stmt *stmts[MAXSTMT];
 static int nstmts;
 static time_t started;
+static int last_rc;                                  /* how the last dbPostsJson ended: 101 normally, otherwise an SQLite error */
 
 static char *cstr(void *p, size_t n) { char *s = malloc(n + 1); memcpy(s, p, n); s[n] = 0; return s; }
 static gort_xarr copy_out(const void *p, size_t n) {
@@ -47,7 +48,7 @@ int32_t gort_x_dbOpen(void *path, size_t path_len) {
     sqlite3_busy_timeout(db, 5000);
     started = time(NULL);
     /* WAL with synchronous=NORMAL: the challenge's rule 6 */
-    return sqlite3_exec(db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA mmap_size=268435456; PRAGMA temp_store=MEMORY;", NULL, NULL, NULL);
+    return sqlite3_exec(db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA mmap_size=1073741824; PRAGMA temp_store=MEMORY;", NULL, NULL, NULL);
 }
 int32_t gort_x_dbPrepare(void *sql, size_t n) {
     if (nstmts >= MAXSTMT) return -1;
@@ -74,6 +75,58 @@ static const char UI[] =
 #include "ui.inc"
 ;
 gort_xarr gort_x_uiHtml(void) { return copy_out(UI, sizeof UI - 1); }
+
+/* ---- posts as JSON, built here: one buffer, no per-column copies ---- */
+typedef struct { char *p; size_t n, cap; } buf;
+static void bput(buf *b, const void *s, size_t k) {
+    if (b->n + k > b->cap) { while (b->n + k > b->cap) b->cap *= 2; b->p = realloc(b->p, b->cap); }
+    memcpy(b->p + b->n, s, k); b->n += k;
+}
+static void bstr(buf *b, const char *s) { bput(b, s, strlen(s)); }
+static void bint(buf *b, int64_t v) { char t[24]; int n = 0; uint64_t u = v < 0 ? -(uint64_t)v : (uint64_t)v; do { t[n++] = '0' + u % 10; u /= 10; } while (u); if (v < 0) t[n++] = '-'; while (n) bput(b, &t[--n], 1); }
+static void bquote(buf *b, const unsigned char *s, size_t k) {
+    static const char hex[] = "0123456789abcdef";
+    bput(b, "\"", 1);
+    size_t from = 0;
+    for (size_t i = 0; i < k; i++) {
+        unsigned char c = s[i];
+        if (c >= 0x20 && c != '"' && c != '\\') continue;
+        bput(b, s + from, i - from); from = i + 1;
+        if (c == '"') bstr(b, "\\\""); else if (c == '\\') bstr(b, "\\\\");
+        else if (c == '\n') bstr(b, "\\n"); else if (c == '\r') bstr(b, "\\r"); else if (c == '\t') bstr(b, "\\t");
+        else { bstr(b, "\\u00"); bput(b, &hex[c >> 4], 1); bput(b, &hex[c & 15], 1); }
+    }
+    bput(b, s + from, k - from);
+    bput(b, "\"", 1);
+}
+/* the row the statement is on: {"id":..,"body":..,"created_at":..,"author":..,"like_count":..} (columns 0..4) */
+static void post_row(buf *b, sqlite3_stmt *q) {
+    bstr(b, "{\"id\":"); bint(b, sqlite3_column_int64(q, 0));
+    bstr(b, ",\"body\":"); bquote(b, sqlite3_column_text(q, 1), (size_t)sqlite3_column_bytes(q, 1));
+    bstr(b, ",\"created_at\":"); bquote(b, sqlite3_column_text(q, 2), (size_t)sqlite3_column_bytes(q, 2));
+    bstr(b, ",\"author\":"); bquote(b, sqlite3_column_text(q, 3), (size_t)sqlite3_column_bytes(q, 3));
+    bstr(b, ",\"like_count\":"); bint(b, sqlite3_column_int64(q, 4)); bstr(b, "}");
+}
+/* mode 0: steps the statement to its end and answers {"posts":[...]}. mode 1: one row, answers {"post":{...}}, or nothing if there is none.
+ * An SQLite error answers nothing too, and `dbError` says why. */
+gort_xarr gort_x_dbPostsJson(int32_t id, int32_t mode) {
+    sqlite3_stmt *q = stmts[id];
+    buf b = { malloc(8192), 0, 8192 };
+    bstr(&b, mode == 0 ? "{\"posts\":[" : "{\"post\":");
+    int rows = 0, rc;
+    while ((rc = sqlite3_step(q)) == 100) {
+        if (rows++ && mode == 0) bput(&b, ",", 1);
+        post_row(&b, q);
+        if (mode == 1) { rc = 101; break; }
+    }
+    last_rc = rc;
+    gort_xarr r = { NULL, 0 };
+    if (rc == 101 && (mode == 0 || rows)) { bstr(&b, mode == 0 ? "]}" : "}"); r = (gort_xarr){ b.p, b.n }; }
+    else free(b.p);
+    return r;
+}
+
+int32_t gort_x_dbLastRc(void) { return last_rc; }
 
 /* ---- clock ---- */
 int64_t gort_x_nowSec(void) { return (int64_t)time(NULL); }

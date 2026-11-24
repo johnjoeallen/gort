@@ -51,14 +51,6 @@ fn jsonQuote(s: String): String {
     return String.toString(out)
 }
 
-// The post object of the row the statement is on: id, body, created_at, author, like_count.
-fn postJson(q: i32): String {
-    return "{\"id\":" + dbInt(q, 0) + ",\"body\":" + jsonQuote(String.toString(dbText(q, 1)))
-        + ",\"created_at\":" + jsonQuote(String.toString(dbText(q, 2)))
-        + ",\"author\":" + jsonQuote(String.toString(dbText(q, 3)))
-        + ",\"like_count\":" + dbInt(q, 4) + "}"
-}
-
 // ---------- handlers: (request, body, store, the path parameters) ----------
 
 fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
@@ -75,14 +67,10 @@ fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply
 fn hFeed(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
     let q = store.qFeed
     dbReset(q)
-    var out = "{\"posts\":["
-    var first = true
-    while (stepRow(q)) {
-        out = out + (first ? "" : ",") + postJson(q)
-        first = false
-    }
+    let out = dbPostsJson(q, 0)
     dbReset(q)
-    return json(200, out + "]}")
+    if (out.length == 0) throw DbError(String.toString(dbError()))
+    return Reply.bytes(200, "application/json", out)
 }
 
 fn hPostGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
@@ -91,13 +79,13 @@ fn hPostGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Repl
     let q = store.qPost
     dbReset(q)
     dbBindInt(q, 1, id)
-    if (!stepRow(q)) {
-        dbReset(q)
+    let out = dbPostsJson(q, 1)
+    dbReset(q)
+    if (out.length == 0) {
+        if (dbLastRc() != DONE) throw DbError(String.toString(dbError()))
         return fail(404, "post not found")
     }
-    let out = "{\"post\":" + postJson(q) + "}"
-    dbReset(q)
-    return json(200, out)
+    return Reply.bytes(200, "application/json", out)
 }
 
 struct NewPost { body: String? }

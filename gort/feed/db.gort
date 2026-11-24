@@ -10,6 +10,8 @@ extern fn dbBindText(id: i32, i: i32, v: Array<u8>)
 extern fn dbStep(id: i32): i32                           // 100 = a row, 101 = done
 extern fn dbInt(id: i32, col: i32): i64                  // columns count from 0
 extern fn dbText(id: i32, col: i32): Array<u8>
+extern fn dbPostsJson(id: i32, mode: i32): Array<u8>      // the whole answer for a read: mode 0 the feed, mode 1 one post (empty: no row, or an error)
+extern fn dbLastRc(): i32                                  // 101 if the last dbPostsJson read its rows to the end, else the SQLite error code
 extern fn dbChanges(): i64
 extern fn dbError(): Array<u8>
 extern fn uiHtml(): Array<u8>                          // the page served at /ui
