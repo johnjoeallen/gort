@@ -256,6 +256,8 @@ pub enum TS {
     BreakL(usize, bool),
     Return(Option<TExpr>),
     Block(TBlock),
+    /// `scope { }`: leaving it joins every child vthread the body started
+    Scope(TBlock),
     /// the first assignment of a global, which holds nothing to drop yet
     SetGlobal(usize, TExpr),
     /// throw a new exception object of this exception struct

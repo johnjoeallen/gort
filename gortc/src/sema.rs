@@ -1776,6 +1776,10 @@ impl<'a> Sema<'a> {
                 let b = self.lower_block(cx, b);
                 mk(TS::Block(b))
             }
+            StmtKind::Scope(b) => {
+                let b = self.lower_block(cx, b);
+                mk(TS::Scope(b))
+            }
             StmtKind::Sync { targets, body } => {
                 let mut vs: Vec<(bool, TExpr)> = Vec::new();
                 let mut ok = true;
@@ -3330,7 +3334,8 @@ impl<'a> Sema<'a> {
                             return error_expr(line);
                         }
                         let a0 = self.lower_expecting(cx, &args[0], &b.ty);
-                        if a0.ty == b.ty {
+                        // the elements are copied, so the other array may have either layout
+                        if matches!((&a0.ty, &b.ty), (Ty::Arr(e1, _), Ty::Arr(e2, _)) if e1 == e2) {
                             return typed(EK::RtCall("appendArr", vec![b, a0]), Ty::Unit, line);
                         }
                         let a0 = self.coerce(cx, a0, &el, (args[0].line, args[0].col));
@@ -3662,7 +3667,7 @@ fn stmt_returns(s: &TStmt) -> bool {
     match &s.kind {
         TS::Return(_) => true,
         TS::If(_, t, Some(e)) => block_returns(t) && block_returns(e),
-        TS::Block(b) | TS::Sync(_, b) => block_returns(b),
+        TS::Block(b) | TS::Scope(b) | TS::Sync(_, b) => block_returns(b),
         TS::Throw(..) => true,
         TS::Try(b, cs) => block_returns(b) && cs.iter().all(|c| block_returns(&c.body)),
         TS::Loop(b) => !block_breaks(b),
@@ -3676,7 +3681,7 @@ fn block_breaks(b: &TBlock) -> bool {
         TS::Break | TS::BreakL(..) => true,
         TS::Labeled(i) => block_breaks(&TBlock { stmts: vec![(**i).clone()], ..Default::default() }),
         TS::If(_, t, e) => block_breaks(t) || e.as_ref().map(block_breaks).unwrap_or(false),
-        TS::Block(b) | TS::Sync(_, b) => block_breaks(b),
+        TS::Block(b) | TS::Scope(b) | TS::Sync(_, b) => block_breaks(b),
         TS::Try(b, cs) => block_breaks(b) || cs.iter().any(|c| block_breaks(&c.body)),
         _ => false, // a break inside a nested loop belongs to that loop
     })
@@ -3812,7 +3817,7 @@ pub(crate) fn walk_stmt(s: &TStmt, f: &mut dyn FnMut(&TStmt)) {
                 walk_stmts(e, f);
             }
         }
-        TS::While(_, b) | TS::Loop(b) | TS::Block(b) | TS::Sync(_, b) => walk_stmts(b, f),
+        TS::While(_, b) | TS::Loop(b) | TS::Block(b) | TS::Scope(b) | TS::Sync(_, b) => walk_stmts(b, f),
         TS::Labeled(i) => walk_stmt(i, f),
         TS::Try(b, cs) => {
             walk_stmts(b, f);
@@ -3843,7 +3848,7 @@ fn sync_walk_stmt<'a>(s: &'a TStmt, open: &mut Vec<&'a TExpr>, f: &mut dyn FnMut
                 sync_walk(e, open, f);
             }
         }
-        TS::While(_, b) | TS::Loop(b) | TS::Block(b) => sync_walk(b, open, f),
+        TS::While(_, b) | TS::Loop(b) | TS::Block(b) | TS::Scope(b) => sync_walk(b, open, f),
         TS::Labeled(i) => sync_walk_stmt(i, open, f),
         TS::Try(b, cs) => {
             sync_walk(b, open, f);
@@ -3885,7 +3890,7 @@ pub(crate) fn visit_stmt(s: &TStmt, f: &mut dyn FnMut(&TExpr)) {
             f(c);
             visit_block(b, f);
         }
-        TS::Loop(b) | TS::Block(b) => visit_block(b, f),
+        TS::Loop(b) | TS::Block(b) | TS::Scope(b) => visit_block(b, f),
         TS::Sync(ts, b) => {
             // naming an object to lock it only reads through it; it does not let the handle escape
             for (_, t) in ts {
@@ -3990,7 +3995,7 @@ fn hint_stmt<'a>(s: &'a ast::Stmt, name: &str, out: &mut Vec<Option<&'a Expr>>) 
             hint_expr(iter, name, out);
             blk(body, out);
         }
-        StmtKind::Loop(b) | StmtKind::Block(b) | StmtKind::Sync { body: b, .. } => blk(b, out),
+        StmtKind::Loop(b) | StmtKind::Block(b) | StmtKind::Scope(b) | StmtKind::Sync { body: b, .. } => blk(b, out),
         StmtKind::Labeled(_, s) => hint_stmt(s, name, out),
         StmtKind::Switch { subject, arms } => {
             hint_expr(subject, name, out);
@@ -4093,7 +4098,7 @@ fn stmt_mutates(s: &ast::Stmt, name: &str) -> bool {
         StmtKind::If { cond, then, els } => ex(cond) || blk(then) || els.as_ref().map_or(false, blk),
         StmtKind::While { cond, body } => ex(cond) || blk(body),
         StmtKind::For { iter, body, .. } => ex(iter) || blk(body),
-        StmtKind::Loop(b) | StmtKind::Block(b) | StmtKind::Sync { body: b, .. } => blk(b),
+        StmtKind::Loop(b) | StmtKind::Block(b) | StmtKind::Scope(b) | StmtKind::Sync { body: b, .. } => blk(b),
         StmtKind::Labeled(_, s) => stmt_mutates(s, name),
         StmtKind::Switch { subject, arms } => ex(subject) || arms.iter().any(|a| blk(&a.body)),
         StmtKind::Try { body, catches } => blk(body) || catches.iter().any(|c| blk(&c.body)),

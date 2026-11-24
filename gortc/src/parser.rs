@@ -568,10 +568,10 @@ impl Parser {
             let body = self.body_block()?;
             return Ok(mk(StmtKind::For { var, iter, body }));
         }
-        // `scope { }` is still a stub (runs in place); `mutate(x) { }` and `sync(x) { }` take the object's lock
+        // `scope { }` joins its children on every way out; `sync(x) { }` takes the object's lock
         if self.is_kw("scope") {
             self.bump();
-            return Ok(mk(StmtKind::Block(self.block()?)));
+            return Ok(mk(StmtKind::Scope(self.block()?)));
         }
         if self.is_kw("mutate") {
             return self.err(&t, "`mutate` is gone: lock an object for writing with `sync (writes x) { }`".to_string());

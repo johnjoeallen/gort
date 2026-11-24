@@ -630,7 +630,7 @@ impl<'a> Cx<'a> {
                 self.escape_in_block(b, &[]);
                 self.block(b);
             }
-            TS::Block(b) => self.block(b),
+            TS::Block(b) | TS::Scope(b) => self.block(b),
             TS::Labeled(i) => self.stmt(i),
             TS::Try(b, cs) => {
                 self.block(b);
@@ -719,6 +719,12 @@ impl<'a> Cx<'a> {
                 for (i, a) in args.iter().enumerate() {
                     let ok = self.borrowed[*f].get(i).copied().unwrap_or(false) || self.arr_ok[*f].get(i).copied().unwrap_or(false);
                     self.o2(a, ok, line);
+                }
+            }
+            // a built-in that reads or fills an array where it stands (append, find, copy, ...) uses it in place; it keeps no handle
+            EK::RtCall(name, args) if matches!(*name, "appendArr" | "appendOne" | "find" | "contains" | "startsWith" | "equalsIgnoreCase" | "copyFrom" | "isUtf8" | "copyArr" | "toStr" | "capacity" | "grow" | "moveWithin" | "bytesEq") => {
+                for a in args {
+                    self.o2(a, true, line);
                 }
             }
             EK::Method(f, r, args) => {

@@ -1,0 +1,59 @@
+package t
+// leaving a `scope` waits for the children started inside it, whichever way it is left
+extern fn spawnTask(body: fn())
+extern fn pause(ms: i64)
+exception Oops
+
+fn child(n: i64) {
+    pause(40 * n)
+    println("child " + str(n) + " done")
+}
+
+fn plain() {
+    scope {
+        spawn child(1)
+        spawn child(2)
+        println("body done")
+    }
+    println("after scope")
+}
+
+fn early(): i64 {
+    scope {
+        spawn child(3)
+        return 7
+    }
+    return 0
+}
+
+fn loopy() {
+    var i: i64 = 0
+    while (i < 3) {
+        scope {
+            spawn child(4 + i)
+            if (i == 1) { break }
+        }
+        i += 1
+    }
+    println("loop out")
+}
+
+fn thrower() throws Oops {
+    scope {
+        spawn child(6)
+        throw Oops()
+    }
+}
+
+fn main() {
+    plain()
+    println(str(early()))
+    loopy()
+    try {
+        thrower()
+    } catch (e: Oops) {
+        println("caught")
+    }
+    scope { }
+    println("end")
+}

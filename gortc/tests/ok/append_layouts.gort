@@ -1,0 +1,17 @@
+package t
+// append copies the elements, so the array it takes may have either layout
+fn main() {
+    shared Array<u8> s = [1, 2]
+    Array<u8> p = [3, 4]
+    sync (writes s) { s.append(p) }
+    p.append(s)
+    shared Array<u8> t = Array<u8>()
+    t.append(s)
+    t.append(p)
+    var sum: u64 = 0
+    for (x in t) { sum += x }
+    println(s.length)
+    println(p.length)
+    println(t.length)
+    println(sum)
+}

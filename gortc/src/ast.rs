@@ -122,6 +122,8 @@ pub enum StmtKind {
     ContinueTo(String),
     Return(Option<Expr>),
     Block(Block),
+    /// `scope { }`: the vthreads started inside are children of the scope; leaving it, normally or by return, break, continue or throw, waits for all of them
+    Scope(Block),
     Switch { subject: Expr, arms: Vec<Arm> },
     Throw(Expr),
     Try { body: Block, catches: Vec<Catch> },

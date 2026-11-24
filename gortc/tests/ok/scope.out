@@ -1,0 +1,12 @@
+body done
+child 1 done
+child 2 done
+after scope
+child 3 done
+7
+child 4 done
+child 5 done
+loop out
+child 6 done
+caught
+end

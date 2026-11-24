@@ -963,6 +963,23 @@ impl<'a> FnGen<'a> {
                 self.dead = true;
             }
             TS::Block(b) => self.block(b),
+            TS::Scope(body) => {
+                // the join is a scope drop, so return, break, continue and throw out of the body all wait for the children first
+                let saved = self.dead;
+                self.dead = false;
+                self.line("{");
+                self.ind += 1;
+                self.scopes.push(vec!["if (gort_rt_scope_join) gort_rt_scope_join();".to_string()]);
+                self.block(body);
+                if !self.dead {
+                    let sc = self.scopes.len() - 1;
+                    self.emit_scope_drops_to(sc);
+                }
+                self.scopes.pop();
+                self.ind -= 1;
+                self.line("}");
+                self.dead = saved;
+            }
             TS::Sync(targets, body) => {
                 // hold a count on each object and the locks for the whole body; both are scope drops, so return, break, continue and throw release
                 // them. With several objects the locks are taken in one canonical order (by address) no matter what order they were written in.
@@ -1426,7 +1443,7 @@ impl<'a> FnGen<'a> {
                 let a = self.expr(&args[0]);
                 if *name == "toBytes" {
                     let t = self.tmp();
-                    self.line(format!("gort_arr* {} = gort_arr_new(1, {}->len); memcpy({}->data, {}->data, {}->len);", t, a.c, t, a.c, a.c));
+                    self.line(format!("gort_arr* {} = gort_arr_new(1, {}->len); if ({}->len) memcpy({}->data, {}->data, {}->len);", t, a.c, a.c, t, a.c, a.c));
                     self.register_temp(&t, format!("gort_arr_release{}({});", asfx(&e.ty), t));
                     return Val { c: t.clone(), own: Some(t) };
                 }

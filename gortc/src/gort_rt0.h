@@ -73,6 +73,7 @@ static __thread unsigned gort_held_n;
 /* the runtime's side of parking (rt/posix.c); absent in a plain program, whose waits then block the thread */
 extern void *gort_rt_vt_self(void) __attribute__((weak));                  /* the vthread running now, or NULL off a worker */
 extern void gort_rt_vt_park(void *vt) __attribute__((weak));               /* return when gort_rt_vt_unpark(vt) has been called */
+extern void gort_rt_scope_join(void) __attribute__((weak));                 /* leaving a `scope`: park until every child vthread it started has finished */
 extern void gort_rt_vt_unpark(void *vt) __attribute__((weak));             /* callable from any thread; a wake before the park is not lost */
 
 typedef struct gort_waiter { void *obj; int write; int signaled; uint64_t since; void *vt; struct gort_waiter *next; pthread_cond_t cv; } gort_waiter;
