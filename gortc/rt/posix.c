@@ -393,6 +393,27 @@ void gort_x_Conn_lingerClose(G_Conn *self, int64_t ns, uint64_t max) {
 }
 
 /* ---- Listener ---- */
+/* Out of descriptors (EMFILE/ENFILE): the connection waiting in the queue cannot be accepted, and the listener stays readable, so retrying would spin (and
+ * sleep() needs a descriptor too). The usual remedy: a spare descriptor held in reserve. Close it, accept the waiting connection and close that at once (the
+ * client is turned away; the descriptors in use are untouched), and take the spare again. Each pass removes one waiting connection, so the loop ends when the queue is empty. */
+static int spare_fd = -2;
+static pthread_mutex_t spare_mu = PTHREAD_MUTEX_INITIALIZER;
+static void shed_reserve(void) {
+    pthread_mutex_lock(&spare_mu);
+    if (spare_fd < 0) spare_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    pthread_mutex_unlock(&spare_mu);
+}
+static int shed_one(int lfd) {
+    pthread_mutex_lock(&spare_mu);
+    if (spare_fd == -2) spare_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (spare_fd >= 0) { close(spare_fd); spare_fd = -1; }
+    int fd = accept4(lfd, NULL, NULL, SOCK_NONBLOCK);
+    if (fd >= 0) close(fd);
+    spare_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    pthread_mutex_unlock(&spare_mu);
+    return fd >= 0;                                       /* a connection was turned away */
+}
+static __thread unsigned shed_run;
 int gort_x_Listener_bindReusePort(uint16_t port, G_Listener **ret_out) {
     int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (fd < 0) return gort_rt_throw_io();
@@ -402,6 +423,7 @@ int gort_x_Listener_bindReusePort(uint16_t port, G_Listener **ret_out) {
     struct sockaddr_in a; memset(&a, 0, sizeof a);
     a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_ANY); a.sin_port = htons(port);
     if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0 || listen(fd, 1024) < 0) { close(fd); return gort_rt_throw_io(); }
+    shed_reserve();                                        /* the spare descriptor is taken now, while there still is one */
     struct rt_listener *l = gort_rt_new(sizeof *l); l->fd = fd;
     *ret_out = (G_Listener *)l;
     return 0;
@@ -410,6 +432,10 @@ int gort_x_Listener_accept(G_Listener *self, G_Conn **ret_out) {
     int lfd = ((struct rt_listener *)self)->fd;
     for (;;) {
         int fd = accept4(lfd, NULL, NULL, SOCK_NONBLOCK);
+        if (fd < 0 && (errno == EMFILE || errno == ENFILE)) {
+            if (shed_one(lfd)) { if ((++shed_run & 15) == 0) gort_x_yield(); continue; }   /* a long queue must not keep the worker from the connections it has */
+            if (wait_fd(lfd, EPOLLIN, -1) == 0) continue;
+        }
         if (fd < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(lfd, EPOLLIN, -1) == 0) continue; }
         if (fd >= 0) { int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one); *ret_out = conn_new(fd); return 0; }
         if (errno == EINTR || errno == ECONNABORTED) continue;

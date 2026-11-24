@@ -113,9 +113,22 @@ fn runConnection(conn: Conn, store: shared Store, routes: shared Route, cfg: sha
     }
 }
 
+// accept() fails when the process is out of descriptors (EMFILE) or memory: that must not end the server. It logs, waits a moment and tries again, so
+// the connections already open keep being served and the listener recovers as they close.
+fn acceptOrNull(listener: Listener): Conn? {
+    try {
+        return listener.accept()                             // parks until a client arrives
+    } catch (e: IoError) {
+        log(e)
+        sleep(Duration.millis(50))
+        return null
+    }
+}
+
 fn serve(listener: Listener, store: shared Store, routes: shared Route, cfg: shared ServerConfig) throws IoError {   // one per worker
     while (true) {
-        let conn = listener.accept()                         // parks until a client arrives
+        let conn = acceptOrNull(listener)
+        if (conn == null) continue
         spawn runConnection(conn, store, routes, cfg)        // `conn` moves into the new vthread
     }
 }
