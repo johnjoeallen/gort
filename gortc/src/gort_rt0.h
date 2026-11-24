@@ -524,6 +524,16 @@ static int gort_jp_hex4(gort_jp *j, unsigned *u) {
 }
 static int gort_jp_str(gort_jp *j, gort_str **out) {
     if (gort_jp_expect(j, '"')) return 1;
+    {   /* fast path: no escape and no control byte before the closing quote, so the string is the bytes in place and is copied once. Anything else
+           (an escape, a control byte, no closing quote) runs the general loop below from the same start, so its answers and messages are unchanged */
+        const uint8_t *q = j->p;
+        while (q < j->end && *q != '"' && *q != '\\' && *q >= 0x20) q++;
+        if (q < j->end && *q == '"') {
+            size_t len = (size_t)(q - j->p);
+            if (len > (size_t)j->maxstr) { j->p += (size_t)j->maxstr + 1; return gort_jp_fail(j, "string too long"); }   /* the offset the general loop reports */
+            *out = gort_str_make(j->p, len); j->p = q + 1; return 0;
+        }
+    }
     size_t cap = 16, n = 0; uint8_t *b = (uint8_t *)malloc(cap);
     if (!b) gort_trap("out of memory");
     for (;;) {
