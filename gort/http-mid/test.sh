@@ -90,6 +90,20 @@ check "lower-case method -> 501" "$(raw "get / HTTP/1.1\r\n${H}Connection: close
 check "request Content-Type reflected" "$(raw "POST /echo HTTP/1.1\r\n${H}content-TYPE:  application/json \r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")" "Content-Type: application/json"
 check "no Content-Type -> default" "$(raw "POST /echo HTTP/1.1\r\n${H}Content-Length: 2\r\nConnection: close\r\n\r\nab")" "Content-Type: application/octet-stream"
 
+# the response builder: extra headers, Allow, OPTIONS, 204
+check "201 carries Location"        "$(raw "PUT /kv/loc HTTP/1.1\r\n${H}Content-Length: 1\r\nConnection: close\r\n\r\nv")" "201 Created" "Location: /kv/loc"
+check "Location is percent-encoded" "$(raw "PUT /kv/a%20b%2Fc%C3%A9 HTTP/1.1\r\n${H}Content-Length: 1\r\nConnection: close\r\n\r\nv")" "Location: /kv/a%20b%2Fc%C3%A9"
+check "405 lists what is allowed"   "$(raw "POST /kv/x HTTP/1.1\r\n${H}Content-Length: 0\r\nConnection: close\r\n\r\n")" "405" "Allow: GET, HEAD, PUT, DELETE, OPTIONS"
+check "405 on a GET-only path"      "$(raw "POST /health HTTP/1.1\r\n${H}Content-Length: 0\r\nConnection: close\r\n\r\n")" "Allow: GET, HEAD, OPTIONS"
+check "OPTIONS -> 204 and Allow"    "$(raw "OPTIONS /kv/x HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "204 No Content" "Allow: GET, HEAD, PUT, DELETE, OPTIONS"
+resp=$(raw "OPTIONS /kv/x HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+if [[ $resp == *"Content-Length"* || $resp == *"Content-Type"* ]]; then echo "FAIL 204 has body headers"; fail=$((fail+1)); else echo "ok   204 has no Content-Length or Content-Type"; pass=$((pass+1)); fi
+check "OPTIONS on an unknown path -> 404" "$(raw "OPTIONS /nope HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
+check "DELETE answers 204 the same way" "$(raw "DELETE /kv/loc HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "204 No Content"
+resp=$(raw "HEAD /kv/missing HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "HEAD 404 keeps Content-Length" "$resp" "404" "Content-Length: 12"
+if [[ $resp == *"no such key"* ]]; then echo "FAIL HEAD 404 sent a body"; fail=$((fail+1)); else echo "ok   HEAD 404 sends no body"; pass=$((pass+1)); fi
+
 # a handler that throws: 500, and the connection stays usable
 resp=$(raw "GET /boom HTTP/1.1\r\n${H}\r\nGET /boom?ok=1 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
 check "handler throws -> 500, then the next request on the same connection" "$resp" "500 Internal Server Error" "internal error" "200 OK" "fine"

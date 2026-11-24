@@ -6,80 +6,80 @@ package http
 struct Route {
     method: Method
     pattern: String
-    handler: fn(Request, Array<u8>, shared Store, Params): ref Resp throws Exception
+    handler: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception
     next: shared Route?
 }
 
 // ---------- handlers: (request, body, store, the path parameters) ----------
 
-fn hHello(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    return respond(200, "hello\n", req.keepAlive, req.http10)
+fn hHello(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    return reply(200, "hello\n")
 }
 
-fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    return respond(200, "ok\n", req.keepAlive, req.http10)
+fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    return reply(200, "ok\n")
 }
 
-fn hEcho(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    return respondBytes(200, req.header("content-type") ?? "application/octet-stream", body, req.keepAlive, req.http10)
+fn hEcho(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    return Reply.bytes(200, req.header("content-type") ?? "application/octet-stream", body)
 }
 
-fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     let key = p.get("key") ?? ""
     var found: String? = null
     sync (reads store.kv) { found = store.kv.get(key) }
-    if (found == null) return respond(404, "no such key\n", req.keepAlive, req.http10)
-    return respond(200, found + "\n", req.keepAlive, req.http10)
+    if (found == null) return reply(404, "no such key\n")
+    return reply(200, found + "\n")
 }
 
-fn hPut(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+fn hPut(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     let key = p.get("key") ?? ""
-    if (key.length == 0) return respond(400, "empty key\n", req.keepAlive, req.http10)
+    if (key.length == 0) return reply(400, "empty key\n")
     var existed = false
     sync (writes store.kv) {
         existed = store.kv.has(key)
         store.kv.insert(key, String.toString(body))
     }
     sync (writes store) { store.writes += 1 }
-    if (existed) return respond(200, "replaced\n", req.keepAlive, req.http10)
-    return respond(201, "created\n", req.keepAlive, req.http10)
+    if (existed) return reply(200, "replaced\n")
+    return reply(201, "created\n").with("Location", "/kv/" + percentEncode(key))
 }
 
-fn hDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+fn hDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     let key = p.get("key") ?? ""
     var existed = false
     sync (writes store.kv) {
         existed = store.kv.has(key)
         store.kv.remove(key)
     }
-    if (!existed) return respond(404, "no such key\n", req.keepAlive, req.http10)
+    if (!existed) return reply(404, "no such key\n")
     sync (writes store) { store.writes += 1 }
-    return respond(204, "", req.keepAlive, req.http10)
+    return reply(204, "")
 }
 
-fn hStats(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+fn hStats(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     var keys: usize = 0
     sync (reads store.kv) { keys = store.kv.count }
     var requests: u64 = 0
     var writes: u64 = 0
     sync (reads store) { requests = store.requests; writes = store.writes }
-    return respond(200, "keys " + keys + "\nrequests " + requests + "\nwrites " + writes + "\n", req.keepAlive, req.http10)
+    return reply(200, "keys " + keys + "\nrequests " + requests + "\nwrites " + writes + "\n")
 }
 
 exception Boom { reason: String }
 
 // A handler that fails, to show that a throw answers 500 and the connection lives on.
-fn hBoom(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp throws Exception {
-    if (queryGet(req.query, "ok") != null) return respond(200, "fine\n", req.keepAlive, req.http10)
+fn hBoom(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    if (queryGet(req.query, "ok") != null) return reply(200, "fine\n")
     throw Boom("asked to")
 }
 
-fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     let name = p.get("name") ?? ""
     let text = "hello, " + name + "\n"
     let shout = queryGet(req.query, "shout")
-    if (shout != null && shout != "0") return respond(200, "hello, " + name + "!\n", req.keepAlive, req.http10)
-    return respond(200, text, req.keepAlive, req.http10)
+    if (shout != null && shout != "0") return reply(200, "hello, " + name + "!\n")
+    return reply(200, text)
 }
 
 // ---------- the table ----------
@@ -97,37 +97,34 @@ fn buildRoutes(): shared Route {
     return r1
 }
 
-// Finds the route for a request and runs it: 404 if no path matches, 405 if the path matches but not the method.
+// Finds the route for a request and runs it, then renders the reply. 404 if no path matches; 405 (with an Allow header) if the path matches but
+// not the method; OPTIONS on a known path lists what it allows; HEAD is answered by the GET handler with the body cut off.
 fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared Route): ref Resp {
     sync (writes store) { store.requests += 1 }
+    let head = req.method == Method.Head
     var cur: shared Route? = routes
-    var pathSeen = false
+    var allow = ""                                       // the methods the path has routes for
     let path = req.path.toBytes()
     while (cur != null) {
         if (patternMatches(cur.pattern.toBytes(), path)) {
-            // HEAD is answered by the GET handler, without the body
-            if (req.method == cur.method || (req.method == Method.Head && cur.method == Method.Get)) {
+            if (req.method == cur.method || (head && cur.method == Method.Get)) {
                 let h = cur.handler
+                var r = reply(500, "internal error\n")           // what a throwing handler gets
                 try {
-                    let resp = h(req, body, store, Params { pattern: cur.pattern, path: req.path })
-                    return (req.method == Method.Head) ? headOnly(resp) : resp
+                    r = h(req, body, store, Params { pattern: cur.pattern, path: req.path })
                 } catch (e: Exception) {
                     // whatever the handler threw ends this request only: the client gets a 500 and the connection stays open
                     logLine((req.method.name() + " " + req.path + ": the handler threw\n").toBytes())
-                    return respond(500, "internal error\n", req.keepAlive, req.http10)
                 }
+                return render(r, req.keepAlive, req.http10, !head)
             }
-            pathSeen = true
+            allow = allow + (allow.length == 0 ? "" : ", ") + cur.method.name() + (cur.method == Method.Get ? ", HEAD" : "")
         }
         cur = cur.next
     }
-    if (pathSeen) return respond(405, "method not allowed\n", req.keepAlive, req.http10)
-    return respond(404, "not found\n", req.keepAlive, req.http10)
-}
-
-// The response without its body: the same status line and headers (Content-Length is still the length the GET would send).
-fn headOnly(resp: ref Resp): ref Resp {
-    let at = resp.bytes.find("\r\n\r\n")
-    if (at == null) return resp
-    return new Resp { bytes: resp.bytes[0..at + 4].copy(), keepAlive: resp.keepAlive }
+    if (allow.length > 0) {
+        if (req.method == Method.Options) return render(reply(204, "").with("Allow", allow + ", OPTIONS"), req.keepAlive, req.http10, true)
+        return render(reply(405, "method not allowed\n").with("Allow", allow + ", OPTIONS"), req.keepAlive, req.http10, !head)
+    }
+    return render(reply(404, "not found\n"), req.keepAlive, req.http10, !head)
 }

@@ -8,7 +8,7 @@
   is refused as its header arrives), bad framing or `chunked` together with `Content-Length` answers 400, a head above `maxHead` 431. `Expect: 100-continue`
   gets its interim answer when the body has not started to arrive;
 - a route table (`router.gort`): a list of `Route { method, pattern, handler, next }` built once, from the last route to the first, and never changed, so
-  every worker reads it without a lock. A handler is a function value that `throws Exception`: a throw is logged and answers 500 on a connection that stays open. 404 for no path, 405 for a path with the wrong method. `HEAD` is answered by the `GET` handler with the body cut off;
+  every worker reads it without a lock. A handler is a function value that returns a `Reply` (`reply(200, "ok\n")`, `Reply.bytes(status, type, body)`, `.with("Location", ...)`) and `throws Exception`: a throw is logged and answers 500 on a connection that stays open. 404 for no path, 405 (with `Allow`) for a path with the wrong method, `OPTIONS` on a known path answers 204 with `Allow`. `HEAD` is answered by the `GET` handler with the body cut off;
 - route patterns (`pattern.gort`): `/kv/:key` matches one non-empty segment, a final `*rest` matches everything left (slashes included). Matching walks the pattern
   and the path side by side and allocates nothing; a handler reads its parameters from `Params` (`p.get("key") ?? ""`), which cuts the
   segment out and percent-decodes it only when asked. `queryGet(req.query, "name")` does the same for the query string (`+` is a space). A `%` not followed

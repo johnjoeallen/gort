@@ -1,4 +1,6 @@
-// http-mid/response.gort - building responses.
+// http-mid/response.gort - what a handler returns (a Reply) and how the server turns it into bytes (render).
+// A handler says WHAT to answer: a status, a body, a content type, extra headers. The server adds what depends on the connection: Content-Length
+// and the Connection header (keep-alive or close, HTTP/1.0 or 1.1). A Reply is a plain value.
 package http
 
 fn reasonPhrase(code: u16): String {
@@ -6,27 +8,81 @@ fn reasonPhrase(code: u16): String {
         200     -> { return "OK" }
         201     -> { return "Created" }
         204     -> { return "No Content" }
+        301     -> { return "Moved Permanently" }
+        302     -> { return "Found" }
+        303     -> { return "See Other" }
+        307     -> { return "Temporary Redirect" }
+        308     -> { return "Permanent Redirect" }
         400     -> { return "Bad Request" }
         404     -> { return "Not Found" }
         405     -> { return "Method Not Allowed" }
         413     -> { return "Payload Too Large" }
+        431     -> { return "Request Header Fields Too Large" }
         500     -> { return "Internal Server Error" }
         501     -> { return "Not Implemented" }
-        431     -> { return "Request Header Fields Too Large" }
         default -> { return "Other" }
     }
 }
 
-// A response with a body of bytes. `keepAlive` false adds `Connection: close`; an HTTP/1.0 client that asked to keep the connection is told it is kept.
-fn respondBytes(code: u16, contentType: String, body: Array<u8>, keepAlive: bool, http10: bool): ref Resp {
-    let head = "HTTP/1.1 " + code + " " + reasonPhrase(code) + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + body.length + "\r\n"
-             + (keepAlive ? (http10 ? "Connection: keep-alive\r\n" : "") : "Connection: close\r\n") + "\r\n"
+struct Reply {
+    status: u16
+    contentType: String
+    headers: String             // extra header lines, each ending in CR LF
+    body: Array<u8>
+
+    // A text answer: reply(200, "ok\n").
+    static fn text(status: u16, body: String): Reply {
+        return Reply { status: status, contentType: "text/plain", headers: "", body: body.toBytes() }
+    }
+
+    // An answer of bytes with the given content type.
+    static fn bytes(status: u16, contentType: String, body: Array<u8>): Reply {
+        return Reply { status: status, contentType: contentType, headers: "", body: body }
+    }
+
+    // The same reply with one more header: reply(201, "made\n").with("Location", "/kv/a").
+    fn with(name: String, value: String): Reply {
+        return Reply { status: status, contentType: contentType, headers: headers + name + ": " + value + "\r\n", body: body }
+    }
+}
+
+fn reply(status: u16, body: String): Reply { return Reply.text(status, body) }
+
+// Turns a reply into the bytes to send. `keepAlive` false adds `Connection: close`; an HTTP/1.0 client that asked to keep the connection is told it
+// is kept. `withBody` false is for HEAD: the same headers, Content-Length included, and no body. A 204 has neither a body nor a Content-Length.
+fn render(r: Reply, keepAlive: bool, http10: bool, withBody: bool): ref Resp {
+    let noBody = r.status == 204
+    var head = "HTTP/1.1 " + r.status + " " + reasonPhrase(r.status) + "\r\n"
+    if (!noBody) head = head + "Content-Type: " + r.contentType + "\r\nContent-Length: " + r.body.length + "\r\n"
+    head = head + r.headers + (keepAlive ? (http10 ? "Connection: keep-alive\r\n" : "") : "Connection: close\r\n") + "\r\n"
     var out = Array<u8>()
     out.append(head.toBytes())
-    out.append(body)
+    if (withBody && !noBody) out.append(r.body)
     return new Resp { bytes: out, keepAlive: keepAlive }
 }
 
+// An error answer built outside a handler (the server's own 400, 413, 431, 501).
 fn respond(code: u16, body: String, keepAlive: bool, http10: bool): ref Resp {
-    return respondBytes(code, "text/plain", body.toBytes(), keepAlive, http10)
+    return render(reply(code, body), keepAlive, http10, true)
 }
+
+// `s` with every byte that is not unreserved (letters, digits, - . _ ~) written as %XX, for a path segment or a query value.
+fn percentEncode(s: String): String {
+    let b = s.toBytes()
+    var out = Array<u8>()
+    var i: usize = 0
+    while (i < b.length) {
+        let c = b[i]
+        if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 45 || c == 46 || c == 95 || c == 126) {
+            out.append(c)
+        } else {
+            out.append(37)
+            out.append(hexDigit(c / 16))
+            out.append(hexDigit(c % 16))
+        }
+        i += 1
+    }
+    return String.toString(out)
+}
+
+fn hexDigit(n: u8): u8 { return (n < 10) ? 48 + n : 55 + n }
