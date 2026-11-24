@@ -1,0 +1,84 @@
+// http-mid/stream.gort - sending a reply whose body is streamed: a file range (sendfile) or chunks from a producer.
+// It runs in the connection's own vthread, on a connection with nothing else in flight (a streaming route is a barrier), so the answer goes out in order and
+// never sits in memory. It parks while the client reads, and yields between pieces so a big download does not hold the worker.
+package http
+
+// Lower-case hex digits of n.
+fn hexOf(n: usize): String {
+    if (n == 0) return "0"
+    var digits = Array<u8>()
+    var v = n
+    while (v > 0) {
+        digits.append(lowerByte(hexDigit((v % 16) as u8)))
+        v = v / 16
+    }
+    var out = Array<u8>()
+    var i = digits.length
+    while (i > 0) {
+        i -= 1
+        out.append(digits[i])
+    }
+    return String.toString(out)
+}
+
+// What a streaming writer writes to: every write is one chunk of the body (or raw bytes, for an HTTP/1.0 client). It parks while the client is slow.
+struct Sink {
+    conn: Conn
+    chunked: bool
+
+    fn write(bytes: Array<u8>) throws IoError {
+        if (bytes.length == 0) return                        // an empty chunk would end the body
+        if (chunked) {
+            var out = Array<u8>()
+            out.append((hexOf(bytes.length) + "\r\n").toBytes())
+            out.append(bytes)
+            out.append("\r\n".toBytes())
+            writeAll(conn, out)
+        } else {
+            writeAll(conn, bytes)
+        }
+        yield()                                              // the other connections on this worker get a turn
+    }
+
+    fn writeText(text: String) throws IoError { write(text.toBytes()) }
+}
+
+// Sends `r` (head, then the body unless the request was a HEAD). Returns whether the connection may stay open: a chunked body needs HTTP/1.1, so a 1.0 client
+// gets the pieces as they are and the connection closes at the end.
+fn sendStream(conn: Conn, req: Request, r: Reply): bool throws IoError {
+    var chunked = false
+    var open = req.keepAlive
+    switch (r.source) {
+        Stream(_, _) -> { chunked = !req.http10; if (req.http10) open = false }
+        Memory, File(_, _) -> { }
+    }
+    writeAll(conn, renderHead(r, open, req.http10, chunked))
+    if (req.method == Method.Head) return open
+    switch (r.source) {
+        Memory -> { writeAll(conn, r.body) }
+        File(f, offset) -> {
+            var at = offset
+            var left = r.length
+            while (left > 0) {
+                let n = conn.sendFile(f, at, left)           // parks while the client's window is full
+                if (n == 0) break                            // the file ended early: nothing more to send
+                at += n
+                left -= n
+                yield()                                      // the other connections on this worker get a turn
+            }
+        }
+        Stream(params, writer) -> {
+            try {
+                writer(req, params, Sink { conn: conn, chunked: chunked })
+            } catch (e: IoError) {
+                throw IoError()                              // the client left
+            } catch (e: Exception) {
+                // the head and part of the body are gone: there is no way to report this to the client, so the connection ends here
+                logLine((req.method.name() + " " + req.path + ": the stream writer threw\n").toBytes())
+                throw IoError()
+            }
+            if (chunked) writeAll(conn, "0\r\n\r\n")
+        }
+    }
+    return open
+}

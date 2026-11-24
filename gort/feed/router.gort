@@ -1,0 +1,225 @@
+// feed/router.gort - the five endpoints of the challenge API (SPEC.md), the route table and the dispatch.
+package http
+
+// Which reader a route uses: every route here reads its (small) body into memory.
+enum Handler {
+    Memory(fn(Request, Array<u8>, shared Store, Params): Reply throws Exception)
+    Upload(u64, fn(Request, Upload, shared Store, Params): Reply throws Exception)
+}
+
+struct Route {
+    method: Method
+    pattern: String
+    handler: Handler
+    cost: Cost = Cost.Bounded(50.ms)
+    streams: bool = false
+    next: shared Route?
+
+    // GET, HEAD and OPTIONS have no side effects the next request could observe: such requests may run side by side. Anything else is a barrier.
+    fn safe(): bool { return method == Method.Get || method == Method.Head || method == Method.Options }
+
+    fn uploadLimit(): u64? {
+        switch (handler) {
+            Memory(_) -> { return null }
+            Upload(limit, _) -> { return limit }
+        }
+    }
+}
+
+// ---------- JSON out ----------
+
+fn json(status: u16, body: String): Reply { return Reply.bytes(status, "application/json", body.toBytes()) }
+fn fail(status: u16, message: String): Reply { return json(status, "{\"error\":" + jsonQuote(message) + "}") }
+
+// `s` as a JSON string literal.
+fn jsonQuote(s: String): String {
+    let b = s.toBytes()
+    var out = Array<u8>()
+    out.append(34)
+    var i: usize = 0
+    while (i < b.length) {
+        let c = b[i]
+        if (c == 34 || c == 92) { out.append(92); out.append(c) }
+        else if (c == 10) { out.append(92); out.append(110) }
+        else if (c == 13) { out.append(92); out.append(114) }
+        else if (c == 9) { out.append(92); out.append(116) }
+        else if (c < 32) { out.append("\\u00".toBytes()); out.append(hexDigit(c / 16)); out.append(hexDigit(c % 16)) }
+        else { out.append(c) }
+        i += 1
+    }
+    out.append(34)
+    return String.toString(out)
+}
+
+// The post object of the row the statement is on: id, body, created_at, author, like_count.
+fn postJson(q: i32): String {
+    return "{\"id\":" + dbInt(q, 0) + ",\"body\":" + jsonQuote(String.toString(dbText(q, 1)))
+        + ",\"created_at\":" + jsonQuote(String.toString(dbText(q, 2)))
+        + ",\"author\":" + jsonQuote(String.toString(dbText(q, 3)))
+        + ",\"like_count\":" + dbInt(q, 4) + "}"
+}
+
+// ---------- handlers: (request, body, store, the path parameters) ----------
+
+fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    try {
+        dbReset(store.qHealth)
+        stepRow(store.qHealth)
+        dbReset(store.qHealth)
+        return json(200, "{\"status\":\"ok\",\"db\":\"ok\",\"uptime_s\":" + uptimeSec() + "}")
+    } catch (e: DbError) {
+        return json(503, "{\"status\":\"degraded\",\"db\":\"unreachable\",\"error\":" + jsonQuote(e.reason) + "}")
+    }
+}
+
+fn hFeed(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let q = store.qFeed
+    dbReset(q)
+    var out = "{\"posts\":["
+    var first = true
+    while (stepRow(q)) {
+        out = out + (first ? "" : ",") + postJson(q)
+        first = false
+    }
+    dbReset(q)
+    return json(200, out + "]}")
+}
+
+fn hPostGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let id = parseId(p.get("id") ?? "")
+    if (id <= 0) return fail(400, "invalid post id")
+    let q = store.qPost
+    dbReset(q)
+    dbBindInt(q, 1, id)
+    if (!stepRow(q)) {
+        dbReset(q)
+        return fail(404, "post not found")
+    }
+    let out = "{\"post\":" + postJson(q) + "}"
+    dbReset(q)
+    return json(200, out)
+}
+
+struct NewPost { body: String? }
+
+fn isBlank(c: u8): bool { return c == 32 || (c >= 9 && c <= 13) }
+
+fn hPostCreate(req: Request, raw: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    var who: Who? = null
+    try {
+        who = authenticate(req, store.secret)
+    } catch (e: AuthFail) {
+        return fail(401, e.message)
+    }
+    if (!jsonOk(raw)) return fail(400, "malformed JSON body")
+    var parsed: NewPost? = null
+    try {
+        parsed = json.parse<NewPost>(raw, JSON_LIMITS)
+    } catch (e: JsonError) {
+        return fail(400, "body is required")                    // valid JSON of the wrong shape
+    }
+    if (parsed == null || parsed.body == null) return fail(400, "body is required")
+    let b = parsed.body.toBytes()
+    var lo: usize = 0
+    var hi: usize = b.length
+    while (lo < hi && isBlank(b[lo])) lo += 1
+    while (hi > lo && isBlank(b[hi - 1])) hi -= 1
+    if (lo == hi) return fail(400, "body is required")
+    let text = b[lo..hi]
+    let chars = utf8Chars(text)
+    if (chars > 500) return fail(400, "body must be at most 500 characters")
+    let q = store.qInsert
+    dbReset(q)
+    dbBindInt(q, 1, who.id)
+    dbBindText(q, 2, text)
+    if (!stepRow(q)) { dbReset(q); return fail(500, "internal server error") }
+    let id = dbInt(q, 0)
+    let created = String.toString(dbText(q, 1))
+    dbReset(q)                                                   // runs the statement to its end: the row is committed before the answer
+    return json(201, "{\"post\":{\"id\":" + id + ",\"body\":" + jsonQuote(String.toString(text)) + ",\"created_at\":" + jsonQuote(created)
+        + ",\"author\":" + jsonQuote(who.name) + ",\"like_count\":0}}")
+}
+
+fn hLike(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    var who: Who? = null
+    try {
+        who = authenticate(req, store.secret)                    // auth first, then the id
+    } catch (e: AuthFail) {
+        return fail(401, e.message)
+    }
+    let id = parseId(p.get("id") ?? "")
+    if (id <= 0) return fail(400, "invalid post id")
+    let qe = store.qExists
+    dbReset(qe)
+    dbBindInt(qe, 1, id)
+    let found = stepRow(qe)
+    dbReset(qe)
+    if (!found) return fail(404, "post not found")
+    let q = store.qLike
+    dbReset(q)
+    dbBindInt(q, 1, who.id)
+    dbBindInt(q, 2, id)
+    stepRow(q)
+    let fresh = dbChanges() > 0
+    dbReset(q)
+    return json(fresh ? (201 as u16) : (200 as u16), "{\"liked\":true,\"already_liked\":" + (fresh ? "false" : "true") + ",\"post_id\":" + id + "}")
+}
+
+// ---------- the table ----------
+
+fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
+
+fn buildRoutes(): shared Route {
+    shared Route r5 = new Route { method: Method.Post, pattern: "/posts/:id/like", handler: mem(hLike), next: null }
+    shared Route r4 = new Route { method: Method.Post, pattern: "/posts",          handler: mem(hPostCreate), next: r5 }
+    shared Route r3 = new Route { method: Method.Get,  pattern: "/posts/:id",      handler: mem(hPostGet), next: r4 }
+    shared Route r2 = new Route { method: Method.Get,  pattern: "/feed",           handler: mem(hFeed), next: r3 }
+    shared Route r1 = new Route { method: Method.Get,  pattern: "/health",         handler: mem(hHealth), next: r2 }
+    return r1
+}
+
+// The first route that matches the request's path and method (HEAD matches a GET route); null if there is none.
+fn findRoute(req: Request, routes: shared Route): shared Route? {
+    let head = req.method == Method.Head
+    let path = req.path.toBytes()
+    var cur: shared Route? = routes
+    while (cur != null) {
+        if (patternMatches(cur.pattern.toBytes(), path) && (req.method == cur.method || (head && cur.method == Method.Get))) return cur
+        cur = cur.next
+    }
+    return null
+}
+
+// What a request gets when no route takes it: 404 if no path matches; 405 (out of scope for the challenge) if a path matches but not the method.
+fn noRoute(req: Request, routes: shared Route): Reply {
+    let path = req.path.toBytes()
+    var cur: shared Route? = routes
+    while (cur != null) {
+        if (patternMatches(cur.pattern.toBytes(), path)) return fail(405, "method not allowed")
+        cur = cur.next
+    }
+    return fail(404, "not found")
+}
+
+// Runs the route's handler; whatever it throws ends this request only: the client gets a 500 and the connection stays open.
+fn runRoute(route: shared Route, req: Request, body: Array<u8>, up: Upload?, store: shared Store): Reply {
+    let params = Params { pattern: route.pattern, path: req.path }
+    try {
+        switch (route.handler) {
+            Memory(h) -> { return h(req, body, store, params) }
+            Upload(_, h) -> { return fail(500, "internal server error") }
+        }
+    } catch (e: Exception) {
+        logLine((req.method.name() + " " + req.path + ": the handler threw\n").toBytes())
+        return fail(500, "internal server error")
+    }
+}
+
+fn answer(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): Reply {
+    let route = findRoute(req, routes)
+    return (route == null) ? noRoute(req, routes) : runRoute(route, req, body, up, store)
+}
+
+fn dispatch(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): ref Resp {
+    return render(answer(req, body, up, store, routes), req.keepAlive, req.http10, req.method != Method.Head)
+}

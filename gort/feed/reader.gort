@@ -1,0 +1,156 @@
+// http-mid/reader.gort - the connection's input reader: owns the buffer, finds request heads, reads bodies.
+// Unconsumed input is buf[start..end]. A finished request is consumed by advancing `start` (no copy). The buffer exists only while there is
+// unconsumed input, so an idle connection owns none.
+package http
+import runtime
+
+struct Reader {
+    conn: Conn
+    buf: Array<u8>? = null                                   // a runtime growable array; unallocated while the connection is idle
+    maxHead: usize                                           // the largest header block accepted
+    maxBody: usize                                           // the largest body accepted
+    limit: usize = 0                                         // the buffer may grow to this much for what is being read now
+    start: usize = 0
+    end: usize = 0
+    consumed: usize = 0                                      // end of the head (or body) most recently returned
+
+    static fn of(conn: Conn, cfg: shared ServerConfig): Reader {
+        return Reader { conn: conn, maxHead: cfg.maxHead, maxBody: cfg.maxBody }
+    }
+
+    // The next request head, waiting for input if needed. null: the peer closed cleanly.
+    fn nextRequest(): Request? throws IoError, TooLarge, BadRequest, NotImplemented {
+        if (buf == null) {                                   // nothing buffered: wait without holding memory
+            conn.waitReadable()
+            self.buf = Array<u8>()
+            self.start = 0
+            self.end = 0
+            self.consumed = 0
+        } else {
+            self.start = consumed                            // the previous request's bytes are now dead
+        }
+        self.limit = maxHead
+        while (true) {
+            let at = findHeadEnd()
+            if (at != null) {
+                self.consumed = at
+                return parseHead(buf[start..at], at)
+            }
+            if (!makeRoom()) throw TooLarge()
+            let n = conn.recv(buf[end..buf.capacity()])      // EAGAIN: park until readable
+            if (n == 0) return null
+            self.end += n
+        }
+    }
+
+    // The next request head IF it is already buffered: no I/O, never parks. null: none is complete yet (the caller flushes what it owes, then
+    // calls nextRequest, which waits).
+    fn tryNextRequest(): Request? throws BadRequest, NotImplemented {
+        if (buf == null) return null
+        self.start = consumed
+        self.limit = maxHead
+        let at = findHeadEnd()
+        if (at == null) return null
+        self.consumed = at
+        return parseHead(buf[start..at], at)
+    }
+
+    // The next request head without waiting: buffered input first, then whatever the socket has right now.
+    fn pollRequest(): Poll throws IoError, TooLarge, BadRequest, NotImplemented {
+        if (buf == null) {
+            self.buf = Array<u8>()
+            self.start = 0
+            self.end = 0
+            self.consumed = 0
+        }
+        self.start = consumed
+        self.limit = maxHead
+        while (true) {
+            let at = findHeadEnd()
+            if (at != null) {
+                self.consumed = at
+                return Poll.Head(parseHead(buf[start..at], at))
+            }
+            if (!makeRoom()) throw TooLarge()
+            let n = conn.tryRecv(buf[end..buf.capacity()])
+            if (n == null) return Poll.Idle                  // (the caller drops the buffer if nothing is in it)
+            if (n == 0) return Poll.Closed
+            self.end += n
+        }
+    }
+
+    // Is another whole request head already buffered?
+    fn hasCompleteRequest(): bool {
+        if (buf == null || consumed >= end) return false
+        return buf[consumed..end].find("\r\n\r\n") != null
+    }
+
+    fn readable(): Wakeup { return conn.readableWakeup() }   // a wait source for waitAny
+
+    // Is the whole body of `req` already buffered? (A chunked body is never assumed to be: its end is only known by decoding it.)
+    fn bodyBuffered(req: Request): bool {
+        return !req.chunked && end - consumed >= req.contentLength
+    }
+
+    // The body of the request whose head was just returned, decoded (Content-Length or chunked) and kept in memory, at most `maxBody`.
+    fn readBody(req: Request): Array<u8> throws IoError, BodyTooLarge, BadBody {
+        let decoder = BodyDecoder.of(req.chunked, req.contentLength, maxBody, null)
+        stream(req, decoder)
+        return decoder.data
+    }
+
+    // The same body, spooled to an unnamed temporary file in `dir` as it arrives, at most `limit` bytes: memory use does not grow with it.
+    fn readUpload(req: Request, limit: u64, dir: String): Upload throws IoError, BodyTooLarge, BadBody {
+        let decoder = BodyDecoder.of(req.chunked, req.contentLength, limit, dir)
+        stream(req, decoder)
+        if (decoder.file == null) return Upload { file: File.openTemp(dir), length: 0 }      // an empty body is still a file
+        return Upload { file: decoder.file, length: decoder.total }
+    }
+
+    // The engine both share. Bytes already buffered are used first; whatever follows the body (a pipelined request) stays in the buffer. On an
+    // exception the rest of the body is unread, so the caller must close the connection.
+    fn stream(req: Request, decoder: ref BodyDecoder) throws IoError, BodyTooLarge, BadBody {
+        self.start = consumed                                // the head is done with
+        if (req.expectContinue && start == end) conn.trySend("HTTP/1.1 100 Continue\r\n\r\n")   // best effort; the client is waiting
+        self.limit = 8192                                    // stream through a buffer of this size, however big the body is
+        while (!decoder.done) {
+            if (start == end) {                              // everything buffered is used: read more from the start of the buffer
+                self.start = 0
+                self.end = 0
+                self.consumed = 0
+                if (!makeRoom()) throw BodyTooLarge()
+                let n = conn.recv(buf[0..buf.capacity()])
+                if (n == 0) throw IoError()                  // the client left in the middle of the body
+                self.end = n
+            }
+            let used = decoder.feed(buf[start..end])
+            self.start += used
+        }
+        self.consumed = start
+    }
+
+    fn releaseIfDrained() { if (consumed == end) self.buf = null }   // dropping the array returns it to its pool
+
+    // Where the head ends in buf (just past the blank line), if the whole head is there.
+    fn findHeadEnd(): usize? {
+        if (buf == null || end <= start) return null
+        let i = buf[start..end].find("\r\n\r\n")             // null: not there yet
+        if (i == null) return null
+        return start + i + 4
+    }
+
+    // Free space at the tail for the next read. false: the buffer is full and already at `limit`.
+    fn makeRoom(): bool {
+        if (end < buf.capacity()) return true
+        if (start > 0) {
+            buf.moveWithin(start..end, 0)
+            self.end -= start
+            if (consumed >= start) self.consumed -= start
+            self.start = 0
+            return true
+        }
+        if (buf.capacity() >= limit) return false
+        buf.grow()
+        return true
+    }
+}

@@ -1,0 +1,102 @@
+// http-mid/types.gort - requests, responses and how a connection loop ended.
+package http
+import runtime
+
+// One response. Built per request, so it belongs to the connection's vthread: a `ref`.
+struct Resp { bytes: Array<u8>, keepAlive: bool }
+
+// The parsed head of a request. `head` and the positions are offsets into the reader's buffer; the strings are copies.
+enum Method {
+    Get
+    Head
+    Post
+    Put
+    Delete
+    Patch
+    Options
+
+    fn name(): String {
+        switch (self) {
+            Get -> { return "GET" }
+            Head -> { return "HEAD" }
+            Post -> { return "POST" }
+            Put -> { return "PUT" }
+            Delete -> { return "DELETE" }
+            Patch -> { return "PATCH" }
+            Options -> { return "OPTIONS" }
+        }
+    }
+
+    // null: not a method this server knows (a 501, not a 400: the request may be well formed)
+    static fn parse(b: Array<u8>): Method? {
+        if (b == "GET") return Method.Get
+        if (b == "HEAD") return Method.Head
+        if (b == "POST") return Method.Post
+        if (b == "PUT") return Method.Put
+        if (b == "DELETE") return Method.Delete
+        if (b == "PATCH") return Method.Patch
+        if (b == "OPTIONS") return Method.Options
+        return null
+    }
+}
+
+struct Request {
+    method: Method
+    path: String
+    query: String
+    keepAlive: bool
+    http10: bool            // the client speaks HTTP/1.0
+    contentLength: usize
+    chunked: bool           // Transfer-Encoding: chunked
+    expectContinue: bool    // Expect: 100-continue
+    headers: shared Array<u8>   // the header lines (the request line and the blank line cut off), copied so they outlive the reader's buffer
+    headEnd: usize          // where the head ends in the reader's buffer (the body starts here)
+
+    // The value of a request header (any case), or null: `req.header("content-type") ?? ""`. The first of several wins.
+    fn header(name: String): String? { return headerValue(headers, name) }
+}
+
+// What the upload reader hands a handler: the finished body as an unnamed temporary file (deleted when this is dropped; link it into place to keep it).
+struct Upload { file: File, length: u64 }
+
+// A route's declared cost. A handler cannot be interrupted, so the server needs this BEFORE it runs one: an unbounded route (CPU-bound, never
+// parks) starts only when nothing else is in flight, so the answers already finished are sent first and it delays nobody.
+enum Cost {
+    Bounded(Duration)        // expected to finish, or park, within this long
+    Unbounded                // may run long without parking
+
+    fn isUnbounded(): bool {
+        switch (self) {
+            Bounded(_) -> { return false }
+            Unbounded -> { return true }
+        }
+    }
+}
+
+// The result of looking for the next request head without waiting.
+enum Poll {
+    Idle                     // nothing to read right now
+    Closed                   // the peer closed its side
+    Head(Request)            // a complete request head
+}
+
+// One request in flight on a pipelined connection, a queue in the connection's order. The child that runs the request fills it in, the connection reads it:
+// two vthreads, so it is `shared`.
+struct Slot {
+    owns bytes: Array<u8>                       // the answer, covered by the slot's own lock
+    keepAlive: bool = true
+    done: bool = false
+    next: shared Slot?
+}
+
+exception TooLarge                                      // the header block does not fit in the buffer
+exception BodyTooLarge                                  // Content-Length is above the limit
+exception BadRequest                                    // the head is malformed
+exception NotImplemented                                // the method is not one this server knows
+exception BadBody                                       // the body's framing is malformed
+
+enum Ending {
+    ClientClosed             // the peer closed it, or it failed: nothing more can arrive
+    ServerClosed             // the server ended it after a normal answer (Connection: close, HTTP/1.0)
+    ServerRejected           // the server ended it with an ERROR answer: the client is probably still sending
+}

@@ -1,0 +1,34 @@
+// feed/db.gort - SQLite and the other native pieces (native.c). Nothing here parks: a request runs its statements start to finish.
+package http
+
+extern fn dbOpen(path: Array<u8>): i32                   // 0 on success; WAL, synchronous=NORMAL
+extern fn dbPrepare(sql: Array<u8>): i32                 // a statement id, or -1
+extern fn dbExec(sql: Array<u8>): i32
+extern fn dbReset(id: i32)                               // rewinds the statement and clears its bindings
+extern fn dbBindInt(id: i32, i: i32, v: i64)             // parameters count from 1
+extern fn dbBindText(id: i32, i: i32, v: Array<u8>)
+extern fn dbStep(id: i32): i32                           // 100 = a row, 101 = done
+extern fn dbInt(id: i32, col: i32): i64                  // columns count from 0
+extern fn dbText(id: i32, col: i32): Array<u8>
+extern fn dbChanges(): i64
+extern fn dbError(): Array<u8>
+extern fn nowSec(): i64
+extern fn uptimeSec(): i64
+extern fn hmacB64(msg: Array<u8>, key: Array<u8>): Array<u8>   // HMAC-SHA256 as unpadded base64url
+extern fn b64Decode(b: Array<u8>): Array<u8>             // empty if it is not base64url
+extern fn sameBytes(a: Array<u8>, b: Array<u8>): bool    // compares every byte, whatever the first difference
+extern fn utf8Chars(b: Array<u8>): i64                   // characters, not bytes
+extern fn jsonOk(b: Array<u8>): bool                     // is it syntactically valid JSON?
+
+const ROW: i32 = 100
+const DONE: i32 = 101
+
+exception DbError { reason: String }
+
+// Steps a statement that must give a row (or not): true for a row.
+fn stepRow(id: i32): bool throws DbError {
+    let rc = dbStep(id)
+    if (rc == ROW) return true
+    if (rc == DONE) return false
+    throw DbError(String.toString(dbError()))
+}

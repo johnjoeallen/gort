@@ -1,0 +1,30 @@
+// feed/store.gort - the ids of the prepared statements, and the JWT secret. Built once at start, never changed, so every worker reads it with no lock.
+package http
+
+struct Store {
+    secret: String
+    qHealth: i32
+    qFeed: i32
+    qPost: i32
+    qExists: i32
+    qInsert: i32
+    qLike: i32
+}
+
+let POST_SELECT: String = "SELECT p.id, p.body, p.created_at, u.username, (SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id "
+
+fn newStore(path: String, secret: String): shared Store {
+    if (dbOpen(path.toBytes()) != 0) {
+        logLine(("cannot open the database " + path + "\n").toBytes())
+        exit(1)
+    }
+    return new Store {
+        secret: secret,
+        qHealth: dbPrepare("SELECT 1".toBytes()),
+        qFeed: dbPrepare((POST_SELECT + "ORDER BY p.created_at DESC, p.id DESC LIMIT 20").toBytes()),
+        qPost: dbPrepare((POST_SELECT + "WHERE p.id = ?").toBytes()),
+        qExists: dbPrepare("SELECT 1 FROM posts WHERE id = ?".toBytes()),
+        qInsert: dbPrepare("INSERT INTO posts (user_id, body) VALUES (?, ?) RETURNING id, created_at".toBytes()),
+        qLike: dbPrepare("INSERT INTO likes (user_id, post_id) VALUES (?, ?) ON CONFLICT (user_id, post_id) DO NOTHING".toBytes())
+    }
+}

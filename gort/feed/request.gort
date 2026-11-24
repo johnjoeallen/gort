@@ -1,0 +1,126 @@
+// http-mid/request.gort - turning the bytes of a request head into a Request.
+package http
+
+fn isSpace(c: u8): bool { return c == 32 || c == 9 }
+
+fn lowerByte(c: u8): u8 { return (c >= 65 && c <= 90) ? c + 32 : c }
+
+// The index of the first `ch` in b[from..], or b.length if there is none.
+fn indexOf(b: any Array<u8>, ch: u8, from: usize): usize {
+    var i = from
+    while (i < b.length && b[i] != ch) { i += 1 }
+    return i
+}
+
+// Does the header line `line` (without its CR LF) start with `name` (lower case, ending in ':'), ignoring case?
+fn headerIs(line: any Array<u8>, name: Array<u8>): bool {
+    if (line.length < name.length) return false
+    var i = 0
+    while (i < name.length) {
+        if (lowerByte(line[i]) != name[i]) return false
+        i += 1
+    }
+    return true
+}
+
+// Where the value of a header line starts: after its name and any spaces.
+fn valueStart(line: any Array<u8>, nameLen: usize): usize {
+    var i = nameLen
+    while (i < line.length && isSpace(line[i])) { i += 1 }
+    return i
+}
+
+// Where the value that starts at `from` ends: the end of `b` without its trailing spaces (never before `from`).
+fn valueEnd(b: any Array<u8>, from: usize): usize {
+    var n = b.length
+    while (n > from && isSpace(b[n - 1])) { n -= 1 }
+    return n
+}
+
+// A decimal number, or null if there is anything else in it.
+fn parseUsize(b: Array<u8>): usize? {
+    if (b.length == 0 || b.length > 12) return null
+    var v: usize = 0
+    var i = 0
+    while (i < b.length) {
+        if (b[i] < 48 || b[i] > 57) return null
+        v = v * 10 + ((b[i] - 48) as usize)
+        i += 1
+    }
+    return v
+}
+
+// Parses `head`, the bytes of the request line and the headers up to and including the blank line.
+fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest, NotImplemented {
+    // request line: METHOD SP target SP HTTP/1.x
+    let eol = indexOf(head, 10, 0)
+    if (eol >= head.length || eol < 2) throw BadRequest()
+    let sp1 = indexOf(head, 32, 0)
+    let sp2 = indexOf(head, 32, sp1 + 1)
+    if (sp1 == 0 || sp2 >= eol || sp2 == sp1 + 1) throw BadRequest()
+    let method = Method.parse(head[0..sp1])
+    if (method == null) throw NotImplemented()
+    let target = head[sp1 + 1..sp2]
+    let q = indexOf(target, 63, 0)                        // '?'
+    let path = String.toString(target[0..q])
+    let query = (q < target.length) ? String.toString(target[q + 1..target.length]) : ""
+    if (path.length == 0 || !path.startsWith("/")) throw BadRequest()
+    if (!escapesValid(target)) throw BadRequest()           // a '%' not followed by two hex digits (in the path or the query)
+    // HTTP/1.1 keeps the connection open unless told otherwise; HTTP/1.0 closes unless told otherwise
+    let version = head[sp2 + 1..eol - 1]
+    let http10 = !(version.length == 8 && version[7] == 49)
+    var keepAlive = !http10                                       // "HTTP/1.1"
+    var contentLength: usize = 0
+    var hasLength = false
+    var chunked = false
+    var expectContinue = false
+    let nameCL = "content-length:".toBytes()
+    let nameConn = "connection:".toBytes()
+    let nameTE = "transfer-encoding:".toBytes()
+    let nameExpect = "expect:".toBytes()
+    var pos = eol + 1
+    while (pos < head.length) {
+        let e = indexOf(head, 10, pos)
+        if (e >= head.length) break
+        let line = head[pos..e - 1]                       // without the CR
+        if (line.length == 0) break                       // the blank line
+        if (headerIs(line, nameCL)) {
+            let n = parseUsize(line[valueStart(line, nameCL.length)..line.length])
+            if (n == null || hasLength) throw BadRequest()      // not a number, or repeated
+            contentLength = n
+            hasLength = true
+        } else if (headerIs(line, nameTE)) {
+            let v = line[valueStart(line, nameTE.length)..valueEnd(line, valueStart(line, nameTE.length))]
+            if (!v.equalsIgnoreCase("chunked")) throw BadRequest()   // no other transfer coding is understood
+            chunked = true
+        } else if (headerIs(line, nameExpect)) {
+            let v = line[valueStart(line, nameExpect.length)..valueEnd(line, valueStart(line, nameExpect.length))]
+            if (v.equalsIgnoreCase("100-continue")) expectContinue = true
+        } else if (headerIs(line, nameConn)) {
+            let v = line[valueStart(line, nameConn.length)..line.length]
+            if (v.length >= 5 && lowerByte(v[0]) == 99) keepAlive = false         // "close"
+            if (v.length >= 10 && lowerByte(v[0]) == 107) keepAlive = true         // "keep-alive"
+        }
+        pos = e + 1
+    }
+    if (chunked && hasLength) throw BadRequest()          // the two framings together are a smuggling risk: refuse
+    shared Array<u8> headers = Array<u8>()                // shared: a child vthread that runs the request reads it
+    headers.append(head[eol + 1..head.length])
+    return Request { method: method, headers: headers, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, chunked: chunked, expectContinue: expectContinue, headEnd: headEnd }
+}
+
+// The value of the first header called `name` (any case), without the spaces around it; null if the request has none.
+fn headerValue(headers: any Array<u8>, name: String): String? {
+    var pos: usize = 0
+    while (pos < headers.length) {
+        let e = indexOf(headers, 10, pos)
+        let end = (e > pos && headers[e - 1] == 13) ? e - 1 : e              // without the CR
+        if (end == pos) return null                                            // the blank line: no more headers
+        let line = headers[pos..end]
+        if (line.length > name.length && line[name.length] == 58 && line[0..name.length].equalsIgnoreCase(name)) {
+            return String.toString(line[valueStart(line, name.length + 1)..valueEnd(line, valueStart(line, name.length + 1))])
+        }
+        pos = e + 1
+    }
+    return null
+}

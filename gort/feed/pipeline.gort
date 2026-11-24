@@ -1,0 +1,178 @@
+// http-mid/pipeline.gort - a connection whose pipelined requests run concurrently and are answered in order.
+// RFC 7230 6.3.2: a server MAY process pipelined requests in parallel if all are safe, but MUST send the responses in request order. Each request
+// that can run beside the others is a child vthread of the connection's vthread; the connection sends the contiguous COMPLETED PREFIX of the answers
+// as one write each time it runs. Nothing is held on purpose: an answer waits only behind an earlier request that has not finished.
+//
+//   * depth: at most `depth` requests are in flight; the connection stops reading beyond that.
+//   * barriers: a request with a body, or to an unsafe method (anything but GET, HEAD, OPTIONS), starts only when nothing is in flight; so does a route
+//     declared Unbounded. Nothing starts behind a request that runs in the connection's own vthread, since the connection does not read until it is back.
+//   * streams: a route whose answer is a file or a chunked body (`Route.streams`) is a barrier too: this vthread sends it itself, once the answers before it are out.
+//   * inline: a request with nothing in flight and no other request buffered behind it runs directly in the connection's vthread (no spawn).
+//   * the connection waits in waitAny for input or for a child to finish, and does not listen for input while it could not admit it anyway (full, a
+//     request held by a barrier, or closing): that would wake it at once, again and again.
+//   * leaving the connection, normally or by an exception, waits for every child (`scope`): none outlives it.
+package http
+
+// A slot already filled in: an inline request, or an error answer.
+fn doneSlot(resp: ref Resp): shared Slot {
+    shared Slot s = new Slot { bytes: Array<u8>(), keepAlive: resp.keepAlive, done: true, next: null }
+    s.bytes.append(resp.bytes)                               // (still local: nobody else has the slot yet)
+    return s
+}
+
+// The root of a child vthread: runs one request and fills in its slot. It throws nothing: dispatch turns a handler's exception into a 500.
+fn runChild(slot: shared Slot, req: Request, store: shared Store, routes: shared Route) {
+    let resp = dispatch(req, Array<u8>(), null, store, routes)
+    sync (writes slot) {
+        slot.bytes.append(resp.bytes)
+        slot.keepAlive = resp.keepAlive
+        slot.done = true
+    }
+}
+
+fn handlePipelined(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig): Ending throws IoError {
+    var ending = Ending.ClientClosed
+    scope {                                                  // the children are tied to this scope: leaving it, by an exception too, waits for every one
+        ending = pipelineLoop(conn, store, routes, cfg)
+    }
+    return ending
+}
+
+fn pipelineLoop(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig): Ending throws IoError {
+    var input = Reader.of(conn, cfg)
+    let depth = cfg.depth
+    var first: shared Slot? = null                           // the requests in flight, oldest first, as a queue
+    var last: shared Slot? = null
+    var count: usize = 0
+    var held: Request? = null                                // a request read but not yet admitted: a barrier is waiting for the others to finish
+    var closing = false                                      // no more requests are admitted once the connection will close
+    var peerClosed = false
+    var rejected = false                                     // the connection ends with an error answer
+    var out = Array<u8>()
+    while (true) {
+        // (a) collect the completed prefix, in request order
+        var closes = false
+        while (first != null && !closes) {
+            var done = false
+            sync (reads first) {
+                done = first.done
+                if (done) {
+                    out.append(first.bytes)
+                    closes = !first.keepAlive                // nothing is admitted after a closing request, so it is the last
+                }
+            }
+            if (!done) break
+            var nextSlot: shared Slot? = null
+            sync (reads first) { nextSlot = first.next }
+            first = nextSlot
+            if (first == null) last = null
+            count -= 1
+        }
+        // (b) send it as one write
+        if (out.length > 0) {
+            writeAll(conn, out)                              // an IoError ends the connection; the caller still waits for the children
+            out = Array<u8>()
+            if (closes) break
+            continue                                         // more may have finished: collect again
+        }
+        // (c) admit new requests
+        admission: while (!closing && count < depth) {
+            var poll = Poll.Idle
+            var failure: ref Resp? = null                    // an error answer to queue, and then close
+            if (held != null) {
+                poll = Poll.Head(held)
+                held = null
+            } else {
+                try {
+                    poll = input.pollRequest()
+                } catch (e: TooLarge) {
+                    failure = respond(431, "headers too large\n", false, false)
+                } catch (e: NotImplemented) {
+                    failure = respond(501, "not implemented\n", false, false)
+                } catch (e: BadRequest) {
+                    failure = respond(400, "bad request\n", false, false)
+                }
+            }
+            if (failure == null) {
+                var req: Request? = null
+                var route: shared Route? = null
+                var limit: u64? = null
+                switch (poll) {
+                    Idle -> { break admission }              // nothing to read right now
+                    Closed -> { closing = true; peerClosed = true; break admission }   // the peer closed; what is in flight still finishes
+                    Head(r) -> { req = r }
+                }
+                route = findRoute(req, routes)
+                limit = (route == null) ? null : route.uploadLimit()
+                let hasBody = req.chunked || req.contentLength > 0 || limit != null
+                let safe = !hasBody && (route == null || route.safe())
+                let unbounded = route != null && route.cost.isUnbounded()
+                let streams = route != null && route.streams       // sent by this vthread, alone, so it is a barrier too
+                if ((!safe || unbounded || streams) && count > 0) {     // a barrier: it starts only when nothing is in flight
+                    held = req
+                    break admission
+                }
+                if (!req.keepAlive) closing = true
+                var queued: shared Slot? = null
+                if (hasBody) {
+                    // Unsafe, so nothing else is in flight: this vthread reads the body itself, parking while the client sends.
+                    var body = Array<u8>()
+                    var upload: Upload? = null
+                    try {
+                        if (limit != null) {
+                            upload = input.readUpload(req, (limit < cfg.uploadMax) ? limit : cfg.uploadMax, cfg.uploadDir)
+                        } else {
+                            body = input.readBody(req)
+                        }
+                    } catch (e: BodyTooLarge) {
+                        failure = respond(413, "payload too large\n", false, false)
+                    } catch (e: BadBody) {
+                        failure = respond(400, "bad request\n", false, false)
+                    }
+                    if (failure == null) queued = doneSlot(dispatch(req, body, upload, store, routes))
+                } else if (streams) {
+                    // Nothing is in flight and everything before it has been sent, so a streamed answer can go out right here, in order.
+                    let r = answer(req, Array<u8>(), null, store, routes)
+                    if (r.isStream()) {
+                        if (!sendStream(conn, req, r)) closing = true
+                    } else {
+                        queued = doneSlot(render(r, req.keepAlive, req.http10, req.method != Method.Head))
+                    }
+                } else if (count == 0 && !input.hasCompleteRequest()) {
+                    queued = doneSlot(dispatch(req, Array<u8>(), null, store, routes))   // inline: nothing to overlap with
+                } else {
+                    shared Slot slot = new Slot { bytes: Array<u8>(), next: null }
+                    queued = slot
+                    spawn runChild(slot, req, store, routes)           // a child vthread
+                }
+                if (queued != null) {
+                    if (last == null) { first = queued } else { sync (writes last) { last.next = queued } }
+                    last = queued
+                    count += 1
+                }
+            }
+            if (failure != null) {                           // an error answer closes the connection after it
+                let slot = doneSlot(failure)
+                if (last == null) { first = slot } else { sync (writes last) { last.next = slot } }
+                last = slot
+                count += 1
+                closing = true
+                rejected = true
+                break admission
+            }
+        }
+        input.releaseIfDrained()                             // idle: no buffer
+        // (d) finished, or wait for input and/or a child to finish
+        var headDone = false
+        if (first != null) { sync (reads first) { headDone = first.done } }
+        if (headDone) continue                               // an inline or already-finished request: collect it, do not park
+        if (count == 0 && closing) break
+        if (closing || count >= depth || held != null) {
+            waitAny(Wakeup.scopeChild())                     // input could not be admitted now: only a child finishing changes anything
+        } else {
+            waitAny(input.readable(), Wakeup.scopeChild())
+        }
+    }
+    if (peerClosed) return Ending.ClientClosed
+    return rejected ? Ending.ServerRejected : Ending.ServerClosed
+}

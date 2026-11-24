@@ -1,0 +1,141 @@
+// feed/server.gort - one request at a time per connection, one listener per worker, shared state behind sync.
+package http
+import runtime
+
+// Sends what has been answered so far, as one write.
+fn flush(conn: Conn, out: Array<u8>): Array<u8> throws IoError {
+    if (out.length == 0) return out
+    writeAll(conn, out)                                      // parks if the send buffer is full
+    return Array<u8>()
+}
+
+// An error answer the server ends the connection after: what was answered before it goes out first, in order.
+fn reject(conn: Conn, out: Array<u8>, code: u16, message: String) throws IoError {
+    let resp = respond(code, message, false, false)
+    var all = Array<u8>()
+    all.append(out)
+    all.append(resp.bytes)
+    writeAll(conn, all)
+}
+
+// Serves one connection until the client leaves or the server ends it. Requests are answered in order. The answers to requests that are
+// already buffered (a pipelining client) are collected and sent as one write, just before the connection would wait for more input: nothing is
+// held for a timer, a response waits only behind the requests in front of it. `depth` and `maxBatch` bound how much is collected.
+fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig): Ending throws IoError {
+    var input = Reader.of(conn, cfg)
+    var ending = Ending.ClientClosed
+    var out = Array<u8>()                                    // answers not yet written
+    var answered: usize = 0                                  // how many of them
+    while (true) {
+        var req: Request?
+        try {
+            req = input.tryNextRequest()                     // already buffered: no waiting
+            if (req == null) {
+                out = flush(conn, out)                       // about to wait: send what is ready first
+                answered = 0
+                req = input.nextRequest()                    // parks while idle or mid-request
+            }
+        } catch (e: TooLarge) {
+            reject(conn, out, 431, "headers too large\n")
+            ending = Ending.ServerRejected
+            break
+        } catch (e: NotImplemented) {
+            reject(conn, out, 501, "not implemented\n")
+            ending = Ending.ServerRejected
+            break
+        } catch (e: BadRequest) {
+            reject(conn, out, 400, "bad request\n")
+            ending = Ending.ServerRejected
+            break
+        }
+        if (req == null) break                               // the client closed the connection
+        var body = Array<u8>()
+        var upload: Upload? = null
+        let route = findRoute(req, routes)
+        let limit = (route == null) ? null : route.uploadLimit()
+        if (req.chunked || req.contentLength > 0 || limit != null) {
+            if (!input.bodyBuffered(req)) {                  // waiting for the body: send what is ready first
+                out = flush(conn, out)
+                answered = 0
+            }
+            try {
+                if (limit != null) {                         // an upload route: the body goes to a file, under the route's own limit
+                    upload = input.readUpload(req, (limit < cfg.uploadMax) ? limit : cfg.uploadMax, cfg.uploadDir)
+                } else {
+                    body = input.readBody(req)
+                }
+            } catch (e: BodyTooLarge) {
+                reject(conn, out, 413, "payload too large\n")
+                ending = Ending.ServerRejected
+                break
+            } catch (e: BadBody) {
+                reject(conn, out, 400, "bad request\n")
+                ending = Ending.ServerRejected
+                break
+            }
+        }
+        let r = answer(req, body, upload, store, routes)
+        if (r.isStream()) {
+            // a file or a chunked body: written by this vthread, after the answers before it, never held in memory
+            out = flush(conn, out)
+            answered = 0
+            if (!sendStream(conn, req, r)) { ending = Ending.ServerClosed; break }
+            input.releaseIfDrained()
+            continue
+        }
+        let resp = render(r, req.keepAlive, req.http10, req.method != Method.Head)
+        out.append(resp.bytes)
+        answered += 1
+        if (!resp.keepAlive) { writeAll(conn, out); ending = Ending.ServerClosed; break }
+        if (answered >= cfg.depth || out.length >= cfg.maxBatch) {
+            out = flush(conn, out)
+            answered = 0
+        }
+        input.releaseIfDrained()
+    }
+    return ending
+}
+
+// The root of a connection's vthread: a reset or a failed write ends this connection only.
+fn runConnection(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig) {
+    var ending = Ending.ClientClosed
+    try {
+        ending = cfg.sequential ? handleSequential(conn, store, routes, cfg) : handlePipelined(conn, store, routes, cfg)
+    } catch (e: IoError) {
+        log(e)
+    }
+    // Closing a socket that still holds unread input makes the kernel send a RESET that can destroy the response. So when the SERVER ends
+    // a connection it is handed to a lingering closer: always after an error answer, and after a plain Connection: close only if input is unread.
+    switch (ending) {
+        ClientClosed   -> {}
+        ServerClosed   -> { if (conn.hasUnread()) conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+        ServerRejected -> { conn.lingerClose(cfg.lingerTime, cfg.lingerBytes) }
+    }
+}
+
+fn serve(listener: Listener, store: shared Store, routes: shared Route, cfg: shared ServerConfig) throws IoError {   // one per worker
+    while (true) {
+        let conn = listener.accept()                         // parks until a client arrives
+        spawn runConnection(conn, store, routes, cfg)        // `conn` moves into the new vthread
+    }
+}
+
+// Started as: server --port=8080 --workers=4. Fields left out keep these defaults.
+struct Config { port: u16 = 3000, workers: usize = 1, uploads: String = "/var/tmp", sequential: bool, db: String = "feed.db", secret: String = "twelve-dollar-challenge" }
+
+fn main(config: Config) {
+    let port = config.port
+    shared Store store = newStore(config.db, config.secret)
+    shared Route routes = buildRoutes()
+    shared ServerConfig cfg = new ServerConfig { uploadDir: config.uploads, sequential: config.sequential }
+    for (core in 0..config.workers) {
+        spawnWorker(core, fn() {                             // the worker's root: throws nothing
+            try {
+                serve(Listener.bindReusePort(port), store, routes, cfg)
+            } catch (e: IoError) {
+                log(e)
+                exit(1)
+            }
+        })
+    }
+}

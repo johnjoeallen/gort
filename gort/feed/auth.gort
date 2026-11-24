@@ -1,0 +1,59 @@
+// feed/auth.gort - Authorization: Bearer <HS256 JWT>. The signature and the expiry are checked on every request; nothing is remembered.
+package http
+
+exception AuthFail { message: String }
+
+struct Who { id: i64, name: String }
+
+struct JwtHeader { alg: String? }
+struct Claims { sub: String?, username: String?, exp: i64? }
+
+let JSON_LIMITS: JsonLimits = JsonLimits { maxDepth: 8, maxStringBytes: 16384 }
+
+// A positive integer written in plain digits, or 0 for anything else (so also for "0", "-1", "1.5", "abc", "" and a number too long to be an id).
+fn parseId(s: String): i64 {
+    let b = s.toBytes()
+    if (b.length == 0 || b.length > 18) return 0
+    var v: i64 = 0
+    var i: usize = 0
+    while (i < b.length) {
+        if (b[i] < 48 || b[i] > 57) return 0
+        v = v * 10 + ((b[i] - 48) as i64)
+        i += 1
+    }
+    return v
+}
+
+fn authenticate(req: Request, secret: String): Who throws AuthFail {
+    let h = req.header("authorization")
+    if (h == null || !h.startsWith("Bearer ")) throw AuthFail("missing bearer token")
+    let all = h.toBytes()
+    let tok = all[7..all.length]
+    let d1 = indexOf(tok, 46, 0)
+    if (d1 >= tok.length) throw AuthFail("invalid or expired token")
+    let d2 = indexOf(tok, 46, d1 + 1)
+    if (d2 >= tok.length || indexOf(tok, 46, d2 + 1) < tok.length) throw AuthFail("invalid or expired token")
+    if (!sameBytes(hmacB64(tok[0..d2], secret.toBytes()), tok[d2 + 1..tok.length])) throw AuthFail("invalid or expired token")
+    let head = b64Decode(tok[0..d1])
+    let payload = b64Decode(tok[d1 + 1..d2])
+    if (!jsonOk(head) || !jsonOk(payload)) throw AuthFail("invalid or expired token")
+    var alg: String? = null
+    try {
+        alg = json.parse<JwtHeader>(head, JSON_LIMITS).alg
+    } catch (e: JsonError) {
+        throw AuthFail("invalid or expired token")
+    }
+    if (alg != "HS256") throw AuthFail("invalid or expired token")
+    var claims: Claims? = null
+    try {
+        claims = json.parse<Claims>(payload, JSON_LIMITS)
+    } catch (e: JsonError) {
+        throw AuthFail("invalid token payload")
+    }
+    if (claims == null) throw AuthFail("invalid token payload")
+    if (claims.exp != null && claims.exp <= nowSec()) throw AuthFail("invalid or expired token")
+    if (claims.sub == null || claims.username == null) throw AuthFail("invalid token payload")
+    let id = parseId(claims.sub)
+    if (id <= 0) throw AuthFail("invalid token payload")
+    return Who { id: id, name: claims.username }
+}
