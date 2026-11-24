@@ -55,6 +55,38 @@ struct Reader {
         return parseHead(buf[start..at], at)
     }
 
+    // The next request head without waiting: buffered input first, then whatever the socket has right now.
+    fn pollRequest(): Poll throws IoError, TooLarge, BadRequest, NotImplemented {
+        if (buf == null) {
+            self.buf = Array<u8>()
+            self.start = 0
+            self.end = 0
+            self.consumed = 0
+        }
+        self.start = consumed
+        self.limit = maxHead
+        while (true) {
+            let at = findHeadEnd()
+            if (at != null) {
+                self.consumed = at
+                return Poll.Head(parseHead(buf[start..at], at))
+            }
+            if (!makeRoom()) throw TooLarge()
+            let n = conn.tryRecv(buf[end..buf.capacity()])
+            if (n == null) return Poll.Idle                  // (the caller drops the buffer if nothing is in it)
+            if (n == 0) return Poll.Closed
+            self.end += n
+        }
+    }
+
+    // Is another whole request head already buffered?
+    fn hasCompleteRequest(): bool {
+        if (buf == null || consumed >= end) return false
+        return buf[consumed..end].find("\r\n\r\n") != null
+    }
+
+    fn readable(): Wakeup { return conn.readableWakeup() }   // a wait source for waitAny
+
     // Is the whole body of `req` already buffered? (A chunked body is never assumed to be: its end is only known by decoding it.)
     fn bodyBuffered(req: Request): bool {
         return !req.chunked && end - consumed >= req.contentLength

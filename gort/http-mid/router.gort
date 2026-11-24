@@ -15,7 +15,11 @@ struct Route {
     method: Method
     pattern: String
     handler: Handler
+    cost: Cost = Cost.Bounded(50.ms)
     next: shared Route?
+
+    // A safe route has no side effects the next request could observe (GET, HEAD, OPTIONS): such requests may run side by side. Anything else is a barrier.
+    fn safe(): bool { return method == Method.Get || method == Method.Head || method == Method.Options }
 
     // null: the route reads its body into memory; otherwise the most bytes its upload may have.
     fn uploadLimit(): u64? {
@@ -208,12 +212,37 @@ fn hUserGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Repl
     return Reply.bytes(200, "application/json", found.toBytes())
 }
 
+// ---------- slow handlers, to show what concurrency buys ----------
+
+fn millisFrom(p: Params, name: String): usize {
+    let n = parseUsize((p.get(name) ?? "").toBytes()) ?? 0
+    return (n > 5000) ? 5000 : n
+}
+
+// Parks for the given time: with requests pipelined, the waits overlap.
+fn hSleep(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let ms = millisFrom(p, "ms")
+    sleep(Duration.millis(ms))
+    return reply(200, "slept " + ms + "\n")
+}
+
+// Holds the worker for the given time without parking: declared Unbounded, so it runs alone.
+fn hSpin(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let ms = millisFrom(p, "ms")
+    let started = Instant.now()
+    let wanted = Duration.millis(ms)
+    while (Instant.now() - started < wanted) { }
+    return reply(200, "spun " + ms + "\n")
+}
+
 // ---------- the table ----------
 
 fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
 
 fn buildRoutes(): shared Route {
-    shared Route r15 = new Route { method: Method.Get,    pattern: "/stats",      handler: mem(hStats),  next: null }
+    shared Route r17 = new Route { method: Method.Get,    pattern: "/stats",      handler: mem(hStats),  next: null }
+    shared Route r16 = new Route { method: Method.Get,    pattern: "/spin/:ms",   handler: mem(hSpin), cost: Cost.Unbounded, next: r17 }
+    shared Route r15 = new Route { method: Method.Get,    pattern: "/sleep/:ms",  handler: mem(hSleep), cost: Cost.Bounded(5.s), next: r16 }
     shared Route r14 = new Route { method: Method.Get,    pattern: "/users/:id",  handler: mem(hUserGet), next: r15 }
     shared Route r13 = new Route { method: Method.Post,   pattern: "/users",      handler: mem(hUserCreate), next: r14 }
     shared Route r12 = new Route { method: Method.Delete, pattern: "/files/:name", handler: mem(hFileDelete), next: r13 }

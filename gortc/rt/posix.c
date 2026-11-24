@@ -38,6 +38,7 @@ typedef struct { void *p; size_t n; } gort_xarr;      /* an array given back by 
 typedef struct G_Conn G_Conn;
 typedef struct G_Listener G_Listener;
 typedef struct G_File G_File;
+typedef struct { bool has; size_t v; } rt_opt_usize;   /* same layout as the generated gort_opt_usize */
 typedef struct gort_str_c { size_t strong; size_t len; const uint8_t *data; bool perm; } gort_str_c;   /* the layout of the generated gort_str */
 typedef struct { char _empty; } G_IoError;
 void *gort_rt_new(size_t n);
@@ -60,11 +61,16 @@ struct vt {
     struct sched *home;          /* the worker this vthread lives on */
     int pstate;                  /* lock parking: 0 running, 1 parked, 2 a wake arrived before the park */
     struct vt *inext;            /* link in the home worker's inbox */
+    struct vt *parent;           /* the vthread that spawned this one (NULL for a worker's root) */
+    size_t nchild;               /* children spawned and not yet finished */
+    unsigned child_done;         /* children that finished since the last waitAny returned */
+    bool in_any, wait_all, zombie;   /* parked in waitAny / joinChildren; finished but still has live children */
 };
 struct sched {
     int ep; struct vt *head, *tail, *cur; size_t nlive, nwait; ucontext_t home;
     /* vthreads woken from another thread (a lock handed over): they wait in the inbox until this worker drains it; the eventfd wakes epoll_wait */
     pthread_mutex_t inbox_m; struct vt *inbox; int evfd; size_t nparked;
+    void *stacks[64]; size_t nstacks;       /* finished vthreads' stacks, reused (an mmap per spawn is the cost to avoid) */
 };
 static __thread struct sched *S;
 #define STACK_SIZE (256 * 1024)
@@ -73,13 +79,31 @@ static void ready(struct vt *v) { v->next = NULL; if (S->tail) S->tail->next = v
 static void trampoline(void) { struct vt *v = S->cur; v->body(v->env); v->done = true; }   /* returning resumes S->home (uc_link) */
 static void vt_new(void (*body)(void *), void *env) {
     struct vt *v = calloc(1, sizeof *v);
-    v->stack = mmap(NULL, STACK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-    if (v->stack == MAP_FAILED) { perror("mmap"); exit(2); }
+    if (S->nstacks) v->stack = S->stacks[--S->nstacks];
+    else {
+        v->stack = mmap(NULL, STACK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+        if (v->stack == MAP_FAILED) { perror("mmap"); exit(2); }
+    }
     v->body = body; v->env = env; v->home = S;
+    v->parent = S->cur; if (v->parent) v->parent->nchild++;
     getcontext(&v->ctx);
     v->ctx.uc_stack.ss_sp = v->stack; v->ctx.uc_stack.ss_size = STACK_SIZE; v->ctx.uc_link = &S->home;
     makecontext(&v->ctx, trampoline, 0);
     S->nlive++; ready(v);
+}
+/* wake a vthread parked by waitAny / joinChildren (it is not on the run queue and not already woken) */
+static void wake_parked(struct vt *p) { if (!p->woken) { p->woken = true; S->nwait--; ready(p); } }
+/* `v` has returned: free its stack, tell its parent, and free it unless children of its own are still running (then it stays a zombie until the last one ends) */
+static void vt_finished(struct vt *v) {
+    if (S->nstacks < sizeof S->stacks / sizeof *S->stacks) S->stacks[S->nstacks++] = v->stack; else munmap(v->stack, STACK_SIZE);
+    S->nlive--;
+    struct vt *p = v->parent;
+    if (v->nchild) v->zombie = true; else free(v);
+    if (p) {
+        p->nchild--; p->child_done++;
+        if (p->zombie) { if (!p->nchild) free(p); }
+        else if (p->in_any || (p->wait_all && !p->nchild)) wake_parked(p);
+    }
 }
 static void drain_inbox(void) {
     pthread_mutex_lock(&S->inbox_m);
@@ -95,7 +119,7 @@ static void sched_run(void) {
         while ((v = S->head)) {
             S->head = v->next; if (!S->head) S->tail = NULL;
             S->cur = v; swapcontext(&S->home, &v->ctx); S->cur = NULL;
-            if (v->done) { munmap(v->stack, STACK_SIZE); free(v); S->nlive--; }
+            if (v->done) vt_finished(v);
             drain_inbox();
         }
         if (!S->nlive) break;
@@ -230,6 +254,46 @@ void gort_x_File_cleanup(G_File *self) {
     if (f->fd >= 0) { close(f->fd); f->fd = -1; }
 }
 
+/* ---- waiting on several things, children, sleeping ---- */
+typedef struct G_Wakeup G_Wakeup;
+struct rt_wakeup { int kind; int fd; };            /* 1: the socket has input; 2: a child of the waiting vthread has finished */
+G_Wakeup *gort_x_Conn_readableWakeup(G_Conn *self);
+G_Wakeup *gort_x_Wakeup_scopeChild(void) { struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 2; w->fd = -1; return (G_Wakeup *)w; }
+/* Parks until one of the sources is ready. A child that finished before this call counts (child_done), so a wake-up is never lost; one that
+ * finished long ago may make the call return early, and the caller re-checks what it is waiting for. */
+void gort_x_waitAny(void *srcs, size_t n) {
+    struct rt_wakeup **w = srcs;
+    struct vt *v = S ? S->cur : NULL;
+    if (!v) return;
+    bool child = false;
+    for (size_t i = 0; i < n; i++) if (w[i]->kind == 2) child = true;
+    if (child && v->child_done) { v->child_done = 0; return; }
+    int added[8]; size_t na = 0;
+    for (size_t i = 0; i < n && na < 8; i++) {
+        if (w[i]->kind != 1) continue;
+        struct epoll_event e = { .events = EPOLLIN | EPOLLONESHOT, .data.ptr = v };
+        if (epoll_ctl(S->ep, EPOLL_CTL_ADD, w[i]->fd, &e) == 0) added[na++] = w[i]->fd;
+    }
+    v->in_any = child; v->woken = false; S->nwait++;
+    swapcontext(&v->ctx, &S->home);
+    v->in_any = false; v->child_done = 0;
+    for (size_t i = 0; i < na; i++) epoll_ctl(S->ep, EPOLL_CTL_DEL, added[i], NULL);
+}
+/* Parks until every child this vthread has spawned has finished: what leaving a `scope { }` does. */
+void gort_rt_scope_join(void) {
+    struct vt *v = S ? S->cur : NULL;
+    while (v && v->nchild) { v->wait_all = true; v->woken = false; S->nwait++; swapcontext(&v->ctx, &S->home); v->wait_all = false; }
+}
+void gort_x_sleep(int64_t ns) {
+    if (ns <= 0) { return; }
+    if (!S || !S->cur) { struct timespec t = { ns / 1000000000LL, ns % 1000000000LL }; nanosleep(&t, NULL); return; }
+    int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    struct itimerspec its = { {0, 0}, { ns / 1000000000LL, ns % 1000000000LL } };
+    timerfd_settime(tfd, 0, &its, NULL);
+    wait_fd(tfd, EPOLLIN, -1);
+    close(tfd);
+}
+
 /* ---- Conn ---- */
 int gort_x_Conn_recv(G_Conn *self, void *buf, size_t buf_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
@@ -241,6 +305,20 @@ int gort_x_Conn_recv(G_Conn *self, void *buf, size_t buf_len, size_t *ret_out) {
         return gort_rt_throw_io();
     }
 }
+/* never parks: null (has = false) when nothing can be read right now, 0 when the peer closed */
+int gort_x_Conn_tryRecv(G_Conn *self, void *buf, size_t buf_len, rt_opt_usize *ret_out) {
+    struct rt_conn *c = (struct rt_conn *)self;
+    for (;;) {
+        ssize_t n = recv(c->fd, buf, buf_len, MSG_DONTWAIT);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { ret_out->has = false; ret_out->v = 0; return 0; }
+        if (n >= 0) { ret_out->has = true; ret_out->v = (size_t)n; return 0; }
+        return gort_rt_throw_io();
+    }
+}
+G_Wakeup *gort_x_Conn_readableWakeup(G_Conn *self) {
+    struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 1; w->fd = ((struct rt_conn *)self)->fd; return (G_Wakeup *)w;
+}
 int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
     for (;;) {
@@ -251,7 +329,6 @@ int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *
         return gort_rt_throw_io();
     }
 }
-typedef struct { bool has; size_t v; } rt_opt_usize;   /* same layout as the generated gort_opt_usize */
 /* never parks, never throws: one non-blocking send; has=false when it would block or fails (best-effort cleanup and 100-continue) */
 rt_opt_usize gort_x_Conn_trySend(G_Conn *self, const void *bytes, size_t bytes_len) {
     struct rt_conn *c = (struct rt_conn *)self;

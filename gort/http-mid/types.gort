@@ -49,7 +49,7 @@ struct Request {
     contentLength: usize
     chunked: bool           // Transfer-Encoding: chunked
     expectContinue: bool    // Expect: 100-continue
-    headers: Array<u8>      // the header lines (the request line and the blank line cut off), copied so they outlive the reader's buffer
+    headers: shared Array<u8>   // the header lines (the request line and the blank line cut off), copied so they outlive the reader's buffer
     headEnd: usize          // where the head ends in the reader's buffer (the body starts here)
 
     // The value of a request header (any case), or null: `req.header("content-type") ?? ""`. The first of several wins.
@@ -58,6 +58,36 @@ struct Request {
 
 // What the upload reader hands a handler: the finished body as an unnamed temporary file (deleted when this is dropped; link it into place to keep it).
 struct Upload { file: File, length: u64 }
+
+// A route's declared cost. A handler cannot be interrupted, so the server needs this BEFORE it runs one: an unbounded route (CPU-bound, never
+// parks) starts only when nothing else is in flight, so the answers already finished are sent first and it delays nobody.
+enum Cost {
+    Bounded(Duration)        // expected to finish, or park, within this long
+    Unbounded                // may run long without parking
+
+    fn isUnbounded(): bool {
+        switch (self) {
+            Bounded(_) -> { return false }
+            Unbounded -> { return true }
+        }
+    }
+}
+
+// The result of looking for the next request head without waiting.
+enum Poll {
+    Idle                     // nothing to read right now
+    Closed                   // the peer closed its side
+    Head(Request)            // a complete request head
+}
+
+// One request in flight on a pipelined connection, a queue in the connection's order. The child that runs the request fills it in, the connection reads it:
+// two vthreads, so it is `shared`.
+struct Slot {
+    owns bytes: Array<u8>                       // the answer, covered by the slot's own lock
+    keepAlive: bool = true
+    done: bool = false
+    next: shared Slot?
+}
 
 exception TooLarge                                      // the header block does not fit in the buffer
 exception BodyTooLarge                                  // Content-Length is above the limit

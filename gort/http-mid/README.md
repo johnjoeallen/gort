@@ -18,9 +18,12 @@
   the route first and picks the reader from it. A 60 MB upload peaks at under 4 MB of memory;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;
 - keep-alive, with per-connection `ref` responses;
-- pipelining without concurrency (`server.gort`): requests are answered in order, and the answers to requests that are already buffered are written as one
-  `send`, just before the connection would wait for input (`depth` answers or `maxBatch` bytes at most). Nothing is held for a timer. Handlers still run one at a
-  time; running them concurrently with barriers needs `scope`, `spawn` results and `waitAny` from the runtime, which `gortc` does not have yet.
+- concurrent pipelining (`pipeline.gort`, the default; `--sequential` selects the one-at-a-time loop of `server.gort`, which batches its answers into one `send`): requests that
+  can overlap run as child vthreads of the connection and are answered in request order, as one write each time the connection runs (nothing is held for a timer).
+  `depth` (16) requests are in flight at most. A request with a body, one to an unsafe method (anything but GET, HEAD, OPTIONS) and a route declared `Cost.Unbounded` are
+  barriers: each starts only when nothing is in flight, and nothing starts beside it. A request with nothing in flight and nothing buffered behind it runs inline, with no
+  spawn. The connection waits in `waitAny` for input or a finishing child, and leaves `scope { }` (which waits for every child, by an exception too) before it ends. A slot
+  the child fills in is `shared`: a spawn is a vthread boundary, so the language requires it. Eight pipelined 200 ms sleeps take 200 ms instead of 1600;
 
 | route | |
 |---|---|
@@ -34,6 +37,8 @@
 | `GET /files/:name`, `DELETE /files/:name` | the file (read into memory, up to 16 MB), or 404; 204 or 404 |
 | `POST /users` | `application/json` parsed with `json.parse<User>` (name, optional email and age): 201 with the user as JSON and a `Location`; 400 for bad JSON or a missing name, 415 for another content type |
 | `GET /users/:id` | the user as JSON, or 404 |
+| `GET /sleep/:ms` | parks for `ms` (at most 5000): what overlapping looks like |
+| `GET /spin/:ms` | busy for `ms` without parking; declared `Cost.Unbounded`, so it runs alone |
 | `GET /stats` | key count, requests, writes |
 
 What is `shared` and what is `ref`: the `Store`, its `Map`, the `Route` list and the `ServerConfig` are `shared` (every worker and connection reaches them); each
@@ -53,4 +58,4 @@ curl -X PUT -d value localhost:8080/kv/a; curl localhost:8080/kv/a; curl localho
 ## Testing
 
 `gort/http-mid/test.sh [port]` builds the server, starts it and checks routes, `Content-Length` and chunked bodies (extensions, trailers, split and
-pipelined requests, every 400 and 413 case, the number of writes a pipelined burst takes, counted with `sendcount.c` when `gcc` is there) and `Expect: 100-continue` over a real socket. It needs `nc` and `curl`.
+pipelined requests, every 400 and 413 case, the number of writes a pipelined burst takes, counted with `sendcount.c` when `gcc` is there; `pipeline_test.py` checks overlap, order, barriers, depth, errors and clients that leave with requests in flight). `HTTPMID_ARGS=--sequential gort/http-mid/test.sh` runs the same suite against the baseline loop and `Expect: 100-continue` over a real socket. It needs `nc` and `curl`.

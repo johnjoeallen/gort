@@ -8,7 +8,7 @@ port=${1:-8099}
 bin=$(mktemp -d)/httpmid
 (cd "$root/gortc" && cargo build --release -q && ./target/release/gortc build --link rt/posix.c -o "$bin" ../gort/runtime/*.gort ../gort/http-mid/*.gort) || { echo "build failed"; exit 2; }
 uploads="$bin.uploads"; mkdir -p "$uploads"
-"$bin" --port="$port" --uploads="$uploads" >"$bin.log" 2>&1 &
+"$bin" --port="$port" --uploads="$uploads" ${HTTPMID_ARGS:-} >"$bin.log" 2>&1 &
 pid=$!
 trap 'kill $pid 2>/dev/null' EXIT
 for _ in $(seq 50); do nc -z 127.0.0.1 "$port" 2>/dev/null && break; sleep 0.1; done
@@ -175,6 +175,18 @@ check "no content type -> 415" "$(curl -s -i -X POST -d '{"name":"x"}' -H 'Conte
 check "user chunked"           "$(curl -s -X POST -H "$J" -H 'Transfer-Encoding: chunked' -d '{"name":"Chunky"}' "localhost:$port/users")" '"name":"Chunky"'
 check "unknown user -> 404"    "$(curl -s -i "localhost:$port/users/99999")" "404"
 check "non-numeric user -> 404" "$(curl -s -i "localhost:$port/users/abc")" "404"
+
+# concurrent pipelining: overlap, order, barriers, depth (the default loop; skipped with HTTPMID_ARGS=--sequential)
+if [[ "${HTTPMID_ARGS:-}" == *--sequential* ]]; then
+    echo "skip concurrent pipelining checks (--sequential)"
+elif command -v python3 >/dev/null; then
+    while IFS= read -r line; do
+        echo "$line"
+        case $line in ok*) pass=$((pass+1));; FAIL*) fail=$((fail+1));; esac
+    done < <(python3 "$here/pipeline_test.py" "$port")
+else
+    echo "skip concurrent pipelining checks (no python3)"
+fi
 
 # Expect: 100-continue with the body not yet sent must be answered before the body arrives
 resp=$( (printf "POST /echo HTTP/1.1\r\nExpect: 100-continue\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"; sleep 0.3; printf "hi") | timeout 3 nc -q1 127.0.0.1 "$port")

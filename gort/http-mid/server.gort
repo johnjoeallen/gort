@@ -91,7 +91,7 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
 fn runConnection(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig) {
     var ending = Ending.ClientClosed
     try {
-        ending = handleSequential(conn, store, routes, cfg)
+        ending = cfg.sequential ? handleSequential(conn, store, routes, cfg) : handlePipelined(conn, store, routes, cfg)
     } catch (e: IoError) {
         log(e)
     }
@@ -112,13 +112,13 @@ fn serve(listener: Listener, store: shared Store, routes: shared Route, cfg: sha
 }
 
 // Started as: server --port=8080 --workers=4. Fields left out keep these defaults.
-struct Config { port: u16 = 8080, workers: usize = 1, uploads: String = "/var/tmp" }
+struct Config { port: u16 = 8080, workers: usize = 1, uploads: String = "/var/tmp", sequential: bool }
 
 fn main(config: Config) {
     let port = config.port
     shared Store store = newStore(config.uploads)
     shared Route routes = buildRoutes()
-    shared ServerConfig cfg = new ServerConfig { uploadDir: config.uploads }
+    shared ServerConfig cfg = new ServerConfig { uploadDir: config.uploads, sequential: config.sequential }
     for (core in 0..config.workers) {
         spawnWorker(core, fn() {                             // the worker's root: throws nothing
             try {

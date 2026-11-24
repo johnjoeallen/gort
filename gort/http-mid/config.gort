@@ -6,7 +6,8 @@ struct ServerConfig {
     maxBody: usize = 1.mb          // largest accepted request body (413 beyond it)
     uploadMax: u64 = 64.mb         // the upload reader's limit: separate from maxBody, and a route can lower it
     uploadDir: String = "/var/tmp"  // where uploads are spooled and kept
-    depth: usize = 16              // pipelined requests answered per write (the next write waits for none of them)
+    sequential: bool = false       // one request at a time, answers batched: the baseline the concurrent loop is measured against
+    depth: usize = 16              // requests in flight per connection, and answers per write
     maxBatch: usize = 64.kb        // ... and the answers are written once they add up to this many bytes
     lingerTime: Duration = 2.s     // after the server ends a connection while the client may still be sending: keep reading this long
     lingerBytes: u64 = 256.mb      // ... and at most this many bytes, then close
