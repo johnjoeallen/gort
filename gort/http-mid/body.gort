@@ -30,29 +30,39 @@ fn hexValue(c: u8): i64 {
     return -1
 }
 
+// One decoder per body, mutated all through the read loop: a `ref`, so passing it on never copies its arrays.
 struct BodyDecoder {
     framing: Framing
     limit: u64               // refuse more than this many payload bytes
     total: u64 = 0           // payload bytes delivered so far
     chunk: u64 = 0           // the size of the chunk being read
     trailer: usize = 0       // trailer bytes seen (capped)
-    data: Array<u8>          // the payload
+    data: Array<u8>          // the payload, when it is kept in memory
+    spoolDir: String?        // not null: the payload goes to an unnamed temporary file in this directory instead (the upload reader)
+    file: File? = null       // that file, created when the first byte arrives
     done: bool = false
 
-    static fn of(chunked: bool, length: usize, limit: u64): BodyDecoder throws BodyTooLarge {
-        if (chunked) return BodyDecoder { framing: Framing.Chunked(ChunkState.Size(0)), limit: limit, data: Array<u8>() }
+    // `spoolDir` null keeps the body in memory (at most `limit`, the route's cap); a directory spools it to a file. Either way the limit is
+    // enforced as the bytes arrive.
+    static fn of(chunked: bool, length: usize, limit: u64, spoolDir: String?): ref BodyDecoder throws BodyTooLarge {
+        if (chunked) return new BodyDecoder { framing: Framing.Chunked(ChunkState.Size(0)), limit: limit, data: Array<u8>(), spoolDir: spoolDir }
         if (length > limit) throw BodyTooLarge()             // refused before a single body byte is read
-        return BodyDecoder { framing: Framing.Fixed(length), limit: limit, data: Array<u8>(), done: length == 0 }
+        return new BodyDecoder { framing: Framing.Fixed(length), limit: limit, data: Array<u8>(), spoolDir: spoolDir, done: length == 0 }
     }
 
-    fn deliver(bytes: Array<u8>) {
+    fn deliver(bytes: Array<u8>) throws IoError {
         self.total += bytes.length
-        data.append(bytes)
+        if (spoolDir == null) {
+            data.append(bytes)
+        } else {
+            if (file == null) self.file = File.openTemp(spoolDir)
+            file.write(bytes)
+        }
     }
 
     // Feeds the next bytes of the connection's input; returns how many it consumed. It stops at the end of the body, so a pipelined
     // request behind it is left alone.
-    fn feed(input: Array<u8>): usize throws BadBody, BodyTooLarge {
+    fn feed(input: Array<u8>): usize throws BadBody, BodyTooLarge, IoError {
         var i: usize = 0
         switch (framing) {
             NoBody -> { self.done = true }

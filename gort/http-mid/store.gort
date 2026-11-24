@@ -4,9 +4,12 @@ package http
 struct Store {
     kv: shared Map<String, String>       // the key-value data behind /kv/:key
     requests: u64 = 0                    // every request handled, by any worker
+    dir: String                          // where uploaded files are kept
+    users: shared Map<i64, String>       // the JSON of each user, by id
+    nextUserId: i64 = 1
     writes: u64 = 0                      // successful PUT and DELETE
 }
 
-fn newStore(): shared Store {
-    return new Store { kv: new Map<String, String> {} }
+fn newStore(dir: String): shared Store {
+    return new Store { kv: new Map<String, String> {}, dir: dir, users: new Map<i64, String> {} }
 }

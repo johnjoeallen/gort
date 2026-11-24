@@ -7,7 +7,8 @@ root=$(cd "$here/../.." && pwd)
 port=${1:-8099}
 bin=$(mktemp -d)/httpmid
 (cd "$root/gortc" && cargo build --release -q && ./target/release/gortc build --link rt/posix.c -o "$bin" ../gort/runtime/*.gort ../gort/http-mid/*.gort) || { echo "build failed"; exit 2; }
-"$bin" --port="$port" >"$bin.log" 2>&1 &
+uploads="$bin.uploads"; mkdir -p "$uploads"
+"$bin" --port="$port" --uploads="$uploads" >"$bin.log" 2>&1 &
 pid=$!
 trap 'kill $pid 2>/dev/null' EXIT
 for _ in $(seq 50); do nc -z 127.0.0.1 "$port" 2>/dev/null && break; sleep 0.1; done
@@ -129,6 +130,51 @@ resp=$(raw "GET /boom HTTP/1.1\r\n${H}\r\nGET /boom?ok=1 HTTP/1.1\r\n${H}Connect
 check "handler throws -> 500, then the next request on the same connection" "$resp" "500 Internal Server Error" "internal error" "200 OK" "fine"
 count "500 keeps the connection open" "$resp" "Connection: close" 1
 check "500 is logged" "$(cat "$bin.log")" "GET /boom: the handler threw"
+
+# uploads: bodies above maxBody are spooled to a file, under the route's own limit
+check "upload, small"          "$(curl -s -i -X PUT --data-binary 'file body' "localhost:$port/files/a.txt")" "201 Created" "stored 9 bytes" "Location: /files/a.txt"
+check "download it"            "$(curl -s "localhost:$port/files/a.txt")" "file body"
+check "upload replaces"        "$(curl -s -i -X PUT --data-binary 'new' "localhost:$port/files/a.txt")" "200 OK" "replaced 3 bytes"
+check "upload, empty body"     "$(curl -s -i -X PUT "localhost:$port/files/empty")" "201 Created" "stored 0 bytes"
+head -c 3000000 /dev/urandom > "$bin.big"
+check "upload 3 MB (over maxBody), Content-Length" "$(curl -s -X PUT --data-binary @"$bin.big" "localhost:$port/files/big")" "stored 3000000 bytes"
+if cmp -s "$bin.big" "$uploads/big"; then echo "ok   the 3 MB file on disk is identical"; pass=$((pass+1)); else echo "FAIL the stored file differs"; fail=$((fail+1)); fi
+curl -s "localhost:$port/files/big" -o "$bin.back"
+if cmp -s "$bin.big" "$bin.back"; then echo "ok   downloading it returns the same bytes"; pass=$((pass+1)); else echo "FAIL the download differs"; fail=$((fail+1)); fi
+check "upload 3 MB chunked"    "$(curl -s -X PUT -H 'Transfer-Encoding: chunked' --data-binary @"$bin.big" "localhost:$port/files/bigc")" "stored 3000000 bytes"
+check "upload over the route limit -> 413" "$(raw "PUT /files/huge HTTP/1.1\r\n${H}Content-Length: 70000000\r\n\r\n")" "413"
+check "the same size to an ordinary route -> 413" "$(raw "POST /echo HTTP/1.1\r\n${H}Content-Length: 2000000\r\n\r\n")" "413"
+check "hidden file name -> 400" "$(raw "PUT /files/.secret HTTP/1.1\r\n${H}Content-Length: 1\r\nConnection: close\r\n\r\nx")" "400"
+check "slash in file name -> 400" "$(raw "PUT /files/a%2Fb HTTP/1.1\r\n${H}Content-Length: 1\r\nConnection: close\r\n\r\nx")" "400"
+if [ -e "$uploads/.secret" ] || [ -e "$uploads/a/b" ]; then echo "FAIL a bad name made a file"; fail=$((fail+1)); else echo "ok   no file was made for a bad name"; pass=$((pass+1)); fi
+check "download of a missing file -> 404" "$(raw "GET /files/nope HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
+check "delete"                 "$(raw "DELETE /files/a.txt HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "204"
+check "delete again -> 404"    "$(raw "DELETE /files/a.txt HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
+leftover=$(ls -A "$uploads" | grep -c "\.tmp$")
+if [ "$leftover" -eq 0 ]; then echo "ok   no temporary names left behind"; pass=$((pass+1)); else echo "FAIL $leftover .tmp files left"; fail=$((fail+1)); fi
+check "an upload on a keep-alive connection, then a GET" \
+    "$(raw "PUT /files/k HTTP/1.1\r\n${H}Content-Length: 4\r\n\r\nabcdGET /files/k HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "stored 4 bytes" "abcd"
+
+# JSON: parsed into a struct, answered as JSON
+J='Content-Type: application/json'
+resp=$(curl -s -i -X POST -H "$J" -d '{"name":"Ann","age":30,"extra":[1,{"a":null}]}' "localhost:$port/users")
+check "POST /users"            "$resp" "201 Created" "Content-Type: application/json" "Location: /users/" '{"id":' '"name":"Ann"' '"age":30'
+id=$(grep -o '"id":[0-9]*' <<<"$resp" | cut -d: -f2)
+check "GET /users/:id"         "$(curl -s "localhost:$port/users/$id")" '"name":"Ann"'
+check "optional field absent"  "$(curl -s -X POST -H "$J" -d '{"name":"Bo"}' "localhost:$port/users")" '"name":"Bo"}'
+check "email and escapes"      "$(curl -s -X POST -H "$J" -d '{"name":"Q\"uote\\n","email":"a@b.c"}' "localhost:$port/users")" '"name":"Q\"uote\\n"' '"email":"a@b.c"'
+check "unicode escape decoded" "$(curl -s -X POST -H "$J" -d '{"name":"Al\u00e9"}' "localhost:$port/users")" 'Alé'
+check "ids differ"             "$(curl -s -X POST -H "$J" -d '{"name":"C"}' "localhost:$port/users")" '"id":'"$((id+4))"
+check "invalid JSON -> 400"    "$(curl -s -i -X POST -H "$J" -d '{"name":' "localhost:$port/users")" "400" "invalid JSON"
+check "wrong type -> 400"      "$(curl -s -i -X POST -H "$J" -d '{"name":5}' "localhost:$port/users")" "400"
+check "missing name -> 400"    "$(curl -s -i -X POST -H "$J" -d '{"age":5}' "localhost:$port/users")" "400"
+check "empty name -> 400"      "$(curl -s -i -X POST -H "$J" -d '{"name":""}' "localhost:$port/users")" "400" "needs a name"
+check "age out of range -> 400" "$(curl -s -i -X POST -H "$J" -d '{"name":"x","age":70000}' "localhost:$port/users")" "400"
+check "deeply nested -> 400"   "$(curl -s -i -X POST -H "$J" -d '{"name":"x","a":[[[[[[[[[[[1]]]]]]]]]]]}' "localhost:$port/users")" "400"
+check "no content type -> 415" "$(curl -s -i -X POST -d '{"name":"x"}' -H 'Content-Type:' "localhost:$port/users")" "415"
+check "user chunked"           "$(curl -s -X POST -H "$J" -H 'Transfer-Encoding: chunked' -d '{"name":"Chunky"}' "localhost:$port/users")" '"name":"Chunky"'
+check "unknown user -> 404"    "$(curl -s -i "localhost:$port/users/99999")" "404"
+check "non-numeric user -> 404" "$(curl -s -i "localhost:$port/users/abc")" "404"
 
 # Expect: 100-continue with the body not yet sent must be answered before the body arrives
 resp=$( (printf "POST /echo HTTP/1.1\r\nExpect: 100-continue\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"; sleep 0.3; printf "hi") | timeout 3 nc -q1 127.0.0.1 "$port")

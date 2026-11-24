@@ -90,6 +90,11 @@ extern sync struct File {
     parks fn write(bytes: Array<u8>) throws IoError          // blocking disk I/O is offloaded to a blocking pool (the third call class), so it parks.
                                                          // server.c writes directly from the worker instead (documented in results/http.md)
     fn length(): u64
+    static fn open(path: String): File? throws IoError   // an existing file, read-only; null if there is none
+    fn readAt(offset: u64, buf: Array<u8>): usize throws IoError   // reads up to buf.length bytes at `offset`; 0 at or past the end
+    fn linkAs(path: String) throws IoError               // gives an unnamed file a name, replacing any file already there (atomically)
+    static fn remove(path: String): bool                 // unlinks a file; false if there was none
+    fn cleanup()                                         // closes it (an unnamed file is deleted by this)
     fn map(): Mapping throws IoError                     // an explicit read-only mmap of the file
 }
 extern struct Mapping { }                                // cleanup() unmaps it

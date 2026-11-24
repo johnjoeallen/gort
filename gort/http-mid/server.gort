@@ -50,13 +50,20 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
         }
         if (req == null) break                               // the client closed the connection
         var body = Array<u8>()
-        if (req.chunked || req.contentLength > 0) {
+        var upload: Upload? = null
+        let route = findRoute(req, routes)
+        let limit = (route == null) ? null : route.uploadLimit()
+        if (req.chunked || req.contentLength > 0 || limit != null) {
             if (!input.bodyBuffered(req)) {                  // waiting for the body: send what is ready first
                 out = flush(conn, out)
                 answered = 0
             }
             try {
-                body = input.readBody(req)
+                if (limit != null) {                         // an upload route: the body goes to a file, under the route's own limit
+                    upload = input.readUpload(req, (limit < cfg.uploadMax) ? limit : cfg.uploadMax, cfg.uploadDir)
+                } else {
+                    body = input.readBody(req)
+                }
             } catch (e: BodyTooLarge) {
                 reject(conn, out, 413, "payload too large\n")
                 ending = Ending.ServerRejected
@@ -67,7 +74,7 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
                 break
             }
         }
-        let resp = dispatch(req, body, store, routes)
+        let resp = dispatch(req, body, upload, store, routes)
         out.append(resp.bytes)
         answered += 1
         if (!resp.keepAlive) { writeAll(conn, out); ending = Ending.ServerClosed; break }
@@ -105,13 +112,13 @@ fn serve(listener: Listener, store: shared Store, routes: shared Route, cfg: sha
 }
 
 // Started as: server --port=8080 --workers=4. Fields left out keep these defaults.
-struct Config { port: u16 = 8080, workers: usize = 1 }
+struct Config { port: u16 = 8080, workers: usize = 1, uploads: String = "/var/tmp" }
 
 fn main(config: Config) {
     let port = config.port
-    shared Store store = newStore()
+    shared Store store = newStore(config.uploads)
     shared Route routes = buildRoutes()
-    shared ServerConfig cfg = new ServerConfig()
+    shared ServerConfig cfg = new ServerConfig { uploadDir: config.uploads }
     for (core in 0..config.workers) {
         spawnWorker(core, fn() {                             // the worker's root: throws nothing
             try {

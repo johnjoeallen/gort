@@ -60,11 +60,24 @@ struct Reader {
         return !req.chunked && end - consumed >= req.contentLength
     }
 
-    // The body of the request whose head was just returned, decoded (Content-Length or chunked) and copied out so the buffer can move on.
-    // Bytes already buffered are used first; whatever follows the body (a pipelined request) stays in the buffer. On an exception the rest
-    // of the body is unread, so the caller must close the connection.
+    // The body of the request whose head was just returned, decoded (Content-Length or chunked) and kept in memory, at most `maxBody`.
     fn readBody(req: Request): Array<u8> throws IoError, BodyTooLarge, BadBody {
-        var decoder = BodyDecoder.of(req.chunked, req.contentLength, maxBody)
+        let decoder = BodyDecoder.of(req.chunked, req.contentLength, maxBody, null)
+        stream(req, decoder)
+        return decoder.data
+    }
+
+    // The same body, spooled to an unnamed temporary file in `dir` as it arrives, at most `limit` bytes: memory use does not grow with it.
+    fn readUpload(req: Request, limit: u64, dir: String): Upload throws IoError, BodyTooLarge, BadBody {
+        let decoder = BodyDecoder.of(req.chunked, req.contentLength, limit, dir)
+        stream(req, decoder)
+        if (decoder.file == null) return Upload { file: File.openTemp(dir), length: 0 }      // an empty body is still a file
+        return Upload { file: decoder.file, length: decoder.total }
+    }
+
+    // The engine both share. Bytes already buffered are used first; whatever follows the body (a pipelined request) stays in the buffer. On an
+    // exception the rest of the body is unread, so the caller must close the connection.
+    fn stream(req: Request, decoder: ref BodyDecoder) throws IoError, BodyTooLarge, BadBody {
         self.start = consumed                                // the head is done with
         if (req.expectContinue && start == end) conn.trySend("HTTP/1.1 100 Continue\r\n\r\n")   // best effort; the client is waiting
         self.limit = 8192                                    // stream through a buffer of this size, however big the body is
@@ -82,7 +95,6 @@ struct Reader {
             self.start += used
         }
         self.consumed = start
-        return decoder.data
     }
 
     fn releaseIfDrained() { if (consumed == end) self.buf = null }   // dropping the array returns it to its pool

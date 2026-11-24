@@ -9,6 +9,9 @@
  */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -34,6 +37,8 @@ typedef struct gort_arr gort_arr;
 typedef struct { void *p; size_t n; } gort_xarr;      /* an array given back by an extern function: pointer and length */
 typedef struct G_Conn G_Conn;
 typedef struct G_Listener G_Listener;
+typedef struct G_File G_File;
+typedef struct gort_str_c { size_t strong; size_t len; const uint8_t *data; bool perm; } gort_str_c;   /* the layout of the generated gort_str */
 typedef struct { char _empty; } G_IoError;
 void *gort_rt_new(size_t n);
 void *gort_rt_arr_data(gort_arr *a);
@@ -156,6 +161,73 @@ static int wait_fd(int fd, uint32_t events, int64_t timeout_ns) {
     epoll_ctl(S->ep, EPOLL_CTL_DEL, fd, NULL);
     if (tfd >= 0) { epoll_ctl(S->ep, EPOLL_CTL_DEL, tfd, NULL); close(tfd); }
     return 0;
+}
+
+/* ---- File: blocking disk I/O done directly on the worker (a short stall; the offloaded pool of the design is not built) ---- */
+struct rt_file { int fd; };
+static char *cstr(const gort_str_c *s) { char *p = malloc(s->len + 1); memcpy(p, s->data, s->len); p[s->len] = 0; return p; }
+int gort_x_File_openTemp(gort_str_c *dir, G_File **ret_out) {
+    char *d = cstr(dir);
+    int fd = open(d, O_TMPFILE | O_RDWR | O_CLOEXEC, 0644);
+    free(d);
+    if (fd < 0) return gort_rt_throw_io();
+    struct rt_file *f = gort_rt_new(sizeof *f); f->fd = fd;
+    *ret_out = (G_File *)f;
+    return 0;
+}
+int gort_x_File_open(gort_str_c *path, G_File **ret_out) {
+    char *p = cstr(path);
+    int fd = open(p, O_RDONLY | O_CLOEXEC);
+    int err = errno;
+    free(p);
+    if (fd < 0) { if (err == ENOENT || err == ENOTDIR) { *ret_out = NULL; return 0; } return gort_rt_throw_io(); }
+    struct rt_file *f = gort_rt_new(sizeof *f); f->fd = fd;
+    *ret_out = (G_File *)f;
+    return 0;
+}
+int gort_x_File_write(G_File *self, const void *bytes, size_t n) {
+    int fd = ((struct rt_file *)self)->fd;
+    const char *b = bytes;
+    while (n > 0) {
+        ssize_t w = write(fd, b, n);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) return gort_rt_throw_io();
+        b += w; n -= (size_t)w;
+    }
+    return 0;
+}
+int gort_x_File_readAt(G_File *self, uint64_t off, void *buf, size_t n, size_t *ret_out) {
+    for (;;) {
+        ssize_t r = pread(((struct rt_file *)self)->fd, buf, n, (off_t)off);
+        if (r < 0 && errno == EINTR) continue;
+        if (r < 0) return gort_rt_throw_io();
+        *ret_out = (size_t)r;
+        return 0;
+    }
+}
+uint64_t gort_x_File_length(G_File *self) {
+    struct stat st;
+    return fstat(((struct rt_file *)self)->fd, &st) == 0 ? (uint64_t)st.st_size : 0;
+}
+int gort_x_File_linkAs(G_File *self, gort_str_c *path) {
+    char proc[48], *p = cstr(path), *tmp = malloc(path->len + 48);
+    snprintf(proc, sizeof proc, "/proc/self/fd/%d", ((struct rt_file *)self)->fd);
+    snprintf(tmp, path->len + 48, "%s.up%ld.tmp", p, (long)syscall(SYS_gettid));
+    int rc = linkat(AT_FDCWD, proc, AT_FDCWD, tmp, AT_SYMLINK_FOLLOW);
+    if (rc == 0) rc = rename(tmp, p);
+    if (rc != 0) unlink(tmp);
+    free(p); free(tmp);
+    return rc == 0 ? 0 : gort_rt_throw_io();
+}
+bool gort_x_File_remove(gort_str_c *path) {
+    char *p = cstr(path);
+    int rc = unlink(p);
+    free(p);
+    return rc == 0;
+}
+void gort_x_File_cleanup(G_File *self) {
+    struct rt_file *f = (struct rt_file *)self;
+    if (f->fd >= 0) { close(f->fd); f->fd = -1; }
 }
 
 /* ---- Conn ---- */

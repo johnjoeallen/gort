@@ -3,11 +3,27 @@
 // last route to the first, and never changed, so every worker reads it with no lock.
 package http
 
+// Which reader a route uses. Memory: the whole body is read into memory first, at most ServerConfig.maxBody. Upload: the route states its own larger
+// limit, the body is spooled to an unnamed temporary file as it arrives (memory does not grow with it), and the handler gets the finished file to
+// link into place or read.
+enum Handler {
+    Memory(fn(Request, Array<u8>, shared Store, Params): Reply throws Exception)
+    Upload(u64, fn(Request, Upload, shared Store, Params): Reply throws Exception)      // (limit, handler)
+}
+
 struct Route {
     method: Method
     pattern: String
-    handler: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception
+    handler: Handler
     next: shared Route?
+
+    // null: the route reads its body into memory; otherwise the most bytes its upload may have.
+    fn uploadLimit(): u64? {
+        switch (handler) {
+            Memory(_) -> { return null }
+            Upload(limit, _) -> { return limit }
+        }
+    }
 }
 
 // ---------- handlers: (request, body, store, the path parameters) ----------
@@ -82,49 +98,189 @@ fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply 
     return reply(200, text)
 }
 
+// ---------- files: uploads kept in the upload directory ----------
+
+// A name safe to use as a file in the directory: no slash, no control byte, not hidden, not empty or too long.
+fn validFileName(name: String): bool {
+    let b = name.toBytes()
+    if (b.length == 0 || b.length > 200 || b[0] == 46) return false
+    var i: usize = 0
+    while (i < b.length) {
+        if (b[i] == 47 || b[i] < 32 || b[i] == 127) return false
+        i += 1
+    }
+    return true
+}
+
+fn hFilePut(req: Request, up: Upload, store: shared Store, p: Params): Reply throws Exception {
+    let name = p.get("name") ?? ""
+    if (!validFileName(name)) return reply(400, "bad file name\n")
+    let path = store.dir + "/" + name
+    let old = File.open(path)
+    let existed = old != null
+    up.file.linkAs(path)                                         // the unnamed file gets its name; an older file of that name is replaced
+    sync (writes store) { store.writes += 1 }
+    if (existed) return reply(200, "replaced " + up.length + " bytes\n")
+    return reply(201, "stored " + up.length + " bytes\n").with("Location", "/files/" + percentEncode(name))
+}
+
+fn hFileGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let name = p.get("name") ?? ""
+    if (!validFileName(name)) return reply(400, "bad file name\n")
+    let f = File.open(store.dir + "/" + name)
+    if (f == null) return reply(404, "no such file\n")
+    let size = f.length()
+    if (size > 16.mb) return reply(500, "file too large to serve from memory\n")      // streamed responses are not built yet
+    let data = new u8[size]
+    var got: usize = 0
+    while (got < size) {
+        let n = f.readAt(got, data[got..size])
+        if (n == 0) break                                        // the file shrank under us
+        got += n
+    }
+    return Reply.bytes(200, "application/octet-stream", data[0..got])
+}
+
+fn hFileDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let name = p.get("name") ?? ""
+    if (!validFileName(name)) return reply(400, "bad file name\n")
+    if (!File.remove(store.dir + "/" + name)) return reply(404, "no such file\n")
+    sync (writes store) { store.writes += 1 }
+    return reply(204, "")
+}
+
+// ---------- users: JSON in, JSON out ----------
+
+struct User { name: String, email: String?, age: u16? }
+
+// `s` as a JSON string literal.
+fn jsonQuote(s: String): String {
+    let b = s.toBytes()
+    var out = Array<u8>()
+    out.append(34)
+    var i: usize = 0
+    while (i < b.length) {
+        let c = b[i]
+        if (c == 34 || c == 92) { out.append(92); out.append(c) }
+        else if (c == 10) { out.append(92); out.append(110) }
+        else if (c == 13) { out.append(92); out.append(114) }
+        else if (c == 9) { out.append(92); out.append(116) }
+        else if (c < 32) { out.append("\\u00".toBytes()); out.append(hexDigit(c / 16)); out.append(hexDigit(c % 16)) }
+        else { out.append(c) }
+        i += 1
+    }
+    out.append(34)
+    return String.toString(out)
+}
+
+fn userJson(id: i64, u: User): String {
+    return "{\"id\":" + id + ",\"name\":" + jsonQuote(u.name)
+        + (u.email == null ? "" : ",\"email\":" + jsonQuote(u.email))
+        + (u.age == null ? "" : ",\"age\":" + u.age) + "}\n"
+}
+
+fn hUserCreate(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let ctype = req.header("content-type") ?? ""
+    if (!ctype.startsWith("application/json")) return reply(415, "send application/json\n")
+    var parsed: User? = null
+    try {
+        parsed = json.parse<User>(body, JsonLimits { maxDepth: 8, maxStringBytes: 256 })
+    } catch (e: JsonError) {
+        return reply(400, "invalid JSON: " + e.message + "\n")
+    }
+    if (parsed == null || parsed.name.length == 0) return reply(400, "a user needs a name\n")
+    var id: i64 = 0
+    sync (writes store.users, store) {                           // both at once, in one order
+        id = store.nextUserId
+        store.nextUserId += 1
+        store.users.insert(id, userJson(id, parsed))
+    }
+    return Reply.bytes(201, "application/json", userJson(id, parsed).toBytes()).with("Location", "/users/" + id)
+}
+
+fn hUserGet(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply throws Exception {
+    let id = (p.get("id") ?? "").toBytes()
+    let n = parseUsize(id)
+    if (n == null) return reply(404, "no such user\n")
+    var found: String? = null
+    sync (reads store.users) { found = store.users.get(n as i64) }
+    if (found == null) return reply(404, "no such user\n")
+    return Reply.bytes(200, "application/json", found.toBytes())
+}
+
 // ---------- the table ----------
 
+fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
+
 fn buildRoutes(): shared Route {
-    shared Route r9 = new Route { method: Method.Get,    pattern: "/stats",      handler: hStats,  next: null }
-    shared Route r8 = new Route { method: Method.Get,    pattern: "/boom",       handler: hBoom,   next: r9 }
-    shared Route r7 = new Route { method: Method.Get,    pattern: "/hello/:name", handler: hGreet, next: r8 }
-    shared Route r6 = new Route { method: Method.Delete, pattern: "/kv/:key",    handler: hDelete, next: r7 }
-    shared Route r5 = new Route { method: Method.Put,    pattern: "/kv/:key",    handler: hPut,    next: r6 }
-    shared Route r4 = new Route { method: Method.Get,    pattern: "/kv/:key",    handler: hGet,    next: r5 }
-    shared Route r3 = new Route { method: Method.Post,   pattern: "/echo",       handler: hEcho,   next: r4 }
-    shared Route r2 = new Route { method: Method.Get,    pattern: "/health",     handler: hHealth, next: r3 }
-    shared Route r1 = new Route { method: Method.Get,    pattern: "/",           handler: hHello,  next: r2 }
+    shared Route r15 = new Route { method: Method.Get,    pattern: "/stats",      handler: mem(hStats),  next: null }
+    shared Route r14 = new Route { method: Method.Get,    pattern: "/users/:id",  handler: mem(hUserGet), next: r15 }
+    shared Route r13 = new Route { method: Method.Post,   pattern: "/users",      handler: mem(hUserCreate), next: r14 }
+    shared Route r12 = new Route { method: Method.Delete, pattern: "/files/:name", handler: mem(hFileDelete), next: r13 }
+    shared Route r11 = new Route { method: Method.Get,    pattern: "/files/:name", handler: mem(hFileGet), next: r12 }
+    shared Route r10 = new Route { method: Method.Put,    pattern: "/files/:name", handler: Handler.Upload(64.mb, hFilePut), next: r11 }
+    shared Route r8 = new Route { method: Method.Get,    pattern: "/boom",       handler: mem(hBoom),   next: r10 }
+    shared Route r7 = new Route { method: Method.Get,    pattern: "/hello/:name", handler: mem(hGreet), next: r8 }
+    shared Route r6 = new Route { method: Method.Delete, pattern: "/kv/:key",    handler: mem(hDelete), next: r7 }
+    shared Route r5 = new Route { method: Method.Put,    pattern: "/kv/:key",    handler: mem(hPut),    next: r6 }
+    shared Route r4 = new Route { method: Method.Get,    pattern: "/kv/:key",    handler: mem(hGet),    next: r5 }
+    shared Route r3 = new Route { method: Method.Post,   pattern: "/echo",       handler: mem(hEcho),   next: r4 }
+    shared Route r2 = new Route { method: Method.Get,    pattern: "/health",     handler: mem(hHealth), next: r3 }
+    shared Route r1 = new Route { method: Method.Get,    pattern: "/",           handler: mem(hHello),  next: r2 }
     return r1
 }
 
-// Finds the route for a request and runs it, then renders the reply. 404 if no path matches; 405 (with an Allow header) if the path matches but
-// not the method; OPTIONS on a known path lists what it allows; HEAD is answered by the GET handler with the body cut off.
-fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared Route): ref Resp {
-    sync (writes store) { store.requests += 1 }
+// The first route that matches the request's path and method (HEAD matches a GET route); null if there is none.
+fn findRoute(req: Request, routes: shared Route): shared Route? {
     let head = req.method == Method.Head
-    var cur: shared Route? = routes
-    var allow = ""                                       // the methods the path has routes for
     let path = req.path.toBytes()
+    var cur: shared Route? = routes
+    while (cur != null) {
+        if (patternMatches(cur.pattern.toBytes(), path) && (req.method == cur.method || (head && cur.method == Method.Get))) return cur
+        cur = cur.next
+    }
+    return null
+}
+
+// What a request gets when no route takes it: 404 if no path matches; 405 (with an Allow header) if a path matches but not the method; OPTIONS on a
+// known path lists what it allows.
+fn noRoute(req: Request, routes: shared Route): Reply {
+    var allow = ""
+    let path = req.path.toBytes()
+    var cur: shared Route? = routes
     while (cur != null) {
         if (patternMatches(cur.pattern.toBytes(), path)) {
-            if (req.method == cur.method || (head && cur.method == Method.Get)) {
-                let h = cur.handler
-                var r = reply(500, "internal error\n")           // what a throwing handler gets
-                try {
-                    r = h(req, body, store, Params { pattern: cur.pattern, path: req.path })
-                } catch (e: Exception) {
-                    // whatever the handler threw ends this request only: the client gets a 500 and the connection stays open
-                    logLine((req.method.name() + " " + req.path + ": the handler threw\n").toBytes())
-                }
-                return render(r, req.keepAlive, req.http10, !head)
-            }
             allow = allow + (allow.length == 0 ? "" : ", ") + cur.method.name() + (cur.method == Method.Get ? ", HEAD" : "")
         }
         cur = cur.next
     }
-    if (allow.length > 0) {
-        if (req.method == Method.Options) return render(reply(204, "").with("Allow", allow + ", OPTIONS"), req.keepAlive, req.http10, true)
-        return render(reply(405, "method not allowed\n").with("Allow", allow + ", OPTIONS"), req.keepAlive, req.http10, !head)
+    if (allow.length == 0) return reply(404, "not found\n")
+    if (req.method == Method.Options) return reply(204, "").with("Allow", allow + ", OPTIONS")
+    return reply(405, "method not allowed\n").with("Allow", allow + ", OPTIONS")
+}
+
+// Runs the route's handler; whatever it throws ends this request only: the client gets a 500 and the connection stays open.
+fn runRoute(route: shared Route, req: Request, body: Array<u8>, up: Upload?, store: shared Store): Reply {
+    let params = Params { pattern: route.pattern, path: req.path }
+    try {
+        switch (route.handler) {
+            Memory(h) -> { return h(req, body, store, params) }
+            Upload(_, h) -> {
+                if (up == null) return reply(500, "internal error\n")       // the server read the body the wrong way: cannot happen
+                return h(req, up, store, params)
+            }
+        }
+    } catch (e: Exception) {
+        logLine((req.method.name() + " " + req.path + ": the handler threw\n").toBytes())
+        return reply(500, "internal error\n")
     }
-    return render(reply(404, "not found\n"), req.keepAlive, req.http10, !head)
+}
+
+// Answers a request whose body has been read (into `body`, or spooled into `up` for an upload route): HEAD gets the GET handler's answer without the body.
+fn dispatch(req: Request, body: Array<u8>, up: Upload?, store: shared Store, routes: shared Route): ref Resp {
+    sync (writes store) { store.requests += 1 }
+    let head = req.method == Method.Head
+    let route = findRoute(req, routes)
+    let r = (route == null) ? noRoute(req, routes) : runRoute(route, req, body, up, store)
+    return render(r, req.keepAlive, req.http10, !head)
 }

@@ -13,6 +13,9 @@
   and the path side by side and allocates nothing; a handler reads its parameters from `Params` (`p.get("key") ?? ""`), which cuts the
   segment out and percent-decodes it only when asked. `queryGet(req.query, "name")` does the same for the query string (`+` is a space). A `%` not followed
   by two hex digits, in the path or the query, answers 400 when the head is parsed, so decoding cannot fail later;
+- two readers (`reader.gort`, `body.gort`): a route is `Handler.Memory(fn)` (the body is read into memory, at most `maxBody`) or `Handler.Upload(limit, fn)` (the body is
+  spooled to an unnamed temporary file under the route's own limit, so memory does not grow with it; the handler gets an `Upload` to link into place). The server finds
+  the route first and picks the reader from it. A 60 MB upload peaks at under 4 MB of memory;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;
 - keep-alive, with per-connection `ref` responses;
 - pipelining without concurrency (`server.gort`): requests are answered in order, and the answers to requests that are already buffered are written as one
@@ -27,6 +30,10 @@
 | `DELETE /kv/:key` | 204, or 404 |
 | `POST /echo` | the body, back |
 | `GET /hello/:name` | `hello, name`; with `?shout=1`, `hello, name!` |
+| `PUT /files/:name` | an **upload**: the body (up to 64 MB, chunked or not) is spooled to an unnamed temporary file as it arrives, then linked into the upload directory under `name`: 201 if new, 200 if replaced |
+| `GET /files/:name`, `DELETE /files/:name` | the file (read into memory, up to 16 MB), or 404; 204 or 404 |
+| `POST /users` | `application/json` parsed with `json.parse<User>` (name, optional email and age): 201 with the user as JSON and a `Location`; 400 for bad JSON or a missing name, 415 for another content type |
+| `GET /users/:id` | the user as JSON, or 404 |
 | `GET /stats` | key count, requests, writes |
 
 What is `shared` and what is `ref`: the `Store`, its `Map`, the `Route` list and the `ServerConfig` are `shared` (every worker and connection reaches them); each
@@ -37,7 +44,7 @@ What is `shared` and what is `ref`: the `Store`, its `Map`, the `Route` list and
 ```
 cd gortc && cargo build --release
 ./target/release/gortc build --link rt/posix.c -o /tmp/httpmid ../gort/runtime/*.gort ../gort/http-mid/*.gort
-/tmp/httpmid --port=8080 --workers=4 &
+/tmp/httpmid --port=8080 --workers=4 --uploads=/var/tmp &
 curl -X PUT -d value localhost:8080/kv/a; curl localhost:8080/kv/a; curl localhost:8080/stats
 ```
 
