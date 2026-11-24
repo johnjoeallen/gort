@@ -43,6 +43,23 @@ struct Reader {
         }
     }
 
+    // The next request head IF it is already buffered: no I/O, never parks. null: none is complete yet (the caller flushes what it owes, then
+    // calls nextRequest, which waits).
+    fn tryNextRequest(): Request? throws BadRequest, NotImplemented {
+        if (buf == null) return null
+        self.start = consumed
+        self.limit = maxHead
+        let at = findHeadEnd()
+        if (at == null) return null
+        self.consumed = at
+        return parseHead(buf[start..at], at)
+    }
+
+    // Is the whole body of `req` already buffered? (A chunked body is never assumed to be: its end is only known by decoding it.)
+    fn bodyBuffered(req: Request): bool {
+        return !req.chunked && end - consumed >= req.contentLength
+    }
+
     // The body of the request whose head was just returned, decoded (Content-Length or chunked) and copied out so the buffer can move on.
     // Bytes already buffered are used first; whatever follows the body (a pipelined request) stays in the buffer. On an exception the rest
     // of the body is unread, so the caller must close the connection.

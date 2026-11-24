@@ -104,6 +104,26 @@ resp=$(raw "HEAD /kv/missing HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
 check "HEAD 404 keeps Content-Length" "$resp" "404" "Content-Length: 12"
 if [[ $resp == *"no such key"* ]]; then echo "FAIL HEAD 404 sent a body"; fail=$((fail+1)); else echo "ok   HEAD 404 sends no body"; pass=$((pass+1)); fi
 
+# pipelining: answers come back in request order, and a burst takes far fewer writes than requests
+resp=$(raw "PUT /kv/p HTTP/1.1\r\n${H}Content-Length: 1\r\n\r\n1GET /kv/p HTTP/1.1\r\n${H}\r\nPUT /kv/p HTTP/1.1\r\n${H}Content-Length: 1\r\n\r\n2GET /kv/p HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+order=$(grep -o "created\|replaced\|^[12]$" <<<"$resp" | tr '\n' ' ')
+if [ "$order" = "created 1 replaced 2 " ]; then echo "ok   pipelined PUT/GET answered in order"; pass=$((pass+1)); else echo "FAIL pipelined order: '$order'"; fail=$((fail+1)); fi
+burst="$bin.burst"
+{ for _ in $(seq 40); do printf "GET /health HTTP/1.1\r\nHost: x\r\n\r\n"; done; printf "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"; } >"$burst"
+n=$(timeout 5 nc -q1 127.0.0.1 "$port" <"$burst" | grep -c "HTTP/1.1 200")
+if [ "$n" -eq 41 ]; then echo "ok   41 pipelined requests, 41 answers"; pass=$((pass+1)); else echo "FAIL pipelined burst: $n answers"; fail=$((fail+1)); fi
+if command -v gcc >/dev/null && gcc -shared -fPIC -o "$bin.shim.so" "$here/sendcount.c" -ldl 2>/dev/null; then
+    LD_PRELOAD="$bin.shim.so" "$bin" --port=$((port+1)) >"$bin.sends" 2>&1 &
+    spid=$!
+    for _ in $(seq 50); do nc -z 127.0.0.1 $((port+1)) 2>/dev/null && break; sleep 0.1; done
+    timeout 5 nc -q1 127.0.0.1 $((port+1)) <"$burst" >/dev/null
+    sleep 0.3; kill $spid 2>/dev/null
+    sends=$(grep -c '^SEND' "$bin.sends")
+    if [ "$sends" -ge 1 ] && [ "$sends" -le 10 ]; then echo "ok   41 pipelined answers took $sends writes"; pass=$((pass+1)); else echo "FAIL batching: $sends writes for 41 requests"; fail=$((fail+1)); fi
+else
+    echo "skip write counting (no gcc)"
+fi
+
 # a handler that throws: 500, and the connection stays usable
 resp=$(raw "GET /boom HTTP/1.1\r\n${H}\r\nGET /boom?ok=1 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
 check "handler throws -> 500, then the next request on the same connection" "$resp" "500 Internal Server Error" "internal error" "200 OK" "fine"

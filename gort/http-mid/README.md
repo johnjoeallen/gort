@@ -14,7 +14,10 @@
   segment out and percent-decodes it only when asked. `queryGet(req.query, "name")` does the same for the query string (`+` is a space). A `%` not followed
   by two hex digits, in the path or the query, answers 400 when the head is parsed, so decoding cannot fail later;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;
-- keep-alive, with per-connection `ref` responses.
+- keep-alive, with per-connection `ref` responses;
+- pipelining without concurrency (`server.gort`): requests are answered in order, and the answers to requests that are already buffered are written as one
+  `send`, just before the connection would wait for input (`depth` answers or `maxBatch` bytes at most). Nothing is held for a timer. Handlers still run one at a
+  time; running them concurrently with barriers needs `scope`, `spawn` results and `waitAny` from the runtime, which `gortc` does not have yet.
 
 | route | |
 |---|---|
@@ -43,4 +46,4 @@ curl -X PUT -d value localhost:8080/kv/a; curl localhost:8080/kv/a; curl localho
 ## Testing
 
 `gort/http-mid/test.sh [port]` builds the server, starts it and checks routes, `Content-Length` and chunked bodies (extensions, trailers, split and
-pipelined requests, every 400 and 413 case) and `Expect: 100-continue` over a real socket. It needs `nc` and `curl`.
+pipelined requests, every 400 and 413 case, the number of writes a pipelined burst takes, counted with `sendcount.c` when `gcc` is there) and `Expect: 100-continue` over a real socket. It needs `nc` and `curl`.

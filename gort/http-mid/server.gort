@@ -2,51 +2,79 @@
 package http
 import runtime
 
-// An error answer the server ends the connection after.
-fn reject(conn: Conn, code: u16, message: String) throws IoError {
-    let resp = respond(code, message, false, false)
-    writeAll(conn, resp.bytes)
+// Sends what has been answered so far, as one write.
+fn flush(conn: Conn, out: Array<u8>): Array<u8> throws IoError {
+    if (out.length == 0) return out
+    writeAll(conn, out)                                      // parks if the send buffer is full
+    return Array<u8>()
 }
 
-// Serves one connection until the client leaves or the server ends it.
+// An error answer the server ends the connection after: what was answered before it goes out first, in order.
+fn reject(conn: Conn, out: Array<u8>, code: u16, message: String) throws IoError {
+    let resp = respond(code, message, false, false)
+    var all = Array<u8>()
+    all.append(out)
+    all.append(resp.bytes)
+    writeAll(conn, all)
+}
+
+// Serves one connection until the client leaves or the server ends it. Requests are answered in order. The answers to requests that are
+// already buffered (a pipelining client) are collected and sent as one write, just before the connection would wait for more input: nothing is
+// held for a timer, a response waits only behind the requests in front of it. `depth` and `maxBatch` bound how much is collected.
 fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: shared ServerConfig): Ending throws IoError {
     var input = Reader.of(conn, cfg)
     var ending = Ending.ClientClosed
+    var out = Array<u8>()                                    // answers not yet written
+    var answered: usize = 0                                  // how many of them
     while (true) {
         var req: Request?
         try {
-            req = input.nextRequest()                        // parks while idle or mid-request
+            req = input.tryNextRequest()                     // already buffered: no waiting
+            if (req == null) {
+                out = flush(conn, out)                       // about to wait: send what is ready first
+                answered = 0
+                req = input.nextRequest()                    // parks while idle or mid-request
+            }
         } catch (e: TooLarge) {
-            reject(conn, 431, "headers too large\n")
+            reject(conn, out, 431, "headers too large\n")
             ending = Ending.ServerRejected
             break
         } catch (e: NotImplemented) {
-            reject(conn, 501, "not implemented\n")
+            reject(conn, out, 501, "not implemented\n")
             ending = Ending.ServerRejected
             break
         } catch (e: BadRequest) {
-            reject(conn, 400, "bad request\n")
+            reject(conn, out, 400, "bad request\n")
             ending = Ending.ServerRejected
             break
         }
         if (req == null) break                               // the client closed the connection
         var body = Array<u8>()
         if (req.chunked || req.contentLength > 0) {
+            if (!input.bodyBuffered(req)) {                  // waiting for the body: send what is ready first
+                out = flush(conn, out)
+                answered = 0
+            }
             try {
                 body = input.readBody(req)
             } catch (e: BodyTooLarge) {
-                reject(conn, 413, "payload too large\n")
+                reject(conn, out, 413, "payload too large\n")
                 ending = Ending.ServerRejected
                 break
             } catch (e: BadBody) {
-                reject(conn, 400, "bad request\n")
+                reject(conn, out, 400, "bad request\n")
                 ending = Ending.ServerRejected
                 break
             }
         }
         let resp = dispatch(req, body, store, routes)
-        writeAll(conn, resp.bytes)                           // parks if the send buffer is full
-        if (!resp.keepAlive) { ending = Ending.ServerClosed; break }
+        out.append(resp.bytes)
+        answered += 1
+        if (!resp.keepAlive) { writeAll(conn, out); ending = Ending.ServerClosed; break }
+        if (answered >= cfg.depth || out.length >= cfg.maxBatch) {
+            out = flush(conn, out)
+            answered = 0
+        }
         input.releaseIfDrained()
     }
     return ending
