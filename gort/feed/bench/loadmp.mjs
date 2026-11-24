@@ -12,12 +12,13 @@ const NB = 2000, bucket = ms => Math.min(NB - 1, Math.round(100 * Math.log(ms * 
 if (process.argv[2] === 'worker') {
   const { from, count, total, ramp, hold, base } = JSON.parse(process.argv[3]);
   const url = new URL(base), tokens = JSON.parse(fs.readFileSync(new URL('../../../../challenge/seed/tokens.json', import.meta.url)));
-  const hist = {}, perSec = [], bad = { n: 0 }; let stop = false; const t0 = Date.now();
+  const hist = {}, perSec = [], bad = { n: 0 }, errs = {}; let stop = false; const t0 = Date.now();
   const between = (lo, hi) => lo + Math.random() * (hi - lo), sleep = ms => new Promise(r => setTimeout(r, ms));
   const call = (agent, name, method, path, token, body) => new Promise(resolve => {
     const s = performance.now(); let done = false;
-    const fin = (status, text) => {
+    const fin = (status, text, why) => {
       if (done) return; done = true;
+      if (why || !(status >= 200 && status < 400)) errs[why || 'http ' + status] = (errs[why || 'http ' + status] || 0) + 1;
       const b = bucket(performance.now() - s); (hist[name] ??= new Int32Array(NB))[b]++; (hist.ALL ??= new Int32Array(NB))[b]++;
       const sec = Math.floor((Date.now() - t0) / 1000); perSec[sec] = (perSec[sec] || 0) + 1;
       if (!(status >= 200 && status < 400)) bad.n++;
@@ -27,7 +28,7 @@ if (process.argv[2] === 'worker') {
       headers: token ? { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...(body ? { 'Content-Length': Buffer.byteLength(body) } : {}) } : {} }, res => {
       let s = ''; res.setEncoding('utf8'); res.on('data', d => s += d); res.on('end', () => fin(res.statusCode, s));
     });
-    req.on('error', () => fin(0, '')); req.on('timeout', () => { req.destroy(); fin(0, ''); });
+    req.on('error', e => fin(0, '', e.code || e.message)); req.on('timeout', () => { req.destroy(); fin(0, '', 'timeout'); });
     req.end(body);
   });
   const user = async n => {
@@ -50,7 +51,7 @@ if (process.argv[2] === 'worker') {
   for (let i = 0; i < count; i++) user(from + i);
   setTimeout(() => { stop = true }, (ramp + hold) * 1000);
   await sleep((ramp + hold) * 1000 + 200);
-  process.stdout.write(JSON.stringify({ hist: Object.fromEntries(Object.entries(hist).map(([k, v]) => [k, Array.from(v)])), perSec, bad: bad.n }) + '\n');
+  process.stdout.write(JSON.stringify({ hist: Object.fromEntries(Object.entries(hist).map(([k, v]) => [k, Array.from(v)])), perSec, bad: bad.n, errs }) + '\n');
   process.exit(0);
 }
 
@@ -66,10 +67,10 @@ for (let i = 0; i < nproc; i++) {
 }
 let c0 = NaN; setTimeout(() => { c0 = cpu(serverPid) }, RAMP * 1000);                // the CPU the server uses during the hold only
 const t0 = Date.now(); await Promise.all(procs); const c1 = cpu(serverPid);
-const merged = {}, perSec = []; let bad = 0;
+const merged = {}, perSec = []; let bad = 0; const errs = {};
 for (const o of outs) {
   if (!o.trim()) { bad += 1e9; continue; }                                            // a worker that died counts as a failed run
-  const r = JSON.parse(o.trim().split('\n').pop()); bad += r.bad;
+  const r = JSON.parse(o.trim().split('\n').pop()); bad += r.bad; for (const [k, c] of Object.entries(r.errs || {})) errs[k] = (errs[k] || 0) + c;
   for (const [k, v] of Object.entries(r.hist)) { const m = merged[k] ??= new Array(NB).fill(0); v.forEach((c, i) => m[i] += c); }
   r.perSec.forEach((c, i) => { if (c) perSec[i] = (perSec[i] || 0) + c; });
 }
@@ -78,6 +79,7 @@ const total = merged.ALL ? merged.ALL.reduce((a, b) => a + b, 0) : 0;
 const holdReq = perSec.slice(RAMP, RAMP + HOLD).reduce((a, b) => a + (b || 0), 0), rps = holdReq / HOLD;
 const s = { vus: V, requests: total, rps: Math.round(rps), failed: bad, errPct: +(100 * bad / Math.max(1, total)).toFixed(3), p50: pct(merged.ALL || [0], .5), p95: pct(merged.ALL || [0], .95), p99: pct(merged.ALL || [0], .99),
   serverCpuPct: +(100 * (c1 - c0) / tick / HOLD).toFixed(1), usPerReq: +(1e6 * (c1 - c0) / tick / Math.max(1, holdReq)).toFixed(1), serverPeakMB: Math.round(hwm(serverPid)), elapsedS: Math.round((Date.now() - t0) / 1000) };
+s.errs = errs;
 s.pass = total > 0 && s.p95 < 500 && s.p99 < 1000 && s.errPct < 1;
 for (const [k, h] of Object.entries(merged)) if (k !== 'ALL') console.log(`  ${k.padEnd(22)} n=${String(h.reduce((a, b) => a + b, 0)).padStart(8)}  p95=${pct(h, .95).toFixed(2)}  p99=${pct(h, .99).toFixed(2)} ms`);
 console.log(JSON.stringify(s)); process.exit(s.pass ? 0 : 1);

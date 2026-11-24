@@ -13,8 +13,11 @@ LOG="$WORK/search-$(date +%Y%m%d-%H%M%S).log"; mkdir -p "$WORK/run"
 say() { echo "$@" | tee -a "$LOG"; }
 
 stop_server() { pkill -x feed 2>/dev/null; for _ in $(seq 20); do pgrep -x feed >/dev/null || return 0; sleep 0.5; done; pkill -9 -x feed; }
+# The load generator and the server share this machine, so the sockets one probe closed sit in TIME_WAIT (60 s) on the same loopback addresses and ports
+# the next probe needs: it would fail to connect. A separate load machine does not have this problem, so wait until they are gone.
+drain() { for _ in $(seq 120); do [ "$(ss -tan state time-wait | wc -l)" -le 1000 ] && return 0; sleep 1; done; }
 start_server() {
-  stop_server; rm -f "$WORK/run"/feed.db*; cp "$CH/seed/feed.db" "$WORK/run/feed.db"
+  stop_server; drain; rm -f "$WORK/run"/feed.db*; cp "$CH/seed/feed.db" "$WORK/run/feed.db"
   export SQLITE_PATH="$WORK/run/feed.db" JWT_SECRET=twelve-dollar-challenge HOST=0.0.0.0 PORT
   # one core, 2 GB, no swap, 65535 descriptors: the leaderboard box's limits
   systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 taskset -c "$SERVER_CPU" bash -c 'ulimit -n 65535; exec bash '"$FEED"'/start.sh' > "$WORK/run/server.log" 2>&1 &
