@@ -25,7 +25,7 @@ fn hEcho(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Res
 }
 
 fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    let key = p.getOr("key", "")
+    let key = p.get("key") ?? ""
     var found: String? = null
     sync (reads store.kv) { found = store.kv.get(key) }
     if (found == null) return respond(404, "no such key\n", req.keepAlive, req.http10)
@@ -33,7 +33,7 @@ fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp
 }
 
 fn hPut(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    let key = p.getOr("key", "")
+    let key = p.get("key") ?? ""
     if (key.length == 0) return respond(400, "empty key\n", req.keepAlive, req.http10)
     var existed = false
     sync (writes store.kv) {
@@ -46,7 +46,7 @@ fn hPut(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp
 }
 
 fn hDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    let key = p.getOr("key", "")
+    let key = p.get("key") ?? ""
     var existed = false
     sync (writes store.kv) {
         existed = store.kv.has(key)
@@ -67,7 +67,7 @@ fn hStats(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Re
 }
 
 fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
-    let name = p.getOr("name", "")
+    let name = p.get("name") ?? ""
     let text = "hello, " + name + "\n"
     let shout = queryGet(req.query, "shout")
     if (shout != null && shout != "0") return respond(200, "hello, " + name + "!\n", req.keepAlive, req.http10)

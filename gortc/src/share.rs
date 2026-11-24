@@ -470,6 +470,7 @@ impl<'a> Cx<'a> {
             EK::Slice(b, ..) | EK::Some(b) => self.is_fresh_arr(b),
             EK::Take(p) => owned_place(self.owned, p),
             EK::Cond(_, a, b) => self.is_fresh_arr(a) && self.is_fresh_arr(b),
+            EK::Coalesce(a, b) => self.is_fresh_arr(a) && self.is_fresh_arr(b),
             _ => false,
         }
     }
@@ -517,7 +518,7 @@ impl<'a> Cx<'a> {
                         }
                     }
                 }
-                EK::Cond(_, a, b) => {
+                EK::Cond(_, a, b) | EK::Coalesce(a, b) => {
                     derived(a, params, out);
                     derived(b, params, out);
                 }
@@ -680,6 +681,7 @@ impl<'a> Cx<'a> {
             EK::Null | EK::Zero | EK::NewObj(..) | EK::NewArr(..) | EK::ArrLit(..) => true,
             EK::Some(i) => self.owned_fresh(i),
             EK::Cond(_, a, b) => self.owned_fresh(a) && self.owned_fresh(b),
+            EK::Coalesce(a, b) => self.owned_fresh(a) && self.owned_fresh(b),
             _ => self.is_fresh_value(e),
         }
     }
@@ -890,6 +892,10 @@ impl<'a> Cx<'a> {
                     stack.push(b);
                     stack.extend(l.iter().map(|y| &**y));
                 }
+                EK::Coalesce(a, b) => {
+                    stack.push(a);
+                    stack.push(b);
+                }
                 EK::Cond(a, b, c) => {
                     stack.push(a);
                     stack.push(b);
@@ -1029,7 +1035,7 @@ impl<'a> Cx<'a> {
                 None => self.f().params.iter().position(|p| p == v).map(|k| Some(k + 1)),
             },
             EK::Slice(b, ..) | EK::Unwrap(b) | EK::Some(b) => self.arr_origin(b),
-            EK::Call(..) | EK::Method(..) | EK::Cond(..) | EK::Take(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
+            EK::Call(..) | EK::Method(..) | EK::Cond(..) | EK::Coalesce(..) | EK::Take(..) => if self.is_fresh_arr(e) { None } else { Some(None) },
             _ => None,
         }
     }

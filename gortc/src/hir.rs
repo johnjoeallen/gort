@@ -220,6 +220,8 @@ pub enum EK {
     /// `json.parse<T>(bytes[, limits])`: the struct, the bytes, the limits
     Json(usize, Box<TExpr>, Option<Box<TExpr>>),
     Cond(Box<TExpr>, Box<TExpr>, Box<TExpr>),
+    /// `a ?? b`: the value of `a` (an optional) if it has one, else `b`; `b` is only evaluated then
+    Coalesce(Box<TExpr>, Box<TExpr>),
     /// a global provided by the runtime (`extern let`)
     Global(usize),
 }
@@ -437,7 +439,7 @@ impl TExpr {
         match &self.kind {
             EK::Field(..) | EK::Index(..) | EK::Global(..) => false,
             EK::Unwrap(x) => x.handle_stable(),
-            EK::Cond(_, a, b) => a.handle_stable() && b.handle_stable(),
+            EK::Cond(_, a, b) | EK::Coalesce(a, b) => a.handle_stable() && b.handle_stable(),
             _ => true,
         }
     }

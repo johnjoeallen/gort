@@ -2338,6 +2338,25 @@ impl<'a> Sema<'a> {
                 let bv = self.coerce(cx, bv, &ty, (b.line, b.col));
                 typed(EK::Cond(Box::new(cv), Box::new(av), Box::new(bv)), ty, line)
             }
+            ExprKind::Coalesce(a, b) => {
+                let av = self.lower_expr(cx, a);
+                if av.ty == Ty::Error {
+                    return error_expr(line);
+                }
+                let Ty::Opt(inner) = av.ty.clone() else {
+                    self.error(e.line, e.col, "the left side of `??` must be optional (`T?`)");
+                    return error_expr(line);
+                };
+                let bv = self.lower_expr(cx, b);
+                let bv = self.decay(cx, bv, (b.line, b.col));
+                if bv.ty == Ty::Error {
+                    return error_expr(line);
+                }
+                // `T? ?? T` is a `T`; `T? ?? T?` stays optional (so `a ?? b ?? c` reads left to right)
+                let ty = if matches!(bv.ty, Ty::Opt(_) | Ty::Null) { av.ty.clone() } else { (*inner).clone() };
+                let bv = self.coerce(cx, bv, &ty, (b.line, b.col));
+                typed(EK::Coalesce(Box::new(av), Box::new(bv)), ty, line)
+            }
             ExprKind::Slice(b, lo, hi) => {
                 let base = self.lower_expr(cx, b);
                 let base = self.unwrap_opt(base);
@@ -3902,6 +3921,7 @@ pub(crate) fn children(e: &TExpr) -> Vec<&TExpr> {
         EK::StructLit(_, fs) | EK::NewObj(_, fs) => fs.iter().map(|(_, x)| x).collect(),
         EK::Json(_, b, l) => std::iter::once(&**b).chain(l.iter().map(|x| &**x)).collect(),
         EK::Cond(a, b, c) => vec![&**a, &**b, &**c],
+        EK::Coalesce(a, b) => vec![&**a, &**b],
         _ => vec![],
     }
 }
@@ -4014,6 +4034,10 @@ fn hint_expr<'a>(e: &'a Expr, name: &str, out: &mut Vec<Option<&'a Expr>>) {
             hint_expr(a, name, out);
             hint_expr(b, name, out);
         }
+        ExprKind::Coalesce(a, b) => {
+            hint_expr(a, name, out);
+            hint_expr(b, name, out);
+        }
         ExprKind::Cond(a, b, c) => {
             hint_expr(a, name, out);
             hint_expr(b, name, out);
@@ -4085,6 +4109,7 @@ fn expr_mutates(e: &Expr, name: &str) -> bool {
         ExprKind::Field(a, _) | ExprKind::Unary(_, a) | ExprKind::Cast(a, _) | ExprKind::Take(a) => ex(a),
         ExprKind::Index(a, b) | ExprKind::Binary(_, a, b) => ex(a) || ex(b),
         ExprKind::Cond(a, b, c) => ex(a) || ex(b) || ex(c),
+        ExprKind::Coalesce(a, b) => ex(a) || ex(b),
         _ => false,
     }
 }

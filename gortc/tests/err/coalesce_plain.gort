@@ -1,0 +1,6 @@
+// error: the left side of `??` must be optional
+package t
+fn main() {
+    let n: i32 = 4
+    println(n ?? 1)
+}

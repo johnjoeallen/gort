@@ -389,7 +389,7 @@ Dedicated virtual reservations, as in Goose, remain the candidate for large in-m
    scope that still has child vthreads (the prototype source assumes the scope waits for them first), and whether a handler
    type such as `fn(Array<u8>): Ref<Resp> throws Exception` is the right way to say "may throw anything".
    *Syntax direction (illustrative, used in `gort/http/server.gort`):* nullable `T?` with null-check narrowing instead of an
-   Option type; methods declared inside the type, with `self` available but optional (needed only to disambiguate a member from
+   Option type, and `a ?? b` (`a` unless it is null, else `b`, evaluated only then; right-associative; `T? ?? T` is a `T`); methods declared inside the type, with `self` available but optional (needed only to disambiguate a member from
    a parameter and to refer to the value itself); tagged enums with an exhaustive `switch` whose arms are `Pattern -> { ... }` (no `case` keyword, no fallthrough, commas to list several
    values, `default` required for non-enum switches; ranges, guards, bindings and destructuring deferred) (`enum Cost { Bounded(Duration) Unbounded }`);
    `let`/`var`; camelCase function names.

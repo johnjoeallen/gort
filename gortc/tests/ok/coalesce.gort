@@ -1,0 +1,41 @@
+package t
+
+struct Pt { x: i32, y: i32 }
+
+fn some(n: i32): i32? { return n }
+fn none(): i32? { return null }
+fn word(s: String): String? { return s }
+fn noWord(): String? { return null }
+
+fn loud(tag: String, v: i32): i32 {
+    println("evaluated " + tag)
+    return v
+}
+
+fn main() {
+    let a: usize? = 7
+    let b: usize? = null
+    println(a ?? 0)
+    println(b ?? 99)
+    println(some(3) ?? loud("skipped", 0))        // the right side does not run
+    println(none() ?? loud("ran", 5))             // ... and runs only when needed
+    println(word("hi") ?? "other")
+    println(noWord() ?? "other")
+    println(noWord() ?? noWord() ?? "last")       // right-associative
+    println(noWord() ?? word("mid") ?? "last")
+    let c: String? = noWord() ?? noWord()         // optional on both sides stays optional
+    println(c == null)
+    let d: String? = noWord() ?? word("kept")
+    println(d == "kept")
+    let p: Pt? = Pt { x: 1, y: 2 }
+    let q = p ?? Pt { x: 0, y: 0 }
+    println(q.x + q.y)
+    let n: Pt? = null
+    let r = n ?? Pt { x: 8, y: 9 }
+    println(r.x + r.y)
+    let arr: Array<u8>? = null
+    let got = arr ?? "xyz".toBytes()
+    println(got.length)
+    println((none() ?? 1) + (some(2) ?? 0) * 10)
+    println(true ? (b ?? 4) : 0)
+}

@@ -84,6 +84,8 @@ pub enum ExprKind {
     ArrayLit(Vec<Expr>),
     /// `c ? a : b`
     Cond(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// `a ?? b`: `a` unless it is null, else `b`
+    Coalesce(Box<Expr>, Box<Expr>),
     /// a type with arguments used as a qualifier: `Mailbox<Reap>.make(..)`
     TypeName(TypeExpr),
 }

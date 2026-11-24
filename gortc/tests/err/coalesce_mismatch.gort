@@ -1,0 +1,7 @@
+// error: expected
+package t
+fn main() {
+    let n: i32? = null
+    let s: String = n ?? "text"
+    println(s)
+}

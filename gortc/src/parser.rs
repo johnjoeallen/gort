@@ -760,8 +760,19 @@ impl Parser {
 
     // ---------------- expressions ----------------
 
+    // `a ?? b`: binds looser than every binary operator and tighter than `?:`; `a ?? b ?? c` is `a ?? (b ?? c)`
+    fn coalesce(&mut self) -> R<Expr> {
+        let lhs = self.binary(0)?;
+        if self.is_sym("??") {
+            let t = self.bump();
+            let rhs = self.coalesce()?;
+            return Ok(Expr { kind: ExprKind::Coalesce(Box::new(lhs), Box::new(rhs)), line: t.line, col: t.col });
+        }
+        Ok(lhs)
+    }
+
     pub fn expr(&mut self) -> R<Expr> {
-        let c = self.binary(0)?;
+        let c = self.coalesce()?;
         // `a..b` is a Range value (inside `x[..]` the `..` belongs to the slice)
         if self.is_sym("..") && !self.cur().nl && !NO_RANGE.with(|c| c.get()) {
             let d = self.bump();

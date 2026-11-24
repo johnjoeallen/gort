@@ -10,7 +10,7 @@
 - a route table (`router.gort`): a list of `Route { method, pattern, handler, next }` built once, from the last route to the first, and never changed, so
   every worker reads it without a lock. A handler is a function value. 404 for no path, 405 for a path with the wrong method;
 - route patterns (`pattern.gort`): `/kv/:key` matches one non-empty segment, a final `*rest` matches everything left (slashes included). Matching walks the pattern
-  and the path side by side and allocates nothing; a handler reads its parameters from `Params` (`p.get("key")`, `p.getOr("key", "")`), which cuts the
+  and the path side by side and allocates nothing; a handler reads its parameters from `Params` (`p.get("key") ?? ""`), which cuts the
   segment out and percent-decodes it only when asked. `queryGet(req.query, "name")` does the same for the query string (`+` is a space). A `%` not followed
   by two hex digits, in the path or the query, answers 400 when the head is parsed, so decoding cannot fail later;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;

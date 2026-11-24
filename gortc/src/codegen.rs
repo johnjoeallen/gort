@@ -452,7 +452,7 @@ fn has_effects(e: &TExpr) -> bool {
     match &e.kind {
         EK::Borrow(..) | EK::BoxVal(..) | EK::Call(..) | EK::CallInd(..) | EK::RtCall(..) | EK::Json(..) | EK::ExternFn(..) | EK::Lambda(..) | EK::Method(..) | EK::Builtin(..) | EK::NewObj(..) | EK::NewArr(..) => true,
         EK::Field(b, _) | EK::Deref(b) | EK::Len(b) | EK::Unary(_, b) | EK::Cast(b) => has_effects(b),
-        EK::Slice(..) | EK::Cond(..) | EK::ArrLit(..) => true,
+        EK::Slice(..) | EK::Cond(..) | EK::Coalesce(..) | EK::ArrLit(..) => true,
         EK::Index(a, b) | EK::Binary(_, a, b) => has_effects(a) || has_effects(b),
         EK::StructLit(_, fs) => fs.iter().any(|(_, x)| has_effects(x)),
         _ => false,
@@ -1670,6 +1670,41 @@ impl<'a> FnGen<'a> {
                     self.pop_frame();
                     self.ind -= 1;
                 }
+                self.line("}");
+                match drop_code(self.prog, &e.ty, &t) {
+                    Some(d) => {
+                        self.register_temp(&t, d);
+                        Val { c: t.clone(), own: Some(t) }
+                    }
+                    None => Val::plain(t),
+                }
+            }
+            EK::Coalesce(a, b) => {
+                // `a` is evaluated once; `b` only when `a` is null
+                let av = self.expr(a);
+                let h = self.hold(Val { c: av.c, own: None }, &a.ty);
+                let handle = matches!(&a.ty, Ty::Opt(i) if i.is_handle());
+                let present = if handle { format!("{} != NULL", h.c) } else { format!("{}.has", h.c) };
+                let t = self.tmp();
+                let cty = self.ct(&e.ty);
+                self.line(format!("{} {};", cty, t));
+                self.line(format!("if ({}) {{", present));
+                self.ind += 1;
+                self.push_frame();
+                // the value itself when the result is optional too, else what is inside it
+                let src = if e.ty == a.ty { h.c.clone() } else if handle { format!("(({}){})", cty, h.c) } else { format!("{}.v", h.c) };
+                let o = self.copy_value(Val::plain(src), &e.ty);
+                self.line(format!("{} = {};", t, o));
+                self.pop_frame();
+                self.ind -= 1;
+                self.line("} else {");
+                self.ind += 1;
+                self.push_frame();
+                let v = self.expr(b);
+                let o = self.own_value(v, &b.ty);
+                self.line(format!("{} = {};", t, o));
+                self.pop_frame();
+                self.ind -= 1;
                 self.line("}");
                 match drop_code(self.prog, &e.ty, &t) {
                     Some(d) => {

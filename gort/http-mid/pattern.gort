@@ -51,12 +51,6 @@ struct Params {
         }
         return null
     }
-
-    // Like `get`, with a default for a parameter the pattern does not have.
-    fn getOr(name: String, other: String): String {
-        let v = get(name)
-        return (v == null) ? other : v
-    }
 }
 
 // Decodes %XX escapes (and, in a query, '+' as a space). Every escape in a request was checked when the head was parsed.
