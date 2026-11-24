@@ -1,38 +1,39 @@
 // http-mid/router.gort - the route table and the handlers.
-// A route is a method, a path (exact, or a prefix whose remainder is passed to the handler) and a function. The table is a list built once, from the
+// A route is a method, a path pattern ("/kv/:key", see pattern.gort) and a function. The table is a list built once, from the
 // last route to the first, and never changed, so every worker reads it with no lock.
 package http
 
 struct Route {
     method: String
-    path: String
-    exact: bool
-    handler: fn(Request, Array<u8>, shared Store, String): ref Resp
+    pattern: String
+    handler: fn(Request, Array<u8>, shared Store, Params): ref Resp
     next: shared Route?
 }
 
-// ---------- handlers: (request, body, store, the part of the path after the prefix) ----------
+// ---------- handlers: (request, body, store, the path parameters) ----------
 
-fn hHello(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+fn hHello(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
     return respond(200, "hello\n", req.keepAlive, req.http10)
 }
 
-fn hHealth(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+fn hHealth(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
     return respond(200, "ok\n", req.keepAlive, req.http10)
 }
 
-fn hEcho(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+fn hEcho(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
     return respondBytes(200, "application/octet-stream", body, req.keepAlive, req.http10)
 }
 
-fn hGet(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+fn hGet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+    let key = p.getOr("key", "")
     var found: String? = null
     sync (reads store.kv) { found = store.kv.get(key) }
     if (found == null) return respond(404, "no such key\n", req.keepAlive, req.http10)
     return respond(200, found + "\n", req.keepAlive, req.http10)
 }
 
-fn hPut(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+fn hPut(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+    let key = p.getOr("key", "")
     if (key.length == 0) return respond(400, "empty key\n", req.keepAlive, req.http10)
     var existed = false
     sync (writes store.kv) {
@@ -44,7 +45,8 @@ fn hPut(req: Request, body: Array<u8>, store: shared Store, key: String): ref Re
     return respond(201, "created\n", req.keepAlive, req.http10)
 }
 
-fn hDelete(req: Request, body: Array<u8>, store: shared Store, key: String): ref Resp {
+fn hDelete(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+    let key = p.getOr("key", "")
     var existed = false
     sync (writes store.kv) {
         existed = store.kv.has(key)
@@ -55,7 +57,7 @@ fn hDelete(req: Request, body: Array<u8>, store: shared Store, key: String): ref
     return respond(204, "", req.keepAlive, req.http10)
 }
 
-fn hStats(req: Request, body: Array<u8>, store: shared Store, rest: String): ref Resp {
+fn hStats(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
     var keys: usize = 0
     sync (reads store.kv) { keys = store.kv.count }
     var requests: u64 = 0
@@ -64,16 +66,25 @@ fn hStats(req: Request, body: Array<u8>, store: shared Store, rest: String): ref
     return respond(200, "keys " + keys + "\nrequests " + requests + "\nwrites " + writes + "\n", req.keepAlive, req.http10)
 }
 
+fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
+    let name = p.getOr("name", "")
+    let text = "hello, " + name + "\n"
+    let shout = queryGet(req.query, "shout")
+    if (shout != null && shout != "0") return respond(200, "hello, " + name + "!\n", req.keepAlive, req.http10)
+    return respond(200, text, req.keepAlive, req.http10)
+}
+
 // ---------- the table ----------
 
 fn buildRoutes(): shared Route {
-    shared Route r7 = new Route { method: "GET",    path: "/stats",  exact: true,  handler: hStats,  next: null }
-    shared Route r6 = new Route { method: "DELETE", path: "/kv/",    exact: false, handler: hDelete, next: r7 }
-    shared Route r5 = new Route { method: "PUT",    path: "/kv/",    exact: false, handler: hPut,    next: r6 }
-    shared Route r4 = new Route { method: "GET",    path: "/kv/",    exact: false, handler: hGet,    next: r5 }
-    shared Route r3 = new Route { method: "POST",   path: "/echo",   exact: true,  handler: hEcho,   next: r4 }
-    shared Route r2 = new Route { method: "GET",    path: "/health", exact: true,  handler: hHealth, next: r3 }
-    shared Route r1 = new Route { method: "GET",    path: "/",       exact: true,  handler: hHello,  next: r2 }
+    shared Route r8 = new Route { method: "GET",    pattern: "/stats",      handler: hStats,  next: null }
+    shared Route r7 = new Route { method: "GET",    pattern: "/hello/:name", handler: hGreet, next: r8 }
+    shared Route r6 = new Route { method: "DELETE", pattern: "/kv/:key",    handler: hDelete, next: r7 }
+    shared Route r5 = new Route { method: "PUT",    pattern: "/kv/:key",    handler: hPut,    next: r6 }
+    shared Route r4 = new Route { method: "GET",    pattern: "/kv/:key",    handler: hGet,    next: r5 }
+    shared Route r3 = new Route { method: "POST",   pattern: "/echo",       handler: hEcho,   next: r4 }
+    shared Route r2 = new Route { method: "GET",    pattern: "/health",     handler: hHealth, next: r3 }
+    shared Route r1 = new Route { method: "GET",    pattern: "/",           handler: hHello,  next: r2 }
     return r1
 }
 
@@ -82,13 +93,12 @@ fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared R
     sync (writes store) { store.requests += 1 }
     var cur: shared Route? = routes
     var pathSeen = false
+    let path = req.path.toBytes()
     while (cur != null) {
-        let matches = cur.exact ? (req.path == cur.path) : (req.path.startsWith(cur.path) && req.path.length > cur.path.length)
-        if (matches) {
+        if (patternMatches(cur.pattern.toBytes(), path)) {
             if (req.method == cur.method) {
-                let rest = cur.exact ? "" : String.toString(req.path.toBytes()[cur.path.length..req.path.length])
                 let h = cur.handler
-                return h(req, body, store, rest)
+                return h(req, body, store, Params { pattern: cur.pattern, path: req.path })
             }
             pathSeen = true
         }

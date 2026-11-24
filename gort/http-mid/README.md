@@ -7,8 +7,12 @@
   extensions skipped, trailers dropped, a pipelined request behind the body left alone). A body above `maxBody` answers 413 (a chunk that would pass the limit
   is refused as its header arrives), bad framing or `chunked` together with `Content-Length` answers 400, a head above `maxHead` 431. `Expect: 100-continue`
   gets its interim answer when the body has not started to arrive;
-- a route table (`router.gort`): a list of `Route { method, path, exact, handler, next }` built once, from the last route to the first, and never changed, so
+- a route table (`router.gort`): a list of `Route { method, pattern, handler, next }` built once, from the last route to the first, and never changed, so
   every worker reads it without a lock. A handler is a function value. 404 for no path, 405 for a path with the wrong method;
+- route patterns (`pattern.gort`): `/kv/:key` matches one non-empty segment, a final `*rest` matches everything left (slashes included). Matching walks the pattern
+  and the path side by side and allocates nothing; a handler reads its parameters from `Params` (`p.get("key")`, `p.getOr("key", "")`), which cuts the
+  segment out and percent-decodes it only when asked. `queryGet(req.query, "name")` does the same for the query string (`+` is a space). A `%` not followed
+  by two hex digits, in the path or the query, answers 400 when the head is parsed, so decoding cannot fail later;
 - shared state (`store.gort`): a `shared Store` with a `shared Map<String, String>` and two counters, reached with `sync (reads|writes ...)`;
 - keep-alive, with per-connection `ref` responses.
 
@@ -19,6 +23,7 @@
 | `PUT /kv/:key` | the body becomes the value: 201 if new, 200 if replaced |
 | `DELETE /kv/:key` | 204, or 404 |
 | `POST /echo` | the body, back |
+| `GET /hello/:name` | `hello, name`; with `?shout=1`, `hello, name!` |
 | `GET /stats` | key count, requests, writes |
 
 What is `shared` and what is `ref`: the `Store`, its `Map`, the `Route` list and the `ServerConfig` are `shared` (every worker and connection reaches them); each

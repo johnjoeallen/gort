@@ -1,0 +1,109 @@
+// http-mid/pattern.gort - route patterns, path parameters, query parameters and percent-decoding.
+// A pattern is a path of segments: "/kv/:key" (a `:name` segment matches any one non-empty segment), "/static/*rest" (a final `*name` segment
+// matches everything left, which may contain slashes), anything else must match literally. Matching walks the pattern and the path side by side and
+// allocates nothing; a parameter is cut out of the path, and percent-decoded, only when a handler asks for it.
+package http
+
+// The index of the first '/' in b at or after `from`, or b.length.
+fn segmentEnd(b: Array<u8>, from: usize): usize { return indexOf(b, 47, from) }
+
+// Does `path` (the request path, starting with '/') match `pattern`?
+fn patternMatches(pattern: Array<u8>, path: Array<u8>): bool {
+    var p: usize = 0                                      // both strings sit at the '/' that starts a segment
+    var q: usize = 0
+    while (p < pattern.length) {
+        if (q >= path.length) return false
+        let pe = segmentEnd(pattern, p + 1)
+        let seg = pattern[p + 1..pe]
+        if (seg.length > 0 && seg[0] == 42) return pe == pattern.length && path.length > q + 1    // '*': the rest, non-empty
+        let qe = segmentEnd(path, q + 1)
+        if (seg.length > 0 && seg[0] == 58) {            // ':'
+            if (qe == q + 1) return false                 // a parameter is not empty
+        } else if (!(pattern[p + 1..pe] == path[q + 1..qe])) {
+            return false
+        }
+        p = pe
+        q = qe
+    }
+    return q == path.length
+}
+
+// The path parameters of one matched request: the pattern and the path they were matched on. Nothing is copied until `get`.
+struct Params {
+    pattern: String
+    path: String
+
+    // The percent-decoded value of parameter `name`, or null if the pattern has no such parameter.
+    fn get(name: String): String? {
+        let pat = pattern.toBytes()
+        let pth = path.toBytes()
+        let want = name.toBytes()
+        var p: usize = 0
+        var q: usize = 0
+        while (p < pat.length && q < pth.length) {
+            let pe = segmentEnd(pat, p + 1)
+            let seg = pat[p + 1..pe]
+            let qe = segmentEnd(pth, q + 1)
+            if (seg.length > 1 && seg[0] == 42 && seg[1..seg.length] == want) return percentDecode(pth[q + 1..pth.length], false)
+            if (seg.length > 1 && seg[0] == 58 && seg[1..seg.length] == want) return percentDecode(pth[q + 1..qe], false)
+            p = pe
+            q = qe
+        }
+        return null
+    }
+
+    // Like `get`, with a default for a parameter the pattern does not have.
+    fn getOr(name: String, other: String): String {
+        let v = get(name)
+        return (v == null) ? other : v
+    }
+}
+
+// Decodes %XX escapes (and, in a query, '+' as a space). Every escape in a request was checked when the head was parsed.
+fn percentDecode(b: Array<u8>, plus: bool): String {
+    var out = Array<u8>()
+    var i: usize = 0
+    while (i < b.length) {
+        let c = b[i]
+        if (c == 37 && i + 2 < b.length + 0 && hexValue(b[i + 1]) >= 0 && hexValue(b[i + 2]) >= 0) {
+            out.append(((hexValue(b[i + 1]) * 16 + hexValue(b[i + 2])) as u8))
+            i += 3
+        } else {
+            out.append((plus && c == 43) ? 32 : c)
+            i += 1
+        }
+    }
+    return String.toString(out)
+}
+
+// Is every '%' in `b` followed by two hex digits?
+fn escapesValid(b: Array<u8>): bool {
+    var i: usize = 0
+    while (i < b.length) {
+        if (b[i] == 37) {
+            if (i + 2 >= b.length) return false
+            if (hexValue(b[i + 1]) < 0 || hexValue(b[i + 2]) < 0) return false
+            i += 3
+        } else {
+            i += 1
+        }
+    }
+    return true
+}
+
+// The decoded value of the first query parameter called `name` in `query` ("a=1&b=2"), "" for a bare "name", null if there is none.
+fn queryGet(query: String, name: String): String? {
+    let q = query.toBytes()
+    let want = name.toBytes()
+    var pos: usize = 0
+    while (pos < q.length) {
+        let amp = indexOf(q, 38, pos)
+        let eq = indexOf(q, 61, pos)
+        let keyEnd = (eq < amp) ? eq : amp
+        if (percentDecode(q[pos..keyEnd], true).toBytes() == want) {
+            return (eq < amp) ? percentDecode(q[eq + 1..amp], true) : ""
+        }
+        pos = amp + 1
+    }
+    return null
+}

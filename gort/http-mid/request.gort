@@ -64,6 +64,7 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
     let path = String.toString(target[0..q])
     let query = (q < target.length) ? String.toString(target[q + 1..target.length]) : ""
     if (path.length == 0 || !path.startsWith("/")) throw BadRequest()
+    if (!escapesValid(target)) throw BadRequest()           // a '%' not followed by two hex digits (in the path or the query)
     // HTTP/1.1 keeps the connection open unless told otherwise; HTTP/1.0 closes unless told otherwise
     let version = head[sp2 + 1..eol - 1]
     let http10 = !(version.length == 8 && version[7] == 49)
