@@ -16,6 +16,7 @@ extern fn uiHtml(): Array<u8>                          // the page served at /ui
 extern fn nowSec(): i64
 extern fn uptimeSec(): i64
 extern fn hmacB64(msg: Array<u8>, key: Array<u8>): Array<u8>   // HMAC-SHA256 as unpadded base64url
+extern fn b64Encode(b: Array<u8>): Array<u8>             // bytes as unpadded base64url
 extern fn b64Decode(b: Array<u8>): Array<u8>             // empty if it is not base64url
 extern fn sameBytes(a: Array<u8>, b: Array<u8>): bool    // compares every byte, whatever the first difference
 extern fn utf8Chars(b: Array<u8>): i64                   // characters, not bytes

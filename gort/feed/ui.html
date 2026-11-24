@@ -18,7 +18,6 @@
 <h1>Gort feed <code id="stat"></code></h1>
 <div class="bar">
   <label>user id <input id="uid" type="number" min="1" value="1" style="width:90px"></label>
-  <label>secret <input id="secret" value="twelve-dollar-challenge" style="width:190px"></label>
   <span class="sp"></span><button id="refresh">Refresh</button>
 </div>
 <form id="f"><textarea id="text" maxlength="600" placeholder="What's happening? (500 characters)"></textarea>
@@ -27,15 +26,8 @@
 <div id="feed"></div>
 <script>
 const $ = id => document.getElementById(id);
-const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const enc = s => new TextEncoder().encode(s);
-// the server has no login: a token is signed here, with the secret in the box (HS256, 1 hour)
-async function token() {
-  const id = String(parseInt($('uid').value, 10) || 1), now = Math.floor(Date.now() / 1000);
-  const head = b64(enc(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))), body = b64(enc(JSON.stringify({ sub: id, username: 'web_user_' + id, iat: now, exp: now + 3600 })));
-  const key = await crypto.subtle.importKey('raw', enc($('secret').value), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return head + '.' + body + '.' + b64(await crypto.subtle.sign('HMAC', key, enc(head + '.' + body)));
-}
+// the server has no login: it hands out a one-hour token for a user id at /ui/token (a demo route)
+async function token() { return (await (await fetch('/ui/token?id=' + (parseInt($('uid').value, 10) || 1))).json()).token; }
 function say(t, ok) { $('msg').textContent = t; $('msg').className = 'msg ' + (ok ? 'ok' : 'err'); }
 function card(p) {
   const d = document.createElement('div'); d.className = 'post';

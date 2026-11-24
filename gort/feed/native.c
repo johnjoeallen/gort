@@ -142,6 +142,17 @@ gort_xarr gort_x_hmacB64(void *msg, size_t mn, void *key, size_t kn) {
     }
     return copy_out(o, n);
 }
+/* bytes as unpadded base64url */
+gort_xarr gort_x_b64Encode(void *p, size_t n) {
+    const uint8_t *s = p; char *o = malloc(n * 4 / 3 + 4); size_t m = 0;
+    for (size_t i = 0; i < n; i += 3) {
+        uint32_t v = (uint32_t)s[i] << 16 | (i + 1 < n ? (uint32_t)s[i+1] << 8 : 0) | (i + 2 < n ? s[i+2] : 0);
+        o[m++] = B64[v >> 18]; o[m++] = B64[(v >> 12) & 63];
+        if (i + 1 < n) o[m++] = B64[(v >> 6) & 63];
+        if (i + 2 < n) o[m++] = B64[v & 63];
+    }
+    gort_xarr r = copy_out(o, m); free(o); return r;
+}
 /* unpadded base64url to bytes; empty if the input is not valid base64url */
 gort_xarr gort_x_b64Decode(void *p, size_t n) {
     const uint8_t *s = p; uint8_t *o = malloc(n + 3); size_t m = 0; uint32_t acc = 0; int bits = 0;

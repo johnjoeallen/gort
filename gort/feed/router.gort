@@ -170,6 +170,18 @@ fn hUi(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
     return Reply.bytes(200, "text/html; charset=utf-8", uiHtml())
 }
 
+// GET /ui/token?id=N: a one-hour token for user N, signed with the server's secret, so the page needs no WebCrypto (which a browser only allows on
+// localhost or HTTPS). This hands a token to anyone who asks: it is for trying the server out, not part of the challenge.
+fn hUiToken(req: Request, body: Array<u8>, store: shared Store, p: Params): Reply {
+    let id = parseId(queryGet(req.query, "id") ?? "")
+    if (id <= 0) return fail(400, "invalid user id")
+    let now = nowSec()
+    let head = String.toString(b64Encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".toBytes()))
+    let payload = String.toString(b64Encode(("{\"sub\":\"" + id + "\",\"username\":\"web_user_" + id + "\",\"iat\":" + now + ",\"exp\":" + (now + 3600) + "}").toBytes()))
+    let sig = String.toString(hmacB64((head + "." + payload).toBytes(), store.secret.toBytes()))
+    return json(200, "{\"token\":\"" + head + "." + payload + "." + sig + "\"}")
+}
+
 // ---------- the table ----------
 
 fn mem(h: fn(Request, Array<u8>, shared Store, Params): Reply throws Exception): Handler { return Handler.Memory(h) }
@@ -181,7 +193,8 @@ fn buildRoutes(): shared Route {
     shared Route r2 = new Route { method: Method.Get,  pattern: "/feed",           handler: mem(hFeed), next: r3 }
     shared Route r1 = new Route { method: Method.Get,  pattern: "/health",         handler: mem(hHealth), next: r2 }
     shared Route r0 = new Route { method: Method.Get,  pattern: "/ui",             handler: mem(hUi), next: r1 }
-    return r0
+    shared Route rt = new Route { method: Method.Get,  pattern: "/ui/token",       handler: mem(hUiToken), next: r0 }
+    return rt
 }
 
 // The first route that matches the request's path and method (HEAD matches a GET route); null if there is none.
