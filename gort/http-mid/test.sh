@@ -77,6 +77,12 @@ check "kv key read back"       "$(curl -s "localhost:$port/kv/a%2Fb")" "v"
 check "kv key with a slash -> 404" "$(raw "GET /kv/a/b HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
 check "kv empty key -> 404"    "$(raw "GET /kv/ HTTP/1.1\r\n${H}Connection: close\r\n\r\n")" "404"
 
+# a handler that throws: 500, and the connection stays usable
+resp=$(raw "GET /boom HTTP/1.1\r\n${H}\r\nGET /boom?ok=1 HTTP/1.1\r\n${H}Connection: close\r\n\r\n")
+check "handler throws -> 500, then the next request on the same connection" "$resp" "500 Internal Server Error" "internal error" "200 OK" "fine"
+count "500 keeps the connection open" "$resp" "Connection: close" 1
+check "500 is logged" "$(cat "$bin.log")" "GET /boom: the handler threw"
+
 # Expect: 100-continue with the body not yet sent must be answered before the body arrives
 resp=$( (printf "POST /echo HTTP/1.1\r\nExpect: 100-continue\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"; sleep 0.3; printf "hi") | timeout 3 nc -q1 127.0.0.1 "$port")
 check "100-continue then 200"  "$resp" "100 Continue" "200 OK" "hi"

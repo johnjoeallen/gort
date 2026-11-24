@@ -6,7 +6,7 @@ package http
 struct Route {
     method: String
     pattern: String
-    handler: fn(Request, Array<u8>, shared Store, Params): ref Resp
+    handler: fn(Request, Array<u8>, shared Store, Params): ref Resp throws Exception
     next: shared Route?
 }
 
@@ -66,6 +66,14 @@ fn hStats(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Re
     return respond(200, "keys " + keys + "\nrequests " + requests + "\nwrites " + writes + "\n", req.keepAlive, req.http10)
 }
 
+exception Boom { reason: String }
+
+// A handler that fails, to show that a throw answers 500 and the connection lives on.
+fn hBoom(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp throws Exception {
+    if (queryGet(req.query, "ok") != null) return respond(200, "fine\n", req.keepAlive, req.http10)
+    throw Boom("asked to")
+}
+
 fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Resp {
     let name = p.get("name") ?? ""
     let text = "hello, " + name + "\n"
@@ -77,7 +85,8 @@ fn hGreet(req: Request, body: Array<u8>, store: shared Store, p: Params): ref Re
 // ---------- the table ----------
 
 fn buildRoutes(): shared Route {
-    shared Route r8 = new Route { method: "GET",    pattern: "/stats",      handler: hStats,  next: null }
+    shared Route r9 = new Route { method: "GET",    pattern: "/stats",      handler: hStats,  next: null }
+    shared Route r8 = new Route { method: "GET",    pattern: "/boom",       handler: hBoom,   next: r9 }
     shared Route r7 = new Route { method: "GET",    pattern: "/hello/:name", handler: hGreet, next: r8 }
     shared Route r6 = new Route { method: "DELETE", pattern: "/kv/:key",    handler: hDelete, next: r7 }
     shared Route r5 = new Route { method: "PUT",    pattern: "/kv/:key",    handler: hPut,    next: r6 }
@@ -98,7 +107,13 @@ fn dispatch(req: Request, body: Array<u8>, store: shared Store, routes: shared R
         if (patternMatches(cur.pattern.toBytes(), path)) {
             if (req.method == cur.method) {
                 let h = cur.handler
-                return h(req, body, store, Params { pattern: cur.pattern, path: req.path })
+                try {
+                    return h(req, body, store, Params { pattern: cur.pattern, path: req.path })
+                } catch (e: Exception) {
+                    // whatever the handler threw ends this request only: the client gets a 500 and the connection stays open
+                    logLine((req.method + " " + req.path + ": the handler threw\n").toBytes())
+                    return respond(500, "internal error\n", req.keepAlive, req.http10)
+                }
             }
             pathSeen = true
         }

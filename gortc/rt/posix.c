@@ -254,6 +254,7 @@ void gort_x_Listener_cleanup(G_Listener *self) {
 /* ---- the host ---- */
 gort_xarr gort_x_leak(void *bytes, size_t n) { return (gort_xarr){ bytes, n }; }   /* the same array comes back: the caller gets its own handle */
 void gort_x_log(G_IoError e) { (void)e; fprintf(stderr, "gort: connection failed (I/O error)\n"); }
+void gort_x_logLine(const void *msg, size_t n) { fprintf(stderr, "gort: %.*s", (int)n, (const char *)msg); }
 void gort_x_exit(int32_t code) { exit(code); }
 
 struct worker { size_t core; void (*body)(void *); void *env; pthread_t th; };
