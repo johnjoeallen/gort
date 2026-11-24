@@ -203,6 +203,12 @@ impl<'a> Gen<'a> {
 
     /// The presence-flag wrapper for an optional scalar or value, once.
     fn emit_opt(&self, t: &Ty, done: &mut std::collections::HashSet<String>, out: &mut String) {
+        // an optional inside an array (the keys of a Map<i64, V>) or inside another optional needs its wrapper too
+        match t {
+            Ty::Arr(el, _) => self.emit_opt(el, done, out),
+            Ty::Opt(i) => self.emit_opt(i, done, out),
+            _ => {}
+        }
         if let Ty::Opt(i) = t {
             if !i.is_handle() {
                 let n = opt_name(self.prog, i);

@@ -1,0 +1,17 @@
+package t
+// the keys of a Map are kept as an array of optionals: a scalar key type needs its optional wrapper declared
+fn main() {
+    var m = new Map<i64, String> {}
+    m.insert(7, "seven")
+    m.insert(-3, "minus three")
+    println(m.get(7) ?? "none")
+    println(m.get(-3) ?? "none")
+    println(m.get(8) ?? "none")
+    println(m.has(7))
+    m.remove(7)
+    println(m.has(7))
+    println(m.count)
+    var u = new Map<u16, i64> {}
+    u.insert(80, 8080)
+    println(u.get(80) ?? 0)
+}
