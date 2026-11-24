@@ -1,0 +1,109 @@
+// http-mid/body.gort - the request body decoder: Content-Length and chunked framing, read as a stream through the connection's input buffer.
+// The limit is enforced as the bytes arrive (a chunk header that would pass it is refused before its data is read). The payload is appended
+// to one array. Chunk extensions are skipped; trailers are read and dropped.
+package http
+import runtime
+
+enum ChunkState {
+    Size(usize)              // reading hex digits; the payload is how many have been read
+    Ext                      // skipping a chunk extension up to the CR
+    SizeLf                   // saw the CR after the size
+    Data(u64)                // payload bytes left in this chunk
+    DataCr
+    DataLf
+    TrailerStart
+    TrailerLine
+    TrailerEndLf
+}
+
+enum Framing {
+    NoBody
+    Fixed(u64)               // Content-Length: bytes still to come
+    Chunked(ChunkState)
+}
+
+// The value of a hex digit, or -1 if `c` is not one.
+fn hexValue(c: u8): i64 {
+    if (c >= 48 && c <= 57) return (c - 48) as i64
+    if (c >= 97 && c <= 102) return (c - 87) as i64
+    if (c >= 65 && c <= 70) return (c - 55) as i64
+    return -1
+}
+
+struct BodyDecoder {
+    framing: Framing
+    limit: u64               // refuse more than this many payload bytes
+    total: u64 = 0           // payload bytes delivered so far
+    chunk: u64 = 0           // the size of the chunk being read
+    trailer: usize = 0       // trailer bytes seen (capped)
+    data: Array<u8>          // the payload
+    done: bool = false
+
+    static fn of(chunked: bool, length: usize, limit: u64): BodyDecoder throws BodyTooLarge {
+        if (chunked) return BodyDecoder { framing: Framing.Chunked(ChunkState.Size(0)), limit: limit, data: Array<u8>() }
+        if (length > limit) throw BodyTooLarge()             // refused before a single body byte is read
+        return BodyDecoder { framing: Framing.Fixed(length), limit: limit, data: Array<u8>(), done: length == 0 }
+    }
+
+    fn deliver(bytes: Array<u8>) {
+        self.total += bytes.length
+        data.append(bytes)
+    }
+
+    // Feeds the next bytes of the connection's input; returns how many it consumed. It stops at the end of the body, so a pipelined
+    // request behind it is left alone.
+    fn feed(input: Array<u8>): usize throws BadBody, BodyTooLarge {
+        var i: usize = 0
+        switch (framing) {
+            NoBody -> { self.done = true }
+            Fixed(left) -> {
+                let take = (left < input.length) ? left : input.length
+                deliver(input[0..take])
+                self.framing = Framing.Fixed(left - take)
+                if (left == take) self.done = true
+                i = take
+            }
+            Chunked(state) -> {
+                var st = state
+                while (i < input.length && !done) {
+                    let c = input[i]
+                    switch (st) {
+                        Size(digits) -> {
+                            let h = hexValue(c)
+                            if (h >= 0) {
+                                if (digits >= 16) throw BadBody()
+                                self.chunk = chunk * 16 + (h as u64); st = ChunkState.Size(digits + 1); i++
+                            } else if (c == 59 && digits > 0) { st = ChunkState.Ext; i++ }          // ';'
+                            else if (c == 13 && digits > 0) { st = ChunkState.SizeLf; i++ }
+                            else throw BadBody()
+                        }
+                        Ext -> { if (c == 10) throw BadBody(); if (c == 13) st = ChunkState.SizeLf; i++ }
+                        SizeLf -> {
+                            if (c != 10) throw BadBody()
+                            i++
+                            if (chunk == 0) { st = ChunkState.TrailerStart }
+                            else {
+                                if (chunk > limit || total + chunk > limit) throw BodyTooLarge()
+                                st = ChunkState.Data(chunk)
+                            }
+                        }
+                        Data(left) -> {
+                            let room = input.length - i
+                            let take = (left < room) ? left : room
+                            deliver(input[i..i + take])
+                            i += take
+                            st = (left == take) ? ChunkState.DataCr : ChunkState.Data(left - take)
+                        }
+                        DataCr -> { if (c != 13) throw BadBody(); i++; st = ChunkState.DataLf }
+                        DataLf -> { if (c != 10) throw BadBody(); i++; st = ChunkState.Size(0); self.chunk = 0 }
+                        TrailerStart -> { if (c == 13) { st = ChunkState.TrailerEndLf; i++ } else st = ChunkState.TrailerLine }
+                        TrailerLine -> { self.trailer++; if (trailer > 8192) throw BadBody(); if (c == 10) st = ChunkState.TrailerStart; i++ }
+                        TrailerEndLf -> { if (c != 10) throw BadBody(); i++; self.done = true }
+                    }
+                }
+                self.framing = Framing.Chunked(st)
+            }
+        }
+        return i
+    }
+}

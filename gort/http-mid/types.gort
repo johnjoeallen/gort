@@ -13,12 +13,15 @@ struct Request {
     keepAlive: bool
     http10: bool            // the client speaks HTTP/1.0
     contentLength: usize
+    chunked: bool           // Transfer-Encoding: chunked
+    expectContinue: bool    // Expect: 100-continue
     headEnd: usize          // where the head ends in the reader's buffer (the body starts here)
 }
 
 exception TooLarge                                      // the header block does not fit in the buffer
 exception BodyTooLarge                                  // Content-Length is above the limit
 exception BadRequest                                    // the head is malformed
+exception BadBody                                       // the body's framing is malformed
 
 enum Ending {
     ClientClosed             // the peer closed it, or it failed: nothing more can arrive

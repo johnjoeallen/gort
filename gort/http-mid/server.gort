@@ -27,11 +27,15 @@ fn handleSequential(conn: Conn, store: shared Store, routes: shared Route, cfg: 
         }
         if (req == null) break                               // the client closed the connection
         var body = Array<u8>()
-        if (req.contentLength > 0) {
+        if (req.chunked || req.contentLength > 0) {
             try {
-                body = input.readBody(req.contentLength)
+                body = input.readBody(req)
             } catch (e: BodyTooLarge) {
                 reject(conn, 413, "payload too large\n")
+                ending = Ending.ServerRejected
+                break
+            } catch (e: BadBody) {
+                reject(conn, 400, "bad request\n")
                 ending = Ending.ServerRejected
                 break
             }

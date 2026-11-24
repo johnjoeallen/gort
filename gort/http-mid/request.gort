@@ -30,6 +30,13 @@ fn valueStart(line: Array<u8>, nameLen: usize): usize {
     return i
 }
 
+// `b` without trailing spaces.
+fn trimmed(b: Array<u8>): Array<u8> {
+    var n = b.length
+    while (n > 0 && isSpace(b[n - 1])) { n -= 1 }
+    return b[0..n]
+}
+
 // A decimal number, or null if there is anything else in it.
 fn parseUsize(b: Array<u8>): usize? {
     if (b.length == 0 || b.length > 12) return null
@@ -62,8 +69,13 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
     let http10 = !(version.length == 8 && version[7] == 49)
     var keepAlive = !http10                                       // "HTTP/1.1"
     var contentLength: usize = 0
+    var hasLength = false
+    var chunked = false
+    var expectContinue = false
     let nameCL = "content-length:".toBytes()
     let nameConn = "connection:".toBytes()
+    let nameTE = "transfer-encoding:".toBytes()
+    let nameExpect = "expect:".toBytes()
     var pos = eol + 1
     while (pos < head.length) {
         let e = indexOf(head, 10, pos)
@@ -72,8 +84,16 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
         if (line.length == 0) break                       // the blank line
         if (headerIs(line, nameCL)) {
             let n = parseUsize(line[valueStart(line, nameCL.length)..line.length])
-            if (n == null) throw BadRequest()
+            if (n == null || hasLength) throw BadRequest()      // not a number, or repeated
             contentLength = n
+            hasLength = true
+        } else if (headerIs(line, nameTE)) {
+            let v = trimmed(line[valueStart(line, nameTE.length)..line.length])
+            if (!v.equalsIgnoreCase("chunked")) throw BadRequest()   // no other transfer coding is understood
+            chunked = true
+        } else if (headerIs(line, nameExpect)) {
+            let v = trimmed(line[valueStart(line, nameExpect.length)..line.length])
+            if (v.equalsIgnoreCase("100-continue")) expectContinue = true
         } else if (headerIs(line, nameConn)) {
             let v = line[valueStart(line, nameConn.length)..line.length]
             if (v.length >= 5 && lowerByte(v[0]) == 99) keepAlive = false         // "close"
@@ -81,5 +101,6 @@ fn parseHead(head: Array<u8>, headEnd: usize): Request throws BadRequest {
         }
         pos = e + 1
     }
-    return Request { method: method, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, headEnd: headEnd }
+    if (chunked && hasLength) throw BadRequest()          // the two framings together are a smuggling risk: refuse
+    return Request { method: method, path: path, query: query, keepAlive: keepAlive, http10: http10, contentLength: contentLength, chunked: chunked, expectContinue: expectContinue, headEnd: headEnd }
 }

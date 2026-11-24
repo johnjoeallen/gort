@@ -179,6 +179,18 @@ int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *
         return gort_rt_throw_io();
     }
 }
+typedef struct { bool has; size_t v; } rt_opt_usize;   /* same layout as the generated gort_opt_usize */
+/* never parks, never throws: one non-blocking send; has=false when it would block or fails (best-effort cleanup and 100-continue) */
+rt_opt_usize gort_x_Conn_trySend(G_Conn *self, const void *bytes, size_t bytes_len) {
+    struct rt_conn *c = (struct rt_conn *)self;
+    rt_opt_usize r = { false, 0 };
+    for (;;) {
+        ssize_t n = send(c->fd, bytes, bytes_len, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n < 0 && errno == EINTR) continue;
+        if (n >= 0) { r.has = true; r.v = (size_t)n; }
+        return r;
+    }
+}
 int gort_x_Conn_waitReadable(G_Conn *self) {
     return wait_fd(((struct rt_conn *)self)->fd, EPOLLIN, -1) == 0 ? 0 : gort_rt_throw_io();
 }
