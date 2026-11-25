@@ -18,6 +18,18 @@
 #include <sys/mman.h>
 #include <sys/timerfd.h>
 #include <ucontext.h>
+
+/* Switching between a vthread and its scheduler. On x86-64 it is a hand-written switch that saves only the callee-saved registers (swapcontext also makes a
+ * rt_sigprocmask syscall each way, to save and restore the signal mask, which these threads never change); elsewhere it is swapcontext. */
+#if defined(__x86_64__) && !defined(__SANITIZE_ADDRESS__)
+#define VT_FAST_SWITCH 1
+void gort_ctx_switch(void **save_sp, void *to_sp);
+__asm__(".text\n.globl gort_ctx_switch\n.type gort_ctx_switch,@function\ngort_ctx_switch:\n"
+        "  pushq %rbp\n  pushq %rbx\n  pushq %r12\n  pushq %r13\n  pushq %r14\n  pushq %r15\n"
+        "  movq %rsp, (%rdi)\n  movq %rsi, %rsp\n"
+        "  popq %r15\n  popq %r14\n  popq %r13\n  popq %r12\n  popq %rbx\n  popq %rbp\n  ret\n"
+        ".size gort_ctx_switch, .-gort_ctx_switch\n");
+#endif
 #include <poll.h>
 #include <pthread.h>
 #include <sched.h>
@@ -50,14 +62,23 @@ int gort_rt_throw_io(void);
 void gort_rt_exit_hook(void);
 
 /* the objects behind the handles: the compiler's `char _empty` is the first byte of these */
-struct rt_conn { int fd; };
+/* A connection made on a worker stays registered with that worker's epoll set for its whole life (edge-triggered, read and write), so waiting for it
+ * costs no epoll_ctl. Events only set the readiness flags `rd` / `wr` and wake the vthread parked on that direction (`rwait` / `wwait`). A flag is
+ * cleared when a recv / send reports EAGAIN, so a set flag can be stale (a retry then finds EAGAIN again) but a clear flag never hides data:
+ * every edge after the EAGAIN sets it. `reg` is false off a worker (the main thread), where waits fall back to poll(). */
+struct vt;
+struct rt_conn { int fd; bool reg, rd, wr; struct vt *rwait, *wwait; };
 struct rt_listener { int fd; };
 
-static G_Conn *conn_new(int fd) { struct rt_conn *c = gort_rt_new(sizeof *c); c->fd = fd; return (G_Conn *)c; }
 
 /* ---- the scheduler: one per worker thread ---- */
 struct vt {
-    ucontext_t ctx; void *stack; void (*body)(void *); void *env;
+#ifdef VT_FAST_SWITCH
+    void *sp;                    /* the saved stack pointer while the vthread is not running */
+#else
+    ucontext_t ctx;
+#endif
+    void *stack; void (*body)(void *); void *env;
     struct vt *next; bool done, woken;
     struct sched *home;          /* the worker this vthread lives on */
     int pstate;                  /* lock parking: 0 running, 1 parked, 2 a wake arrived before the park */
@@ -68,7 +89,12 @@ struct vt {
     bool in_any, wait_all, zombie;   /* parked in waitAny / joinChildren; finished but still has live children */
 };
 struct sched {
-    int ep; struct vt *head, *tail, *cur; size_t nlive, nwait; ucontext_t home;
+    int ep; struct vt *head, *tail, *cur; size_t nlive, nwait;
+#ifdef VT_FAST_SWITCH
+    void *home_sp;
+#else
+    ucontext_t home;
+#endif
     /* vthreads woken from another thread (a lock handed over): they wait in the inbox until this worker drains it; the eventfd wakes epoll_wait */
     pthread_mutex_t inbox_m; struct vt *inbox; int evfd; size_t nparked;
     void *stacks[64]; size_t nstacks;       /* finished vthreads' stacks, reused (an mmap per spawn is the cost to avoid) */
@@ -77,7 +103,15 @@ static __thread struct sched *S;
 #define STACK_SIZE (256 * 1024)
 
 static void ready(struct vt *v) { v->next = NULL; if (S->tail) S->tail->next = v; else S->head = v; S->tail = v; }
+#ifdef VT_FAST_SWITCH
+#define VT_RESUME(v) gort_ctx_switch(&S->home_sp, (v)->sp)         /* scheduler -> vthread */
+#define VT_PARK(v)   gort_ctx_switch(&(v)->sp, S->home_sp)         /* vthread -> scheduler */
+static void trampoline(void) { struct vt *v = S->cur; v->body(v->env); v->done = true; VT_PARK(v); __builtin_unreachable(); }   /* a finished vthread is never resumed */
+#else
+#define VT_RESUME(v) swapcontext(&S->home, &(v)->ctx)
+#define VT_PARK(v)   swapcontext(&(v)->ctx, &S->home)
 static void trampoline(void) { struct vt *v = S->cur; v->body(v->env); v->done = true; }   /* returning resumes S->home (uc_link) */
+#endif
 static void vt_new(void (*body)(void *), void *env) {
     struct vt *v = calloc(1, sizeof *v);
     if (S->nstacks) v->stack = S->stacks[--S->nstacks];
@@ -87,9 +121,19 @@ static void vt_new(void (*body)(void *), void *env) {
     }
     v->body = body; v->env = env; v->home = S;
     v->parent = S->cur; if (v->parent) v->parent->nchild++;
+#ifdef VT_FAST_SWITCH
+    {   /* the first switch to this vthread pops six zeroed registers and "returns" into trampoline, with the stack aligned as at a call */
+        void **sp = (void **)(((uintptr_t)v->stack + STACK_SIZE) & ~(uintptr_t)15);
+        *--sp = NULL;                       /* trampoline's return address (never used) */
+        *--sp = (void *)trampoline;
+        for (int i = 0; i < 6; i++) *--sp = NULL;
+        v->sp = sp;
+    }
+#else
     getcontext(&v->ctx);
     v->ctx.uc_stack.ss_sp = v->stack; v->ctx.uc_stack.ss_size = STACK_SIZE; v->ctx.uc_link = &S->home;
     makecontext(&v->ctx, trampoline, 0);
+#endif
     S->nlive++; ready(v);
 }
 /* wake a vthread parked by waitAny / joinChildren (it is not on the run queue and not already woken) */
@@ -119,7 +163,7 @@ static void sched_run(void) {
         drain_inbox();
         while ((v = S->head)) {
             S->head = v->next; if (!S->head) S->tail = NULL;
-            S->cur = v; swapcontext(&S->home, &v->ctx); S->cur = NULL;
+            S->cur = v; VT_RESUME(v); S->cur = NULL;
             if (v->done) vt_finished(v);
             drain_inbox();
         }
@@ -128,8 +172,16 @@ static void sched_run(void) {
         if (!S->nwait && !S->nparked) break;
         int n = epoll_wait(S->ep, evs, 64, -1);
         for (int i = 0; i < n; i++) {
-            struct vt *w = evs[i].data.ptr;
-            if (!w) { uint64_t c; (void)!read(S->evfd, &c, sizeof c); continue; }       /* the inbox doorbell */
+            void *tag = evs[i].data.ptr;
+            if (!tag) { uint64_t c; (void)!read(S->evfd, &c, sizeof c); continue; }     /* the inbox doorbell */
+            if ((uintptr_t)tag & 1) {                                                   /* a connection: set its flags, wake whoever waits on them */
+                struct rt_conn *c = (struct rt_conn *)((uintptr_t)tag & ~(uintptr_t)1);
+                uint32_t ev = evs[i].events;
+                if (ev & (EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR)) { c->rd = true; if (c->rwait && !c->rwait->woken) { c->rwait->woken = true; S->nwait--; ready(c->rwait); } }
+                if (ev & (EPOLLOUT | EPOLLHUP | EPOLLERR)) { c->wr = true; if (c->wwait && !c->wwait->woken) { c->wwait->woken = true; S->nwait--; ready(c->wwait); } }
+                continue;
+            }
+            struct vt *w = tag;
             if (!w->woken) { w->woken = true; S->nwait--; ready(w); }
         }
     }
@@ -142,7 +194,7 @@ void gort_rt_vt_park(void *tok) {
     int exp = 0;
     if (__atomic_compare_exchange_n(&v->pstate, &exp, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
         S->nparked++;
-        swapcontext(&v->ctx, &S->home);                    /* the scheduler runs others until an unpark moves us from the inbox to the ready queue */
+        VT_PARK(v);                    /* the scheduler runs others until an unpark moves us from the inbox to the ready queue */
     }
     __atomic_store_n(&v->pstate, 0, __ATOMIC_RELEASE);     /* (state 2: the wake came first, so the park returns at once) */
 }
@@ -182,10 +234,35 @@ static int wait_fd(int fd, uint32_t events, int64_t timeout_ns) {
         epoll_ctl(S->ep, EPOLL_CTL_ADD, tfd, &te);
     }
     v->woken = false; S->nwait++;
-    swapcontext(&v->ctx, &S->home);                      /* parked: the scheduler runs others until epoll wakes us */
+    VT_PARK(v);                      /* parked: the scheduler runs others until epoll wakes us */
     epoll_ctl(S->ep, EPOLL_CTL_DEL, fd, NULL);
     if (tfd >= 0) { epoll_ctl(S->ep, EPOLL_CTL_DEL, tfd, NULL); close(tfd); }
     return 0;
+}
+
+static G_Conn *conn_new(int fd) {
+    struct rt_conn *c = gort_rt_new(sizeof *c);
+    c->fd = fd; c->reg = false; c->rd = c->wr = true; c->rwait = c->wwait = NULL;
+    if (S && !((uintptr_t)c & 1)) {
+        struct epoll_event e = { .events = EPOLLIN | EPOLLOUT | EPOLLET, .data.ptr = (void *)((uintptr_t)c | 1) };   /* low bit set: a connection, not a vthread */
+        c->reg = epoll_ctl(S->ep, EPOLL_CTL_ADD, fd, &e) == 0;
+    }
+    return (G_Conn *)c;
+}
+/* Parks the current vthread until the connection's `rd` (or `wr`) flag is set. */
+static void conn_wait(struct rt_conn *c, bool rd) {
+    struct vt *v = S->cur;
+    bool *flag = rd ? &c->rd : &c->wr; struct vt **slot = rd ? &c->rwait : &c->wwait;
+    while (!*flag) {
+        *slot = v; v->woken = false; S->nwait++;
+        VT_PARK(v);
+        *slot = NULL;
+    }
+}
+/* Waits for the socket to become readable (EPOLLIN) or writable (EPOLLOUT) after an EAGAIN. */
+static int conn_park(struct rt_conn *c, uint32_t events) {
+    if (c->reg) { conn_wait(c, events == EPOLLIN); return 0; }
+    return wait_fd(c->fd, events, -1);
 }
 
 /* ---- File: blocking disk I/O done directly on the worker (a short stall; the offloaded pool of the design is not built) ---- */
@@ -257,9 +334,9 @@ void gort_x_File_cleanup(G_File *self) {
 
 /* ---- waiting on several things, children, sleeping ---- */
 typedef struct G_Wakeup G_Wakeup;
-struct rt_wakeup { int kind; int fd; };            /* 1: the socket has input; 2: a child of the waiting vthread has finished */
+struct rt_wakeup { int kind; int fd; struct rt_conn *conn; };            /* 1: the socket has input; 2: a child of the waiting vthread has finished */
 G_Wakeup *gort_x_Conn_readableWakeup(G_Conn *self);
-G_Wakeup *gort_x_Wakeup_scopeChild(void) { struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 2; w->fd = -1; return (G_Wakeup *)w; }
+G_Wakeup *gort_x_Wakeup_scopeChild(void) { struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 2; w->fd = -1; w->conn = NULL; return (G_Wakeup *)w; }
 /* Parks until one of the sources is ready. A child that finished before this call counts (child_done), so a wake-up is never lost; one that
  * finished long ago may make the call return early, and the caller re-checks what it is waiting for. */
 void gort_x_waitAny(void *srcs, size_t n) {
@@ -269,28 +346,32 @@ void gort_x_waitAny(void *srcs, size_t n) {
     bool child = false;
     for (size_t i = 0; i < n; i++) if (w[i]->kind == 2) child = true;
     if (child && v->child_done) { v->child_done = 0; return; }
-    int added[8]; size_t na = 0;
+    int added[8]; size_t na = 0; struct rt_conn *held[8]; size_t nh = 0;
+    for (size_t i = 0; i < n; i++)                         /* a registered connection: input already flagged means do not park (the caller re-checks) */
+        if (w[i]->kind == 1 && w[i]->conn && w[i]->conn->reg && w[i]->conn->rd) return;
     for (size_t i = 0; i < n && na < 8; i++) {
         if (w[i]->kind != 1) continue;
+        if (w[i]->conn && w[i]->conn->reg) { if (nh < 8) { held[nh++] = w[i]->conn; w[i]->conn->rwait = v; } continue; }
         struct epoll_event e = { .events = EPOLLIN | EPOLLONESHOT, .data.ptr = v };
         if (epoll_ctl(S->ep, EPOLL_CTL_ADD, w[i]->fd, &e) == 0) added[na++] = w[i]->fd;
     }
     v->in_any = child; v->woken = false; S->nwait++;
-    swapcontext(&v->ctx, &S->home);
+    VT_PARK(v);
     v->in_any = false; v->child_done = 0;
     for (size_t i = 0; i < na; i++) epoll_ctl(S->ep, EPOLL_CTL_DEL, added[i], NULL);
+    for (size_t i = 0; i < nh; i++) held[i]->rwait = NULL;
 }
 /* Parks until every child this vthread has spawned has finished: what leaving a `scope { }` does. */
 void gort_rt_scope_join(void) {
     struct vt *v = S ? S->cur : NULL;
-    while (v && v->nchild) { v->wait_all = true; v->woken = false; S->nwait++; swapcontext(&v->ctx, &S->home); v->wait_all = false; }
+    while (v && v->nchild) { v->wait_all = true; v->woken = false; S->nwait++; VT_PARK(v); v->wait_all = false; }
 }
 /* the vthread goes to the back of the run queue and resumes in its turn */
 void gort_x_yield(void) {
     struct vt *v = S ? S->cur : NULL;
     if (!v) return;
     ready(v);
-    swapcontext(&v->ctx, &S->home);
+    VT_PARK(v);
 }
 void gort_x_sleep(int64_t ns) {
     if (ns <= 0) { return; }
@@ -306,9 +387,11 @@ void gort_x_sleep(int64_t ns) {
 int gort_x_Conn_recv(G_Conn *self, void *buf, size_t buf_len, size_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
     for (;;) {
+        if (c->reg && !c->rd) conn_wait(c, true);          /* the last recv drained the socket and no edge has come since: park without asking */
         ssize_t n = recv(c->fd, buf, buf_len, 0);
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLIN, -1) == 0) continue; }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { c->rd = false; if (conn_park(c, EPOLLIN) == 0) continue; }
+        if (n > 0 && (size_t)n < buf_len) c->rd = false;   /* a short read took everything queued; anything later is a new edge (the rule epoll-based runtimes use) */
         if (n >= 0) { *ret_out = (size_t)n; return 0; }
         return gort_rt_throw_io();
     }
@@ -317,15 +400,17 @@ int gort_x_Conn_recv(G_Conn *self, void *buf, size_t buf_len, size_t *ret_out) {
 int gort_x_Conn_tryRecv(G_Conn *self, void *buf, size_t buf_len, rt_opt_usize *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
     for (;;) {
+        if (c->reg && !c->rd) { ret_out->has = false; ret_out->v = 0; return 0; }     /* known empty: no syscall */
         ssize_t n = recv(c->fd, buf, buf_len, MSG_DONTWAIT);
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { ret_out->has = false; ret_out->v = 0; return 0; }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { c->rd = false; ret_out->has = false; ret_out->v = 0; return 0; }
+        if (n > 0 && (size_t)n < buf_len) c->rd = false;
         if (n >= 0) { ret_out->has = true; ret_out->v = (size_t)n; return 0; }
         return gort_rt_throw_io();
     }
 }
 G_Wakeup *gort_x_Conn_readableWakeup(G_Conn *self) {
-    struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 1; w->fd = ((struct rt_conn *)self)->fd; return (G_Wakeup *)w;
+    struct rt_wakeup *w = gort_rt_new(sizeof *w); w->kind = 1; w->fd = ((struct rt_conn *)self)->fd; w->conn = (struct rt_conn *)self; return (G_Wakeup *)w;
 }
 int gort_x_Conn_sendFile(G_Conn *self, G_File *file, uint64_t off, uint64_t count, uint64_t *ret_out) {
     struct rt_conn *c = (struct rt_conn *)self;
@@ -335,7 +420,7 @@ int gort_x_Conn_sendFile(G_Conn *self, G_File *file, uint64_t off, uint64_t coun
         off_t o = (off_t)off;
         ssize_t n = sendfile(c->fd, ffd, &o, (size_t)count);
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLOUT, -1) == 0) continue; }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { c->wr = false; if (conn_park(c, EPOLLOUT) == 0) continue; }
         if (n >= 0) { *ret_out = (uint64_t)n; return 0; }
         return gort_rt_throw_io();
     }
@@ -345,7 +430,7 @@ int gort_x_Conn_send(G_Conn *self, const void *bytes, size_t bytes_len, size_t *
     for (;;) {
         ssize_t n = send(c->fd, bytes, bytes_len, MSG_NOSIGNAL);
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { if (wait_fd(c->fd, EPOLLOUT, -1) == 0) continue; }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { c->wr = false; if (conn_park(c, EPOLLOUT) == 0) continue; }
         if (n >= 0) { *ret_out = (size_t)n; return 0; }
         return gort_rt_throw_io();
     }
@@ -362,7 +447,7 @@ rt_opt_usize gort_x_Conn_trySend(G_Conn *self, const void *bytes, size_t bytes_l
     }
 }
 int gort_x_Conn_waitReadable(G_Conn *self) {
-    return wait_fd(((struct rt_conn *)self)->fd, EPOLLIN, -1) == 0 ? 0 : gort_rt_throw_io();
+    return conn_park((struct rt_conn *)self, EPOLLIN) == 0 ? 0 : gort_rt_throw_io();
 }
 bool gort_x_Conn_hasUnread(G_Conn *self) {
     int n = 0;
@@ -377,6 +462,7 @@ void gort_x_Conn_cleanup(G_Conn *self) {
 void gort_x_Conn_lingerClose(G_Conn *self, int64_t ns, uint64_t max) {
     struct rt_conn *c = (struct rt_conn *)self;
     if (c->fd < 0) return;
+    if (c->reg) { epoll_ctl(S->ep, EPOLL_CTL_DEL, c->fd, NULL); c->reg = false; }   /* the timed wait below adds and removes the descriptor itself */
     shutdown(c->fd, SHUT_WR);
     struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     uint64_t got = 0; char buf[4096];

@@ -164,6 +164,19 @@ Setup: server on iris pinned to CPU 2 (sibling 8 idle), 2 GB cap, no swap, `ulim
 
 The cap was calibrated with #239 (39.2 against 41 µs/req, within 5%), one run. On this calibrated core gort uses about twice the CPU per request of the C io_uring entry. The earlier local figure of 24 µs/req was on a 9950X3D core, so it was optimistic.
 
+### Runtime changes measured on the same setup (65,000 users, iris at 2.0 GHz, one run each)
+
+| Change | µs/req | vs previous | Server CPU |
+|---|---:|---:|---:|
+| Baseline (`GORTC_OPT` unset, so `-O1`) | 81.9 | | 56% |
+| `GORTC_OPT=-O2` | 78.9 | -3.7% | 54% |
+| Connections registered with epoll once (edge-triggered), no `epoll_ctl` per wait | 72.5 | -8.1% | 50% |
+| `recv` / `tryRecv` skipped while the socket is known drained | 68.2 | -5.9% | 47% |
+| x86-64 context switch instead of `swapcontext` (no `rt_sigprocmask`) | 66.0 | -3.2% | 45% |
+| `GLIBC_TUNABLES=glibc.malloc.tcache_count=2048:glibc.malloc.tcache_max=16384` | 64.6 | -2.1% (within noise; not adopted) | 44.5% |
+
+Two runs of the baseline differed by 0.5%. Leave a few minutes between runs so TIME_WAIT sockets drain, or a probe fails on latency for reasons that are not the server's.
+
 ## Checklist
 
 - [ ] Both machines wired to the same switch, round trip under 0.3 ms
