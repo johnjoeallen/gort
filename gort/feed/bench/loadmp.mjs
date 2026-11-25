@@ -3,14 +3,16 @@
 // Exit 0 if p95 < 500 ms, p99 < 1 s and under 1% of requests failed; the last stdout line is a JSON summary. A user = one keep-alive connection:
 // GET /feed, think 3-7 s, GET /posts/:id, think 3-8 s, 15% like, 2% post, idle 5-15 s, repeat. Each user binds to a loopback source address
 // (one per 20,000 users) because one source address has about 28,000 ports to one destination.
+// Across a network: LOCAL_IPS=a,b,c binds users round-robin to those local addresses (add them with `ip addr add`), and SERVER_SSH=host reads the
+// server's CPU and memory from /proc over ssh (serverPid is then the pid on that host).
 import http from 'node:http';
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 
 const NB = 2000, bucket = ms => Math.min(NB - 1, Math.round(100 * Math.log(ms * 1000 + 1))), fromBucket = b => Math.exp(b / 100) / 1000;   // 1% resolution, in ms
 
 if (process.argv[2] === 'worker') {
-  const { from, count, total, ramp, hold, base } = JSON.parse(process.argv[3]);
+  const { from, count, total, ramp, hold, base, localIps } = JSON.parse(process.argv[3]);
   const url = new URL(base), tokens = JSON.parse(fs.readFileSync(new URL('../../../../challenge/seed/tokens.json', import.meta.url)));
   const hist = {}, perSec = [], bad = { n: 0 }, errs = {}; let stop = false; const t0 = Date.now();
   const between = (lo, hi) => lo + Math.random() * (hi - lo), sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -33,7 +35,7 @@ if (process.argv[2] === 'worker') {
   });
   const user = async n => {
     const u = tokens[n % tokens.length];
-    const agent = new http.Agent({ keepAlive: true, maxSockets: 1, localAddress: url.hostname === '127.0.0.1' ? `127.0.${1 + Math.floor(n / 20000)}.1` : undefined });
+    const agent = new http.Agent({ keepAlive: true, maxSockets: 1, localAddress: localIps.length ? localIps[n % localIps.length] : url.hostname === '127.0.0.1' ? `127.0.${1 + Math.floor(n / 20000)}.1` : undefined });
     await sleep(ramp * 1000 * n / total + between(0, 5000));                  // spread over the ramp, then up to 5 s more (as load.js does)
     while (!stop) {
       const feed = await call(agent, 'GET /feed', 'GET', '/feed');
@@ -57,12 +59,14 @@ if (process.argv[2] === 'worker') {
 
 const [vus, rampS, holdS, base, serverPid, cpus, per = '20000'] = process.argv.slice(2);
 const V = +vus, RAMP = +rampS, HOLD = +holdS, nproc = Math.ceil(V / +per);
-const cpu = pid => { try { const f = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].split(' '); return +f[11] + +f[12]; } catch { return NaN; } };   // utime + stime, ticks
-const tick = 100, hwm = pid => { try { return +/VmHWM:\s+(\d+)/.exec(fs.readFileSync(`/proc/${pid}/status`, 'utf8'))[1] / 1024; } catch { return NaN; } };
+const localIps = (process.env.LOCAL_IPS || '').split(',').filter(Boolean), sshHost = process.env.SERVER_SSH;
+const proc = (pid, file) => sshHost ? execFileSync('ssh', ['-o', 'BatchMode=yes', sshHost, 'cat', `/proc/${pid}/${file}`], { encoding: 'utf8' }) : fs.readFileSync(`/proc/${pid}/${file}`, 'utf8');
+const cpu = pid => { try { const f = proc(pid, 'stat').split(') ')[1].split(' '); return +f[11] + +f[12]; } catch { return NaN; } };   // utime + stime, ticks
+const tick = 100, hwm = pid => { try { return +/VmHWM:\s+(\d+)/.exec(proc(pid, 'status'))[1] / 1024; } catch { return NaN; } };
 const outs = [], procs = [];
 for (let i = 0; i < nproc; i++) {
   const from = i * +per, count = Math.min(+per, V - from);
-  const p = spawn('taskset', ['-c', cpus, process.execPath, new URL(import.meta.url).pathname, 'worker', JSON.stringify({ from, count, total: V, ramp: RAMP, hold: HOLD, base })], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const p = spawn('taskset', ['-c', cpus, process.execPath, new URL(import.meta.url).pathname, 'worker', JSON.stringify({ from, count, total: V, ramp: RAMP, hold: HOLD, base, localIps })], { stdio: ['ignore', 'pipe', 'inherit'] });
   let o = ''; p.stdout.on('data', d => o += d); procs.push(new Promise(r => p.on('close', () => { outs.push(o); r(); })));
 }
 let c0 = NaN; setTimeout(() => { c0 = cpu(serverPid) }, RAMP * 1000);                // the CPU the server uses during the hold only

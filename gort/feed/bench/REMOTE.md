@@ -149,6 +149,21 @@ Restart the server on a fresh database before every probe. Wait for TIME_WAIT so
 - `loadmp.mjs` reads the server's CPU and memory from the local `/proc`. For a remote server these need to be gathered over SSH, or left out and measured by hand as above.
 - `search.sh` starts and stops the server on the same machine. A remote version would start it over SSH, copy the fresh seed database, and wait for `/health`.
 
+## Measured: iris (5600GT) server, tornado (9950X3D) generator
+
+Setup: server on iris pinned to CPU 2 (sibling 8 idle), 2 GB cap, no swap, `ulimit -n 65535`, 0.1 ms LAN round trip. Frequency cap 2.0 GHz with boost off (sysfs `scaling_max_freq`; iris has no `cpupower`). Generator: four source addresses (`LOCAL_IPS`), `SERVER_SSH=iris`, 65,000 users, 60 s ramp, 120 s hold, fresh seed database.
+
+| | Leaderboard #239 (Xeon) | `lean-c-iouring-loafecho` on iris at 2.0 GHz | gort feed on iris at 2.0 GHz |
+|---|---:|---:|---:|
+| µs/req | 41 | 39.2 | **81.5** |
+| Server CPU | 28% | 27% | **56%** |
+| req/s | 6,399 | 6,880 | 6,877 |
+| p95 / p99 (ms) | 32 / 56 | 2.9 / 5.5 | 2.8 / 6.5 |
+| Errors | 0% | 0% | 0% |
+| Peak memory (MB) | 605 | 138 | 625 |
+
+The cap was calibrated with #239 (39.2 against 41 µs/req, within 5%), one run. On this calibrated core gort uses about twice the CPU per request of the C io_uring entry. The earlier local figure of 24 µs/req was on a 9950X3D core, so it was optimistic.
+
 ## Checklist
 
 - [ ] Both machines wired to the same switch, round trip under 0.3 ms
